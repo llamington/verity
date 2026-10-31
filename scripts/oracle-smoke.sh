@@ -17,7 +17,7 @@ fi
 rm -rf "$OUT" && mkdir -p "$OUT"
 fail=0
 while IFS= read -r -d '' sav; do
-    name=$(basename "$sav" .sav)
+    name=$(basename "$sav"); name=${name%.*}
     if ! "$ORACLE" sav-info "$sav" >"$OUT/$name.info.json" 2>"$OUT/$name.err"; then
         echo "FAIL sav-info $sav"; fail=1; continue
     fi
@@ -30,6 +30,6 @@ while IFS= read -r -d '' sav; do
     legal=$(grep -c '"valid":true' "$OUT/$name.legality.jsonl" || true)
     echo "ok   $name: $legal/$total legal"
     rm -f "$OUT/$name.rt"
-done < <(find "$CORPUS" -name '*.sav' -not -path "*/reports/*" -print0 | sort -z)
+done < <(find "$CORPUS" \( -name '*.sav' -o -name '*.dsv' \) -not -path "*/reports/*" -print0 | sort -z)
 
 exit $fail

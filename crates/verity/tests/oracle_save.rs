@@ -19,7 +19,7 @@ fn saves(root: &Path) -> Vec<PathBuf> {
             let p = e.path();
             if p.is_dir() && !p.ends_with("reports") {
                 stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "sav") {
+            } else if p.extension().is_some_and(|x| x == "sav" || x == "dsv") {
                 out.push(p);
             }
         }
