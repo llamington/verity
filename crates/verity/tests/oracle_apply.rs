@@ -178,6 +178,14 @@ fn random_field_edits_match_pkhex() {
     let tmp = std::env::temp_dir().join(format!("verity-fields-{}", std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
     let names: [&str; 5] = ["Verity", "Bob", "Sparky Ten", "a", "XYZ12"];
+    let blobs = root().join("data/blobs");
+    let (Ok(moves4), Ok(moves5)) = (
+        fs::read(blobs.join("moves4.bin")),
+        fs::read(blobs.join("moves5.bin")),
+    ) else {
+        eprintln!("skipping: build data blobs first (datagen build)");
+        return;
+    };
 
     for (n, path) in paths.iter().enumerate() {
         let stem = path.file_stem().unwrap().to_str().unwrap();
@@ -244,7 +252,12 @@ fn random_field_edits_match_pkhex() {
                     }
                     5 => {
                         let v: [u16; 4] = core::array::from_fn(|_| 1 + rng.below(466) as u16);
-                        pk.set_moves(v);
+                        let md = if save.generation() == 4 {
+                            &moves4
+                        } else {
+                            &moves5
+                        };
+                        pk.set_moves_with_pp(v, &verity::data::MoveData::load(md).unwrap());
                         fields.insert("moves".into(), v.to_vec().into());
                     }
                     _ => {

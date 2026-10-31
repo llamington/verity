@@ -23,11 +23,10 @@ in-game save rewrites every box. verity does the same. The acceptance test compa
 unedited export with PKHeX's export, which equals the input for every save except real HGSS
 saves (3 flag bytes + storage CRC).
 
-## Move edits and PP (P2)
+## Move edits and PP
 
-PKHeX `PKM.SetMoves` also refills PP from move data (`SetMaximumPPCurrent`). Move data arrives in
-P3, so `Pkm::set_moves` currently writes move IDs only and the differential test sets raw move
-IDs on the PKHeX side. A PP-aware setter follows with P3.
+`Pkm::set_moves` writes move IDs only; `Pkm::set_moves_with_pp` matches PKHeX `PKM.SetMoves`
+(refills PP via `SetMaximumPPCurrent`) and is what the differential test uses.
 
 ## Pokédex registration (P2)
 
