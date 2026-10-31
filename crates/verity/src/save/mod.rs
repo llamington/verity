@@ -25,6 +25,20 @@ pub enum Slot {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Trainer {
+    pub name_raw: [u16; 8],
+    pub tid: u16,
+    pub sid: u16,
+    pub gender: u8,
+    pub language: u8,
+    pub money: u32,
+    pub badges: u8,
+    pub played_hours: u16,
+    pub played_minutes: u8,
+    pub played_seconds: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrainerIds {
     pub tid: u16,
     pub sid: u16,
@@ -113,6 +127,68 @@ impl<'a> Save<'a> {
             Layout::Gen5(l) => l.ot_offset(),
         };
         core::array::from_fn(|i| read_u16(self.data, ofs + 2 * i))
+    }
+
+    pub fn trainer(&self) -> Trainer {
+        let d = &*self.data;
+        let ids = self.trainer_ids();
+        let (gender, language, money, badges, hours, minutes, seconds) = match &self.layout {
+            Layout::Gen4(l) => {
+                let t = l.ot_offset();
+                (
+                    d[t + 0x18],
+                    d[t + 0x19],
+                    read_u32(d, t + 0x14),
+                    d[t + 0x1A],
+                    read_u16(d, t + 0x22),
+                    d[t + 0x24],
+                    d[t + 0x25],
+                )
+            }
+            Layout::Gen5(l) => {
+                let p = gen5::PLAYER_DATA;
+                let m = l.misc_offset();
+                (
+                    d[p + 0x21],
+                    d[p + 0x1E],
+                    read_u32(d, m),
+                    d[m + 4],
+                    read_u16(d, p + 0x24),
+                    d[p + 0x26],
+                    d[p + 0x27],
+                )
+            }
+        };
+        Trainer {
+            name_raw: self.trainer_name_raw(),
+            tid: ids.tid,
+            sid: ids.sid,
+            gender,
+            language,
+            money,
+            badges,
+            played_hours: hours,
+            played_minutes: minutes,
+            played_seconds: seconds,
+        }
+    }
+
+    /// Raw box name (Gen 4: 20 code units; Gen 5: 10, rest zero).
+    pub fn box_name_raw(&self, b: usize) -> Result<[u16; 20], SaveError> {
+        if b >= self.box_count() {
+            return Err(SaveError::OutOfRange);
+        }
+        let (ofs, len) = match &self.layout {
+            Layout::Gen4(l) => (l.box_name_offset(b), 20),
+            Layout::Gen5(_) => (gen5::box_name_offset(b), 10),
+        };
+        Ok(core::array::from_fn(|i| {
+            if i < len {
+                read_u16(self.data, ofs + 2 * i)
+            } else {
+                0
+            }
+        }))
     }
 
     fn slot_range(&self, slot: Slot) -> Result<(usize, usize), SaveError> {
