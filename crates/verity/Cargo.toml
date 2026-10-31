@@ -17,3 +17,4 @@ gen5 = []
 [dependencies]
 
 [dev-dependencies]
+serde_json = "1"

@@ -35,6 +35,7 @@ public static class Program
                 "legality-batch" => HandleLegalityBatch(args),
                 "generate-synthetic" => HandleGenerateSynthetic(args),
                 "sav-dump" => HandleSavDump(args),
+                "sav-apply" => HandleSavApply(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -57,6 +58,7 @@ public static class Program
         Console.WriteLine("  legality-batch <dir-path>");
         Console.WriteLine("  generate-synthetic <out-dir>");
         Console.WriteLine("  sav-dump <sav-path> <out-dir>");
+        Console.WriteLine("  sav-apply <sav-path> <ops.json> <out-path>");
         Console.WriteLine("  version");
     }
 
@@ -423,6 +425,58 @@ public static class Program
                 Dump(sav.GetBoxSlotAtIndex(b, s), $"box{b:D2}_{s:D2}", false);
 
         Console.WriteLine(JsonSerializer.Serialize(new { version = sav.Version.ToString(), slots }, JsonOpts));
+        return 0;
+    }
+
+    // ops: [{"op":"copy"|"swap","from":"box00_00"|"party_0","to":...}]
+    private static int HandleSavApply(string[] args)
+    {
+        if (args.Length < 4)
+        {
+            Console.Error.WriteLine("Usage: sav-apply <sav-path> <ops.json> <out-path>");
+            return 1;
+        }
+        var sav = SaveUtil.GetSaveFile(File.ReadAllBytes(args[1]));
+        if (sav == null)
+        {
+            Console.Error.WriteLine("Unrecognized save file format");
+            return 1;
+        }
+
+        PKM Get(string slot) => slot.StartsWith("party_")
+            ? sav.GetPartySlotAtIndex(int.Parse(slot[6..]))
+            : sav.GetBoxSlotAtIndex(int.Parse(slot[3..5]), int.Parse(slot[6..]));
+        void Set(string slot, PKM pk)
+        {
+            if (slot.StartsWith("party_"))
+                sav.SetPartySlotAtIndex(pk, int.Parse(slot[6..]), EntityImportSettings.None);
+            else
+                sav.SetBoxSlotAtIndex(pk, int.Parse(slot[3..5]), int.Parse(slot[6..]), EntityImportSettings.None);
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(args[2]));
+        int applied = 0;
+        foreach (var op in doc.RootElement.EnumerateArray())
+        {
+            var kind = op.GetProperty("op").GetString();
+            var from = op.GetProperty("from").GetString()!;
+            var to = op.GetProperty("to").GetString()!;
+            var a = Get(from);
+            var b = Get(to);
+            if (kind == "copy")
+                Set(to, a);
+            else if (kind == "swap")
+            {
+                Set(to, a);
+                Set(from, b);
+            }
+            else
+                throw new ArgumentException($"unknown op {kind}");
+            applied++;
+        }
+
+        File.WriteAllBytes(args[3], sav.Write().ToArray());
+        Console.WriteLine(JsonSerializer.Serialize(new { applied }));
         return 0;
     }
 
