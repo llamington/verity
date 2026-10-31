@@ -11,10 +11,12 @@ const PARTY: usize = 0x18E00;
 pub(super) const PLAYER_DATA: usize = 0x19400;
 const MISC_BLOCK: usize = 52;
 const ITEMS_BLOCK: usize = 25;
+const EVENT_BLOCK: usize = 45;
 
 pub struct Layout5 {
     blocks: &'static [Block5],
     dex_block: usize,
+    b2w2: bool,
 }
 
 impl Layout5 {
@@ -26,7 +28,11 @@ impl Layout5 {
         };
         // `SaveBlockAccessor5BW.Zukan` is block 55, `SaveBlockAccessor5B2W2.Zukan` block 54.
         let dex_block = if kind == SaveKind::B2W2 { 54 } else { 55 };
-        Self { blocks, dex_block }
+        Self {
+            blocks,
+            dex_block,
+            b2w2: kind == SaveKind::B2W2,
+        }
     }
 
     pub fn party_count_offset(&self) -> usize {
@@ -43,6 +49,16 @@ impl Layout5 {
 
     pub fn dex_offset(&self) -> usize {
         self.blocks[self.dex_block].offset as usize
+    }
+
+    pub fn event_layout(&self) -> (usize, usize, usize, usize) {
+        let base = self.blocks[EVENT_BLOCK].offset as usize;
+        let (work, flags) = if self.b2w2 {
+            (0x1AF, 0xBF8)
+        } else {
+            (0x13E, 0xB60)
+        };
+        (base + work * 2, flags, base, work)
     }
 
     pub fn items_offset(&self) -> usize {
