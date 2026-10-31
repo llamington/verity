@@ -192,6 +192,20 @@ impl Layout4 {
             }
     }
 
+    pub fn event_layout(&self) -> (usize, usize, usize, usize) {
+        let (work, flags) = match self.kind {
+            SaveKind::DP => (0xD9C, 0xFDC),
+            SaveKind::Pt => (0xDAC, 0xFEC),
+            _ => (0xDE4, 0x10C4),
+        };
+        (
+            self.general + flags,
+            0xB60,
+            self.general + work,
+            (flags - work) >> 1,
+        )
+    }
+
     pub fn general_offset(&self) -> usize {
         self.general
     }

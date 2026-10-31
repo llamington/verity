@@ -150,6 +150,33 @@ fn saves_match_pkhex() {
             assert_eq!(got, want.as_str().unwrap(), "{name}: box {b} name");
         }
 
+        assert_eq!(
+            save.event_flag_count() as u64,
+            info["event_flag_count"].as_u64().unwrap(),
+            "{name}: flag count"
+        );
+        let set: Vec<u64> = (0..save.event_flag_count())
+            .filter(|&i| save.event_flag(i).unwrap())
+            .map(|i| i as u64)
+            .collect();
+        let want: Vec<u64> = info["event_flags_set"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap())
+            .collect();
+        assert_eq!(set, want, "{name}: event flags");
+        let work: Vec<u64> = (0..save.event_work_count())
+            .map(|i| save.event_work(i).unwrap() as u64)
+            .collect();
+        let want: Vec<u64> = info["event_work"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap())
+            .collect();
+        assert_eq!(work, want, "{name}: event work");
+
         let pouches = info["inventory"].as_array().unwrap();
         assert_eq!(pouches.len(), save.pouches().len(), "{name}: pouch count");
         for (pi, (want, def)) in pouches.iter().zip(save.pouches()).enumerate() {

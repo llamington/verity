@@ -123,12 +123,22 @@ public static class Program
                 items = p.Items.Select(i => new[] { i.Index, i.Count }).ToArray(),
                 legal = p.Info.GetItems(p.Type).ToArray(),
             }).ToArray(),
+            event_flags_set = Events(sav) is { } ef ? Enumerable.Range(0, ef.EventFlagCount).Where(ef.GetEventFlag).ToArray() : null,
+            event_flag_count = Events(sav)?.EventFlagCount,
+            event_work = Events(sav) is { } ew ? Enumerable.Range(0, ew.EventWorkCount).Select(ew.GetWork).ToArray() : null,
             box_names = sav is IBoxDetailName bn ? Enumerable.Range(0, sav.BoxCount).Select(bn.GetBoxName).ToArray() : null,
         };
 
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOpts));
         return 0;
     }
+
+    private static IEventFlag37? Events(SaveFile sav) => sav switch
+    {
+        IEventFlagProvider37 p => p.EventWork,
+        IEventFlag37 e => e,
+        _ => null,
+    };
 
     private static int HandleSavRoundtrip(string[] args)
     {

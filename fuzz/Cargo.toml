@@ -1,0 +1,29 @@
+[package]
+name = "verity-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+verity = { path = "../crates/verity" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "save_patch"
+path = "fuzz_targets/save_patch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pkm_decode"
+path = "fuzz_targets/pkm_decode.rs"
+test = false
+doc = false
+bench = false
