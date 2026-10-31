@@ -127,7 +127,8 @@ public static class Program
         var outPath = args.Length >= 4 && args[2] == "--out" ? args[3] : inPath + ".roundtrip";
 
         var data = File.ReadAllBytes(inPath);
-        var sav = SaveUtil.GetSaveFile(data);
+        // PKHeX writes into the buffer it was given; keep a pristine copy for comparison.
+        var sav = SaveUtil.GetSaveFile(data.ToArray());
         if (sav == null)
         {
             Console.Error.WriteLine("Unrecognized save file format");

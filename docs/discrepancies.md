@@ -14,3 +14,11 @@ separate operation that matches PKHeX's delete behaviour.
 ## Notes for upstream
 
 - `PlayerData5` (PKHeX 25.12.21) reads a `u32` at `0x28` but its setter writes `0x2C`.
+
+## Unedited export (P2 acceptance)
+
+PLAN P2 asks that open → export with no edits is byte-identical. PKHeX itself is not: for HGSS
+it always sets `FlagsBoxContentChanged = 0x3FFFF` (`SAV4HGSS.GetFinalData`) so a single
+in-game save rewrites every box. verity does the same. The acceptance test compares verity's
+unedited export with PKHeX's export, which equals the input for every save except real HGSS
+saves (3 flag bytes + storage CRC).
