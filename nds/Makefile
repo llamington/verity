@@ -18,12 +18,12 @@ LIBDIRS		:= $(BLOCKSDS)/libs/libnds $(CURDIR)/rust
 
 include $(BLOCKSDS)/sys/default_makefiles/rom_arm9/Makefile
 
-rust/libverity_ffi.a: FORCE
+rust/lib/libverity_ffi.a: FORCE
 	cd .. && cargo build-ds
-	@mkdir -p rust
-	cp $(RUST_LIB) rust/libverity_ffi.a
+	@mkdir -p rust/lib
+	cp $(RUST_LIB) $@
 
-$(ROM): rust/libverity_ffi.a
+$(ELF): rust/lib/libverity_ffi.a
 
 .PHONY: FORCE
 FORCE:
