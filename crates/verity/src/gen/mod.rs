@@ -1,1 +1,3 @@
-//! Constructive Pokémon generators (wild, static, egg, transfer, shiny, IV search).
+//! Legal-mode generators.
+
+pub mod wild4;
