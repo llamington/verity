@@ -91,7 +91,7 @@ fn ints(v: &Value) -> Vec<i64> {
         .unwrap_or_default()
 }
 
-pub fn build_game(j: &Value) -> Vec<u8> {
+pub fn build_game(j: &Value, evolutions: &Value) -> Vec<u8> {
     let generation = j["generation"].as_u64().unwrap() as u8;
     let mut w = BlobWriter::new(generation, BlobKind::Game);
     let size = j["personal_size"].as_u64().unwrap() as u16;
@@ -154,6 +154,31 @@ pub fn build_game(j: &Value) -> Vec<u8> {
     w.indexed(gt::EGG_MOVES, &eggs);
     let held: Vec<u16> = ints(&j["held_items"]).iter().map(|v| *v as u16).collect();
     w.u16s(gt::HELD_ITEMS, &held);
+
+    let mut evos = vec![Vec::new(); count];
+    for e in evolutions["evolutions"].as_array().unwrap() {
+        let (sp, f) = (e["species"].as_i64().unwrap(), e["form"].as_i64().unwrap());
+        let Some(idx) = forms
+            .iter()
+            .find(|x| x[0] == sp && x[1] == f)
+            .map(|x| x[2] as usize)
+        else {
+            continue;
+        };
+        if !evos[idx].is_empty() {
+            continue;
+        }
+        for m in e["evolutions"].as_array().unwrap() {
+            let rec = &mut evos[idx];
+            rec.extend((m["Species"].as_u64().unwrap() as u16).to_le_bytes());
+            rec.extend((m["Argument"].as_u64().unwrap() as u16).to_le_bytes());
+            rec.push(m["Form"].as_u64().unwrap() as u8);
+            rec.push(m["method"].as_u64().unwrap() as u8);
+            rec.push(m["Level"].as_u64().unwrap() as u8);
+            rec.push(m["LevelUp"].as_u64().unwrap() as u8);
+        }
+    }
+    w.indexed(gt::EVOLUTIONS, &evos);
     w.finish()
 }
 
@@ -241,6 +266,204 @@ pub fn build_strings(j: &Value) -> Vec<u8> {
     w.finish()
 }
 
+pub const ENCOUNTER_SOURCES: [(&str, &str); 5] = [
+    ("dppt", "Encounters4DPPt"),
+    ("hgss", "Encounters4HGSS"),
+    ("bw", "Encounters5BW"),
+    ("b2w2", "Encounters5B2W2"),
+    ("dr", "Encounters5DR"),
+];
+
+fn num(v: &Value, key: &str, default: i64) -> i64 {
+    match &v[key] {
+        Value::Bool(b) => *b as i64,
+        Value::Number(n) => n.as_i64().unwrap(),
+        _ => default,
+    }
+}
+
+fn truthy(v: &Value, key: &str) -> bool {
+    v[key].as_bool().unwrap_or(false)
+}
+
+/// Encodes one PKHeX template (exported by `Describe`) as a 68-byte record.
+pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
+    use verity::data::encounters::{flag, EncounterKind, NO_AREA, TEMPLATE_LEN};
+    let kind = EncounterKind::from_pkhex_name(t["kind"].as_str().unwrap())
+        .unwrap_or_else(|| panic!("unknown kind {}", t["kind"]));
+    let mut r = vec![0u8; TEMPLATE_LEN];
+    let put16 =
+        |r: &mut Vec<u8>, o: usize, v: i64| r[o..o + 2].copy_from_slice(&(v as u16).to_le_bytes());
+    let put32 =
+        |r: &mut Vec<u8>, o: usize, v: i64| r[o..o + 4].copy_from_slice(&(v as u32).to_le_bytes());
+    r[0] = kind as u8;
+    r[1] = num(t, "Version", 0) as u8;
+    put16(&mut r, 2, num(t, "Species", 0));
+    r[4] = num(t, "Form", 0) as u8;
+    r[5] = num(t, "LevelMin", 0) as u8;
+    r[6] = num(t, "LevelMax", 0) as u8;
+    r[7] = num(t, "Ability", 0) as u8;
+    r[8] = num(t, "Shiny", 0) as u8;
+    r[9] = num(t, "Gender", 255) as u8;
+    r[10] = num(t, "Nature", 25) as u8;
+    r[11] = num(t, "FixedBall", 0) as u8;
+    put16(&mut r, 12, num(t, "Location", 0));
+    put16(&mut r, 14, num(t, "EggLocation", 0));
+    put16(&mut r, 16, num(t, "HeldItem", 0));
+    let mut flags = 0u16;
+    for (key, f) in [
+        ("FatefulEncounter", flag::FATEFUL),
+        ("IsEgg", flag::EGG),
+        ("IsRoaming", flag::ROAMING),
+        ("IsWildCorrelationPID", flag::WILD_CORRELATION_PID),
+        ("IsHiddenGrotto", flag::HIDDEN_GROTTO),
+        ("IsFixedTrainer", flag::FIXED_TRAINER),
+        ("IsFixedNickname", flag::FIXED_NICKNAME),
+        ("IsLanguageSwap", flag::LANGUAGE_SWAP),
+        ("IsRandomUnspecificForm", flag::RANDOM_UNSPECIFIC_FORM),
+    ] {
+        if truthy(t, key) {
+            flags |= f;
+        }
+    }
+    if t["Moves"]["HasMoves"].as_bool().unwrap_or(false) {
+        flags |= flag::HAS_MOVES;
+    }
+    if t["IVs"]["IsSpecified"].as_bool().unwrap_or(false) {
+        flags |= flag::HAS_IVS;
+    }
+    if t.get("PID").is_some() {
+        flags |= flag::HAS_PID;
+    }
+    if let Some((_, a)) = area {
+        if truthy(a, "IsCoronetFeebasArea") {
+            flags |= flag::CORONET_FEEBAS;
+        }
+    }
+    put16(&mut r, 18, flags as i64);
+    for (i, k) in ["Move1", "Move2", "Move3", "Move4"].iter().enumerate() {
+        put16(&mut r, 20 + 2 * i, num(&t["Moves"], k, 0));
+    }
+    put32(&mut r, 28, num(t, "GroundTile", 0));
+    put32(&mut r, 32, num(t, "PID", 0));
+    put16(&mut r, 36, num(t, "TID16", 0));
+    put16(&mut r, 38, num(t, "SID16", 0));
+    r[40] = num(t, "OTGender", 0) as u8;
+    r[41] = num(t, "MetLevel", 0) as u8;
+    put16(&mut r, 42, num(t, "MetLocation", 0));
+    for (i, k) in ["HP", "ATK", "DEF", "SPE", "SPA", "SPD"].iter().enumerate() {
+        r[44 + i] = num(&t["IVs"], k, 0) as u8;
+    }
+    for (i, k) in [
+        "ContestCool",
+        "ContestBeauty",
+        "ContestCute",
+        "ContestSmart",
+        "ContestTough",
+        "ContestSheen",
+    ]
+    .iter()
+    .enumerate()
+    {
+        r[50 + i] = num(t, k, 0) as u8;
+    }
+    r[56] = num(t, "Course", 0) as u8;
+    r[57] = num(t, "SlotNumber", 0) as u8;
+    r[58] = num(t, "MagnetPullIndex", 0) as u8;
+    r[59] = num(t, "MagnetPullCount", 0) as u8;
+    r[60] = num(t, "StaticIndex", 0) as u8;
+    r[61] = num(t, "StaticCount", 0) as u8;
+    r[62] = num(t, "Type", 0) as u8;
+    r[63] = num(t, "AreaRate", 0) as u8;
+    put16(&mut r, 64, area.map_or(NO_AREA as i64, |(i, _)| i as i64));
+    r
+}
+
+fn encode_slot(t: &Value, area: u16) -> Vec<u8> {
+    use verity::data::encounters::{EncounterKind, SLOT_LEN};
+    let kind = EncounterKind::from_pkhex_name(t["kind"].as_str().unwrap()).unwrap();
+    let mut r = vec![0u8; SLOT_LEN];
+    r[0] = kind as u8;
+    r[1] = num(t, "Form", 0) as u8;
+    r[2..4].copy_from_slice(&(num(t, "Species", 0) as u16).to_le_bytes());
+    r[4] = num(t, "LevelMin", 0) as u8;
+    r[5] = num(t, "LevelMax", 0) as u8;
+    r[6] = num(t, "SlotNumber", 0) as u8;
+    r[7] = num(t, "MagnetPullIndex", 0) as u8;
+    r[8] = num(t, "MagnetPullCount", 0) as u8;
+    r[9] = num(t, "StaticIndex", 0) as u8;
+    r[10] = num(t, "StaticCount", 0) as u8;
+    use verity::data::encounters::{SLOT_HIDDEN_GROTTO, SLOT_RANDOM_FORM};
+    let mut f = 0u8;
+    if truthy(t, "IsRandomUnspecificForm") {
+        f |= SLOT_RANDOM_FORM;
+    }
+    if truthy(t, "IsHiddenGrotto") {
+        f |= SLOT_HIDDEN_GROTTO;
+    }
+    r[11] = f;
+    r[12..14].copy_from_slice(&area.to_le_bytes());
+    r[14] = num(t, "Type", 0) as u8;
+    r[15] = num(t, "FixedBall", 0) as u8;
+    r[16] = num(t, "Ability", 0) as u8;
+    r[17] = num(t, "Shiny", 0) as u8;
+    r
+}
+
+pub fn build_encounters(j: &Value) -> Vec<u8> {
+    use verity::data::encounters::{table, AREA_LEN, RANGE_SLOTS, SLOT_LEN, TEMPLATE_LEN};
+    let mut templates = Vec::new();
+    let mut slots = Vec::new();
+    let mut areas = Vec::new();
+    let mut names = Vec::new();
+    let mut ranges = Vec::new();
+    let mut generation = 0;
+    for (name, group) in j.as_object().unwrap() {
+        let items = group["items"].as_array().unwrap();
+        let (start, count) = if group["type"] == "areas" {
+            let start = slots.len() / SLOT_LEN;
+            for a in items {
+                let ai = (areas.len() / AREA_LEN) as u16;
+                let mut rec = vec![0u8; AREA_LEN];
+                rec[0..2].copy_from_slice(&(num(a, "Location", 0) as u16).to_le_bytes());
+                rec[2] = num(a, "Type", 0) as u8;
+                rec[3] = num(a, "Rate", 0) as u8;
+                rec[4..8].copy_from_slice(&(num(a, "GroundTile", 0) as u32).to_le_bytes());
+                rec[8] = num(a, "Version", 0) as u8;
+                let f = if truthy(a, "IsCoronetFeebasArea") {
+                    verity::data::encounters::flag::CORONET_FEEBAS
+                } else {
+                    0
+                };
+                rec[9..11].copy_from_slice(&f.to_le_bytes());
+                areas.extend(rec);
+                for slot in a["slots"].as_array().unwrap() {
+                    generation = num(slot, "Generation", generation);
+                    slots.extend(encode_slot(slot, ai));
+                }
+            }
+            (start, (slots.len() / SLOT_LEN - start) as u32 | RANGE_SLOTS)
+        } else {
+            let start = templates.len() / TEMPLATE_LEN;
+            for t in items {
+                generation = num(t, "Generation", generation);
+                templates.extend(encode_template(t, None));
+            }
+            (start, (templates.len() / TEMPLATE_LEN - start) as u32)
+        };
+        names.push(name.as_bytes().to_vec());
+        ranges.extend((start as u32).to_le_bytes());
+        ranges.extend(count.to_le_bytes());
+    }
+    let mut w = BlobWriter::new(generation as u8, BlobKind::Encounters);
+    w.table(table::TEMPLATES, TEMPLATE_LEN as u16, templates);
+    w.table(table::SLOTS, SLOT_LEN as u16, slots);
+    w.table(table::AREAS, AREA_LEN as u16, areas);
+    w.indexed(table::GROUP_NAMES, &names);
+    w.table(table::GROUP_RANGES, 8, ranges);
+    w.finish()
+}
+
 /// Builds every blob from `exports` into `out`; returns (name, size) pairs.
 pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     fs::create_dir_all(out).unwrap();
@@ -249,10 +472,23 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
         fs::write(out.join(&name), &bytes).unwrap();
         written.push((name, bytes.len()));
     };
+    let evo4 = load(&exports.join("evolutions4.json"));
+    let evo5 = load(&exports.join("evolutions5.json"));
     for g in GAMES {
+        let evo = if matches!(g, "bw" | "b2w2") {
+            &evo5
+        } else {
+            &evo4
+        };
         put(
             format!("{g}.bin"),
-            build_game(&load(&exports.join(format!("{g}.json")))),
+            build_game(&load(&exports.join(format!("{g}.json"))), evo),
+        );
+    }
+    for (key, src) in ENCOUNTER_SOURCES {
+        put(
+            format!("enc_{key}.bin"),
+            build_encounters(&load(&exports.join(format!("enc_{src}.json")))),
         );
     }
     let tables = load(&exports.join("move_tables.json"));

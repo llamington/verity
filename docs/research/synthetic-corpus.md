@@ -32,4 +32,14 @@ Not covered yet: SoulSilver, White, Black 2 (real), Korean saves.
 `data/blobs/` (gitignored): one game blob per save layout (`dp`, `pt`, `hgss`, `bw`, `b2w2`; 57–106 KB),
 `moves4.bin`/`moves5.bin`, and `strings_<lang>.bin` for ja/en/fr/it/de/es/ko (738 KB total).
 PLAN.md named blobs per concern (`g4_personal.bin`, …); grouping per game lets the DS load a single
-blob for the open save. Encounter and event blobs follow.
+blob for the open save.
+
+Encounters (`pkhex-oracle export-encounters`, read by reflection from PKHeX's internal
+`Encounters4DPPt`, `Encounters4HGSS`, `Encounters5BW`, `Encounters5B2W2`, `Encounters5DR`):
+`enc_dppt.bin` 198 KB, `enc_hgss.bin` 332 KB, `enc_bw.bin` 144 KB, `enc_b2w2.bin` 195 KB,
+`enc_dr.bin` 33 KB. Wild slots use 20-byte records pointing at 12-byte area records; statics,
+gifts and trades use 68-byte templates. Evolutions are in each game blob. Total for all
+blobs: 1.66 MB; one Gen 4 game needs about 260–400 KB (game + moves + encounters + one language).
+
+Deferred: Gen 3 origin data for Pal Park (`g3_origin`, with M4) and the mystery gift database
+(`export-events`, with P8).

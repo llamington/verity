@@ -12,6 +12,11 @@ fn exports() -> Option<PathBuf> {
     p.join("manifest.json").exists().then_some(p)
 }
 
+fn evo_for(ex: &std::path::Path, g: &str) -> Value {
+    let gen = if matches!(g, "bw" | "b2w2") { 5 } else { 4 };
+    datagen::load(&ex.join(format!("evolutions{gen}.json")))
+}
+
 fn ints(v: &Value) -> Vec<i64> {
     v.as_array()
         .unwrap()
@@ -28,7 +33,8 @@ fn game_blobs_roundtrip() {
     };
     for g in datagen::GAMES {
         let j = datagen::load(&ex.join(format!("{g}.json")));
-        let bytes = datagen::build_game(&j);
+        let evo = evo_for(&ex, g);
+        let bytes = datagen::build_game(&j, &evo);
         let gd = GameData::load(&bytes).unwrap();
 
         let personal = j["personal"].as_array().unwrap();
@@ -84,6 +90,38 @@ fn game_blobs_roundtrip() {
                 .collect::<Vec<_>>(),
             "{g}"
         );
+        for e in evo["evolutions"].as_array().unwrap() {
+            let (sp, f) = (
+                e["species"].as_u64().unwrap() as u16,
+                e["form"].as_u64().unwrap() as u8,
+            );
+            if !j["forms"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|x| ints(x)[0] == sp as i64 && ints(x)[1] == f as i64)
+            {
+                continue;
+            }
+            let got: Vec<_> = gd.evolutions(gd.form_index(sp, f)).collect();
+            let want: Vec<_> = e["evolutions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|m| verity::data::Evolution {
+                    species: m["Species"].as_u64().unwrap() as u16,
+                    argument: m["Argument"].as_u64().unwrap() as u16,
+                    form: m["Form"].as_u64().unwrap() as u8,
+                    method: m["method"].as_u64().unwrap() as u8,
+                    level: m["Level"].as_u64().unwrap() as u8,
+                    level_up: m["LevelUp"].as_u64().unwrap() as u8,
+                })
+                .collect();
+            if gd.form_index(sp, f) == gd.form_index(sp, 0) && f != 0 {
+                continue;
+            }
+            assert_eq!(got, want, "{g} evolutions {sp}-{f}");
+        }
         eprintln!("ok {g}: {} bytes", bytes.len());
     }
 }
@@ -145,7 +183,10 @@ fn personal_matches_pkhex_per_pokemon() {
         .map(|g| {
             (
                 g.to_string(),
-                datagen::build_game(&datagen::load(&ex.join(format!("{g}.json")))),
+                datagen::build_game(
+                    &datagen::load(&ex.join(format!("{g}.json"))),
+                    &evo_for(&ex, g),
+                ),
             )
         })
         .collect();
@@ -194,4 +235,136 @@ fn personal_matches_pkhex_per_pokemon() {
         }
     }
     eprintln!("checked {checked} pkm");
+}
+
+#[test]
+fn encounter_blobs_roundtrip() {
+    use verity::data::encounters::{EncounterData, EncounterKind};
+    let Some(ex) = exports() else { return };
+    for (key, src) in datagen::ENCOUNTER_SOURCES {
+        let j = datagen::load(&ex.join(format!("enc_{src}.json")));
+        let bytes = datagen::build_encounters(&j);
+        let ed = EncounterData::load(&bytes).unwrap();
+        let mut total = 0;
+        for (name, group) in j.as_object().unwrap() {
+            let want: Vec<(Value, Option<&Value>)> = if group["type"] == "areas" {
+                group["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .flat_map(|a| {
+                        a["slots"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(move |s| (s.clone(), Some(a)))
+                    })
+                    .collect()
+            } else {
+                group["items"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|t| (t.clone(), None))
+                    .collect()
+            };
+            let got: Vec<_> = ed.group(name.as_bytes()).collect();
+            assert_eq!(got.len(), want.len(), "{key}/{name}");
+            for (t, (w, area)) in got.iter().zip(&want) {
+                let n = |k: &str, d: i64| w[k].as_i64().unwrap_or(d);
+                assert_eq!(
+                    t.kind(),
+                    EncounterKind::from_pkhex_name(w["kind"].as_str().unwrap())
+                );
+                assert_eq!(t.species() as i64, n("Species", 0), "{key}/{name}");
+                assert_eq!(t.form() as i64, n("Form", 0));
+                assert_eq!(
+                    (t.level_min() as i64, t.level_max() as i64),
+                    (n("LevelMin", 0), n("LevelMax", 0))
+                );
+                assert_eq!(t.ability() as i64, n("Ability", 0));
+                assert_eq!(t.shiny() as i64, n("Shiny", 0));
+                assert_eq!(t.ball() as i64, n("FixedBall", 0));
+                assert_eq!(
+                    t.location() as i64,
+                    n("Location", 0),
+                    "{key}/{name} location"
+                );
+                assert_eq!(t.version() as i64, n("Version", 0));
+                assert_eq!(t.ground_tile() as i64, n("GroundTile", 0));
+                assert_eq!(
+                    t.has(verity::data::encounters::flag::RANDOM_UNSPECIFIC_FORM),
+                    w["IsRandomUnspecificForm"].as_bool().unwrap_or(false)
+                );
+                assert_eq!(
+                    t.has(verity::data::encounters::flag::HIDDEN_GROTTO),
+                    w["IsHiddenGrotto"].as_bool().unwrap_or(false)
+                );
+                if let Some(a) = area {
+                    let ar = t.area().unwrap();
+                    assert_eq!(ar.location() as i64, a["Location"].as_i64().unwrap());
+                    assert_eq!(ar.slot_type() as i64, a["Type"].as_i64().unwrap());
+                    assert_eq!(ar.rate() as i64, a["Rate"].as_i64().unwrap_or(0));
+                    assert_eq!(t.slot_type() as i64, n("Type", 0));
+                    assert_eq!(
+                        t.area_rate() as i64,
+                        n("AreaRate", a["Rate"].as_i64().unwrap_or(0))
+                    );
+                    assert_eq!(t.slot_number() as i64, n("SlotNumber", 0));
+                    assert_eq!(
+                        t.magnet_pull(),
+                        (n("MagnetPullIndex", 0) as u8, n("MagnetPullCount", 0) as u8)
+                    );
+                    assert_eq!(
+                        t.static_slot(),
+                        (n("StaticIndex", 0) as u8, n("StaticCount", 0) as u8)
+                    );
+                    assert!(t.template().is_none());
+                    continue;
+                }
+                let t = t.template().unwrap();
+                assert_eq!(t.gender() as i64, n("Gender", 255));
+                assert_eq!(t.nature() as i64, n("Nature", 25));
+                assert_eq!(t.held_item() as i64, n("HeldItem", 0));
+                assert_eq!(t.egg_location() as i64, n("EggLocation", 0));
+                assert_eq!(t.pid() as i64, n("PID", 0));
+                assert_eq!(
+                    (t.tid() as i64, t.sid() as i64),
+                    (n("TID16", 0), n("SID16", 0))
+                );
+                let mv: Vec<i64> = t.moves().iter().map(|m| *m as i64).collect();
+                let wm: Vec<i64> = ["Move1", "Move2", "Move3", "Move4"]
+                    .iter()
+                    .map(|k| w["Moves"][*k].as_i64().unwrap_or(0))
+                    .collect();
+                assert_eq!(mv, wm);
+                let ivs: Vec<i64> = t.ivs().iter().map(|v| *v as i64).collect();
+                let wi: Vec<i64> = ["HP", "ATK", "DEF", "SPE", "SPA", "SPD"]
+                    .iter()
+                    .map(|k| w["IVs"][*k].as_i64().unwrap_or(0))
+                    .collect();
+                assert_eq!(ivs, wi);
+                let ct: Vec<i64> = t.contest().iter().map(|v| *v as i64).collect();
+                let wc: Vec<i64> = [
+                    "ContestCool",
+                    "ContestBeauty",
+                    "ContestCute",
+                    "ContestSmart",
+                    "ContestTough",
+                    "ContestSheen",
+                ]
+                .iter()
+                .map(|k| n(k, 0))
+                .collect();
+                assert_eq!(ct, wc);
+                assert_eq!(t.met_location() as i64, n("MetLocation", 0));
+                assert_eq!(t.met_level() as i64, n("MetLevel", 0));
+                assert_eq!(t.ot_gender() as i64, n("OTGender", 0));
+                assert_eq!(t.course() as i64, n("Course", 0));
+                assert!(t.area().is_none());
+            }
+            total += got.len();
+        }
+        eprintln!("ok enc_{key}: {total} templates, {} bytes", bytes.len());
+    }
 }
