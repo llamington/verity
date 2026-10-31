@@ -8,7 +8,8 @@ use crate::pkm::{SIZE_5PARTY, SIZE_5STORED};
 pub const BOX_COUNT: usize = 24;
 const BOX: usize = 0x400;
 const PARTY: usize = 0x18E00;
-const PLAYER_DATA: usize = 0x19400;
+pub(super) const PLAYER_DATA: usize = 0x19400;
+const MISC_BLOCK: usize = 52;
 
 pub struct Layout5 {
     blocks: &'static [Block5],
@@ -36,6 +37,10 @@ impl Layout5 {
         BOX + SIZE_5STORED * BOX_SLOTS * b + b * 0x10 + s * SIZE_5STORED
     }
 
+    pub fn misc_offset(&self) -> usize {
+        self.blocks[MISC_BLOCK].offset as usize
+    }
+
     pub fn ot_offset(&self) -> usize {
         PLAYER_DATA + 4
     }
@@ -58,6 +63,11 @@ impl Layout5 {
             write_u16(data, b.chk_mirror as usize, chk);
         }
     }
+}
+
+/// `BoxLayout5.GetBoxNameOffset` within block 0.
+pub fn box_name_offset(b: usize) -> usize {
+    0x28 * b + 4
 }
 
 fn checksum(data: &[u8], b: &Block5) -> u16 {

@@ -100,6 +100,56 @@ fn saves_match_pkhex() {
             "{name}: trainer name"
         );
 
+        let decode = |raw: &[u16]| {
+            let mut b = [0u16; 24];
+            let n = if save.generation() == 4 {
+                verity::text::decode4(raw, &mut b)
+            } else {
+                verity::text::decode5(raw, &mut b)
+            };
+            String::from_utf16_lossy(&b[..n])
+        };
+        let t = save.trainer();
+        assert_eq!(
+            t.gender as u64,
+            info["gender_id"].as_u64().unwrap(),
+            "{name}: gender"
+        );
+        assert_eq!(
+            t.language as u64,
+            info["language_id"].as_u64().unwrap(),
+            "{name}: language"
+        );
+        assert_eq!(
+            t.money as u64,
+            info["money"].as_u64().unwrap(),
+            "{name}: money"
+        );
+        assert_eq!(
+            t.badges as u64,
+            info["badges"].as_u64().unwrap(),
+            "{name}: badges"
+        );
+        let played: Vec<u64> = info["played"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap())
+            .collect();
+        assert_eq!(
+            vec![
+                t.played_hours as u64,
+                t.played_minutes as u64,
+                t.played_seconds as u64
+            ],
+            played,
+            "{name}: play time"
+        );
+        for (b, want) in info["box_names"].as_array().unwrap().iter().enumerate() {
+            let got = decode(&save.box_name_raw(b).unwrap());
+            assert_eq!(got, want.as_str().unwrap(), "{name}: box {b} name");
+        }
+
         let ext = if save.generation() == 4 { "pk4" } else { "pk5" };
         let slots = dump["slots"].as_array().unwrap();
         assert!(!slots.is_empty());

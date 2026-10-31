@@ -173,6 +173,15 @@ impl Layout4 {
         self.storage + box_ofs + s * SIZE_4STORED
     }
 
+    /// `SAV4Sinnoh`/`SAV4HGSS.GetBoxNameOffset`.
+    pub fn box_name_offset(&self, b: usize) -> usize {
+        let base = match self.kind {
+            SaveKind::HGSS => 0x12008,
+            _ => 4 + BOX_COUNT * BOX_DATA_LEN_SINNOH,
+        };
+        self.storage + base + 40 * b
+    }
+
     pub fn ot_offset(&self) -> usize {
         self.general + self.trainer
     }

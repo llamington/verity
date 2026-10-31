@@ -109,7 +109,13 @@ public static class Program
             language = ((LanguageID)sav.Language).ToString(),
             box_count = sav.BoxCount,
             party_count = sav.PartyCount,
-            checksum_info = sav.ChecksumInfo
+            checksum_info = sav.ChecksumInfo,
+            gender_id = sav.Gender,
+            language_id = sav.Language,
+            money = sav.Money,
+            badges = sav switch { SAV4 s4 => s4.Badges, SAV5 s5 => s5.Misc.Badges, _ => -1 },
+            played = new[] { sav.PlayedHours, sav.PlayedMinutes, sav.PlayedSeconds },
+            box_names = sav is IBoxDetailName bn ? Enumerable.Range(0, sav.BoxCount).Select(bn.GetBoxName).ToArray() : null,
         };
 
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOpts));
