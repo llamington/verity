@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/verity",
+    "crates/verity-ffi",
+    "crates/datagen",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Bailey Lissington <lissington4@gmail.com>"]
+license = "GPL-3.0-only"
+repository = "https://github.com/llamington/verity"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

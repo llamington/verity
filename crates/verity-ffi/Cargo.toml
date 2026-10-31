@@ -1,0 +1,19 @@
+[package]
+name = "verity-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = ["std"]
+std = ["verity/std"]
+alloc = ["verity/alloc"]
+picolibc-allocator = []
+
+[dependencies]
+verity = { path = "../verity", default-features = false }

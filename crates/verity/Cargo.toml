@@ -1,0 +1,19 @@
+[package]
+name = "verity"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["std"]
+std = ["alloc"]
+alloc = []
+gen3-origin = []
+gen4 = []
+gen5 = []
+
+[dependencies]
+
+[dev-dependencies]

@@ -64,17 +64,17 @@ This document is the hand-off spec. It records decisions already made with the p
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ pkcore  (Rust, no_std + alloc, no I/O, no globals)           │
+│ verity  (Rust, no_std + alloc, no I/O, no globals)           │
 │  rng · text · pkm · save · data · legality · gen · gift      │
 │  · memlink · safety                                          │
 └───────────────┬───────────────────────────────┬──────────────┘
                 │ rlib                          │ rlib
       ┌─────────┴─────────┐           ┌─────────┴───────────┐
-      │ pkcore-ffi        │           │ native test/fuzz    │
+      │ verity-ffi        │           │ native test/fuzz    │
       │ staticlib + C ABI │           │ (cargo test, fuzz,  │
       │ cbindgen → .h     │           │  proptest, oracle)  │
       └─────────┬─────────┘           └─────────────────────┘
-                │ libpkcore.a + pkcore.h
+                │ libverity.a + verity.h
       ┌─────────┴────────────────────────────────────────────┐
       │ nds/  (C++, BlocksDS)                                │
       │ scenes · widgets · input · assets (grit) · NitroFS   │
@@ -103,14 +103,14 @@ tools/
 ## 4. Repository layout
 
 ```
-pkds/
+verity/
   PLAN.md                      (this file)
   LICENSE                      GPL-3.0
   README.md
   rust-toolchain.toml          pinned nightly + rust-src
   Cargo.toml                   workspace
   crates/
-    pkcore/
+    verity/
       src/
         lib.rs
         rng/       lcrng.rs, lcrng_reversal.rs, arng.rs, mt.rs,
@@ -131,7 +131,7 @@ pkds/
         gift/      pgt.rs, pcd.rs, pgf.rs, inject.rs
         memlink/   mod.rs, keysystem.rs
         safety/    mod.rs (game-safe validator)
-    pkcore-ffi/
+    verity-ffi/
       src/lib.rs   extern "C" API, opaque handles
       cbindgen.toml
     datagen/       build-time tool (std), oracle export → blobs
@@ -142,7 +142,7 @@ pkds/
     pkhex-oracle/  C# .NET (net8.0+) console app
     emu-harness/   C++ (CMake), links melonDS core as submodule
   nds/
-    Makefile       BlocksDS; builds pkcore first via cargo
+    Makefile       BlocksDS; builds verity first via cargo
     source/        C++ front end
     graphics/      original art → grit
     nitrofiles/    data blobs copied here at build time
@@ -161,17 +161,17 @@ pkds/
 | Tool | Notes |
 |---|---|
 | Rust nightly | Pinned in `rust-toolchain.toml` (e.g. `nightly-2026-10-01`) with `components = ["rust-src"]`. |
-| DS build of the core | `cargo build -p pkcore-ffi --release --target armv5te-none-eabi -Zbuild-std=core,alloc -Zbuild-std-features=panic_immediate_abort` |
+| DS build of the core | `cargo build -p verity-ffi --release --target armv5te-none-eabi -Zbuild-std=core,alloc -Zbuild-std-features=panic_immediate_abort` |
 | Release profile | `opt-level="z"`, `lto=true`, `codegen-units=1`, `panic="abort"` |
 | BlocksDS | Latest stable. Uses **picolibc**. The Rust `#[global_allocator]` wraps picolibc `malloc`/`free`. Do **not** enable `compiler-builtins-mem` (it would duplicate `memcpy`). |
-| C header | `cbindgen` → `nds/include/pkcore.h` |
+| C header | `cbindgen` → `nds/include/verity.h` |
 | Oracle | .NET 8+ SDK, `PKHeX.Core` from NuGet. Pin a version and record it. |
 | Emulator harness | CMake + the melonDS core (git submodule pinned to a specific commit). |
 | Size checks | `cargo bloat`, `arm-none-eabi-size` on the final ELF. |
 
 CI (GitHub Actions or local):
 - Native `cargo test` and `clippy`.
-- ARM build of `pkcore-ffi`.
+- ARM build of `verity-ffi`.
 - BlocksDS build of `nds/`.
 - Oracle-dependent tests run whenever the corpus is present: locally always, in CI only with synthetic saves the harness generates.
 
@@ -242,9 +242,9 @@ Each phase lists tasks and **acceptance criteria**. Phases P2–P7 can partly ov
 
 ### P0 — Skeleton and toolchain
 - Create the repository layout (§4), LICENSE, README with credits, and the pinned toolchain.
-- `pkcore` exports `pk_crc16_ccitt(data, len) -> u16`.
-- `pkcore-ffi` builds for `armv5te-none-eabi`. A BlocksDS app links it and prints a CRC on screen.
-- Global allocator via picolibc, plus a panic handler that calls `extern "C" pk_on_panic()` (the C++ side shows a red error screen and halts).
+- `verity` exports `verity_crc16_ccitt(data, len) -> u16`.
+- `verity-ffi` builds for `armv5te-none-eabi`. A BlocksDS app links it and prints a CRC on screen.
+- Global allocator via picolibc, plus a panic handler that calls `extern "C" verity_on_panic()` (the C++ side shows a red error screen and halts).
 - **Accept:** `make` at the repo root builds the `.nds`. It boots in melonDS (or the harness) and shows the expected CRC. Native `cargo test` passes.
 
 ### P1 — Oracle and corpus
@@ -282,7 +282,7 @@ Port from PKHeX: `SAV4DP`, `SAV4Pt`, `SAV4HGSS`, `SAV5BW`, `SAV5B2W2`, `PK4`, `P
 
 ### P3 — Data pipeline
 - Implement `oracle export-data`/`export-events`.
-- `datagen` converts the exports into **compact little-endian binary blobs** with a fixed header (magic, version, generation, table offsets), readable zero-copy by `pkcore::data`. Small hot tables (species count, move/item validity bitsets) may be generated as Rust `static`s. Big tables (encounters, learnsets, events) go in blobs.
+- `datagen` converts the exports into **compact little-endian binary blobs** with a fixed header (magic, version, generation, table offsets), readable zero-copy by `verity::data`. Small hot tables (species count, move/item validity bitsets) may be generated as Rust `static`s. Big tables (encounters, learnsets, events) go in blobs.
 - Blobs, one per generation and per concern:
   - `g4_personal.bin`, `g4_learn.bin`, `g4_enc_dppt.bin`, `g4_enc_hgss.bin`
   - `g5_personal.bin`, `g5_learn.bin`, `g5_enc_bw.bin`, `g5_enc_b2w2.bin`
@@ -290,7 +290,7 @@ Port from PKHeX: `SAV4DP`, `SAV4Pt`, `SAV4HGSS`, `SAV5BW`, `SAV5B2W2`, `PK4`, `P
   - `g4_events.bin`, `g5_events.bin`
   - `strings_<lang>.bin`
 - **Accept:**
-  - Round-trip test: every exported record can be read back by `pkcore::data` and matches the JSON export.
+  - Round-trip test: every exported record can be read back by `verity::data` and matches the JSON export.
   - Total blob size per generation is reported. The front end loads only the blobs for the open save's game.
 
 ### P4 — RNG library
@@ -442,24 +442,24 @@ A separate module from legality: "this cannot crash or corrupt the game".
 
 #### P9.2 FFI surface (sketch; refine during implementation)
 ```c
-pk_err pk_save_open(const uint8_t* buf, size_t len, pk_save** out);
-void   pk_save_free(pk_save*);
-pk_err pk_save_info(const pk_save*, pk_save_info*);
-pk_err pk_data_attach(pk_save*, pk_blob_kind, const uint8_t* buf, size_t len);
-pk_err pk_slot_get(const pk_save*, pk_loc loc, pk_pkm_view* out);
-pk_err pk_slot_set(pk_save*, pk_loc loc, const pk_pkm_edit* edit, pk_mode mode, pk_report* out);
-pk_err pk_legality(const pk_save*, pk_loc loc, pk_report* out);
-pk_err pk_gen_begin(pk_save*, const pk_gen_request*, pk_job** out);
-pk_err pk_job_step(pk_job*, uint32_t budget_us, pk_job_status* out);
-pk_err pk_job_result_pkm(pk_job*, pk_pkm_view* out);
-pk_err pk_gift_list(const pk_save*, pk_gift_iter**);
-pk_err pk_gift_inject(pk_save*, uint32_t gift_id);
-pk_err pk_memlink_preview(const pk_save* b2w2, const uint8_t* bw, size_t len, pk_memlink_preview* out);
-pk_err pk_memlink_apply(pk_save* b2w2, const uint8_t* bw, size_t len);
-pk_err pk_save_export(pk_save*, uint8_t* buf, size_t len);
+verity_err verity_save_open(const uint8_t* buf, size_t len, verity_save** out);
+void       verity_save_free(verity_save*);
+verity_err verity_save_info(const verity_save*, verity_save_info*);
+verity_err verity_data_attach(verity_save*, verity_blob_kind, const uint8_t* buf, size_t len);
+verity_err verity_slot_get(const verity_save*, verity_loc loc, verity_pkm_view* out);
+verity_err verity_slot_set(verity_save*, verity_loc loc, const verity_pkm_edit* edit, verity_mode mode, verity_report* out);
+verity_err verity_legality(const verity_save*, verity_loc loc, verity_report* out);
+verity_err verity_gen_begin(verity_save*, const verity_gen_request*, verity_job** out);
+verity_err verity_job_step(verity_job*, uint32_t budget_us, verity_job_status* out);
+verity_err verity_job_result_pkm(verity_job*, verity_pkm_view* out);
+verity_err verity_gift_list(const verity_save*, verity_gift_iter**);
+verity_err verity_gift_inject(verity_save*, uint32_t gift_id);
+verity_err verity_memlink_preview(const verity_save* b2w2, const uint8_t* bw, size_t len, verity_memlink_preview* out);
+verity_err verity_memlink_apply(verity_save* b2w2, const uint8_t* bw, size_t len);
+verity_err verity_save_export(verity_save*, uint8_t* buf, size_t len);
 ```
 - All structs `#[repr(C)]`, fixed-size arrays for strings (`uint16_t[13]` etc.), no Rust types across the boundary.
-- Errors are `enum pk_err`.
+- Errors are `enum verity_err`.
 
 **Accept:**
 - All screens reachable and usable in the harness with scripted input, for one save per supported game.
@@ -507,7 +507,7 @@ It sets a random seed `(rand16 << 16)`. BW_tool's own notes say this unlocks all
 
 #### Method (automated via §7)
 1. **Go/no-go:** a harness script performs a genuine Memory Link: instance A runs B2W2 (fresh or early save), instance B receives via DS Download Play with BW ROM + save in its slot. Confirm the B2W2 save gains data at `0x7E000`.
-2. **Base saves:** obtain BW saves at key story points. Prefer harness-driven natural progression where cheap (owner-supplied saves are fine). Otherwise create variants by editing BW event flags with `pkcore` (BW flags as mapped in PKHeX `EventWork5`).
+2. **Base saves:** obtain BW saves at key story points. Prefer harness-driven natural progression where cheap (owner-supplied saves are fine). Otherwise create variants by editing BW event flags with `verity` (BW flags as mapped in PKHeX `EventWork5`).
 3. **Differential runs:** change one BW variable per run: each flashback-related flag, name, TID/SID, starter, Hall of Fame, Pokédex completion, Battle Subway records, props source. Link each, dump B2W2, **decrypt block 1**, and diff.
 4. Produce `docs/memlink-findings.md`: field-by-field map, derivation rules, and evidence (run IDs and diffs).
 5. **Fallback** if Download Play linking fails in melonDS:
@@ -516,7 +516,7 @@ It sets a random seed `(rand16 << 16)`. BW_tool's own notes say this unlocks all
    - Document which path was used.
 
 #### Implementation
-- `pkcore::memlink::build(bw: &BwSave) -> MemoryLinkData` derives everything from the BW save, never from canned data. It refuses (with a reason) if the BW save hasn't reached the minimum progress, or its region/language doesn't match the B2W2 save.
+- `verity::memlink::build(bw: &BwSave) -> MemoryLinkData` derives everything from the BW save, never from canned data. It refuses (with a reason) if the BW save hasn't reached the minimum progress, or its region/language doesn't match the B2W2 save.
 - `apply(b2w2, data)` writes block 1, the mirror (as the real game does) and block 2, with fresh crypto seeds and correct CRCs.
 - **Key System:** port PKHeX `KeySystem5`. Unlock keys only per the rules the game uses for Unova Link sharing (research R5: which keys are shareable vs earned; document them).
 
@@ -526,8 +526,8 @@ It sets a random seed `(rand16 << 16)`. BW_tool's own notes say this unlocks all
 
 ### P11 — In-game acceptance tests (harness)
 - For each of the 9 games, scripted runs:
-  1. Boot with a pkds-edited save → Continue → open PC → open a box containing generated Pokémon → open a summary → save in-game → dump the save.
-  2. Assert: no crash/freeze (frame progress plus a screen-hash watchdog), and no Bad Egg. The re-dumped save opens in `pkcore` and the oracle, and our Pokémon are still Legal.
+  1. Boot with a verity-edited save → Continue → open PC → open a box containing generated Pokémon → open a summary → save in-game → dump the save.
+  2. Assert: no crash/freeze (frame progress plus a screen-hash watchdog), and no Bad Egg. The re-dumped save opens in `verity` and the oracle, and our Pokémon are still Legal.
 - Mystery gift collection runs (P8) and Memory Link runs (P10).
 - Run nightly when ROMs are available locally. Store the results in `corpus/reports/`.
 
