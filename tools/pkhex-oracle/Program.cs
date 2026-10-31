@@ -34,6 +34,7 @@ public static class Program
                 "legality" => HandleLegality(args),
                 "legality-batch" => HandleLegalityBatch(args),
                 "generate-synthetic" => HandleGenerateSynthetic(args),
+                "sav-dump" => HandleSavDump(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -55,6 +56,7 @@ public static class Program
         Console.WriteLine("  legality <pkm-path>");
         Console.WriteLine("  legality-batch <dir-path>");
         Console.WriteLine("  generate-synthetic <out-dir>");
+        Console.WriteLine("  sav-dump <sav-path> <out-dir>");
         Console.WriteLine("  version");
     }
 
@@ -280,46 +282,147 @@ public static class Program
         var outDir = args.Length >= 2 ? args[1] : "corpus/synthetic";
         Directory.CreateDirectory(outDir);
 
-        byte[] MakeTemplate()
+        var games = new (string file, GameVersion ver)[]
         {
-            var b = new byte[0x80000];
-            Array.Fill(b, (byte)0xFF);
-            return b;
-        }
-
-        var saves = new (string filename, SaveFile sav)[]
-        {
-            ("platinum.sav", new SAV4Pt(MakeTemplate())),
-            ("diamond.sav", new SAV4DP(MakeTemplate()) { Version = GameVersion.D }),
-            ("pearl.sav", new SAV4DP(MakeTemplate()) { Version = GameVersion.P }),
-            ("heartgold.sav", new SAV4HGSS(MakeTemplate()) { Version = GameVersion.HG }),
-            ("soulsilver.sav", new SAV4HGSS(MakeTemplate()) { Version = GameVersion.SS }),
-            ("black.sav", new SAV5BW(MakeTemplate()) { Version = GameVersion.B }),
-            ("white.sav", new SAV5BW(MakeTemplate()) { Version = GameVersion.W }),
-            ("black2.sav", new SAV5B2W2(MakeTemplate()) { Version = GameVersion.B2 }),
-            ("white2.sav", new SAV5B2W2(MakeTemplate()) { Version = GameVersion.W2 })
+            ("diamond.sav", GameVersion.D), ("pearl.sav", GameVersion.P), ("platinum.sav", GameVersion.Pt),
+            ("heartgold.sav", GameVersion.HG), ("soulsilver.sav", GameVersion.SS),
+            ("black.sav", GameVersion.B), ("white.sav", GameVersion.W),
+            ("black2.sav", GameVersion.B2), ("white2.sav", GameVersion.W2),
         };
 
         var results = new System.Collections.Generic.List<object>();
-        foreach (var (filename, sav) in saves)
+        foreach (var (file, ver) in games)
         {
-            sav.OT = "Verity";
+            var sav = MakeBlank(ver);
             sav.TID16 = 12345;
             sav.SID16 = 54321;
-            var path = Path.Combine(outDir, filename);
+            var rnd = new Random((int)ver);
+            var mons = GenerateLegal(sav, ver, rnd, 6 + 2 * sav.BoxSlotCount);
+            for (int i = 0; i < Math.Min(6, mons.Count); i++)
+                sav.SetPartySlotAtIndex(mons[i], i);
+            for (int i = 6; i < mons.Count; i++)
+                sav.SetBoxSlotAtIndex(mons[i], (i - 6) / sav.BoxSlotCount, (i - 6) % sav.BoxSlotCount);
+
+            var path = Path.Combine(outDir, file);
             var bytes = sav.Write().ToArray();
             File.WriteAllBytes(path, bytes);
+            var reread = SaveUtil.GetSaveFile(bytes);
             results.Add(new
             {
-                filename,
+                file,
                 version = sav.Version.ToString(),
-                generation = (int)sav.Generation,
                 size = bytes.Length,
-                checksums_valid = sav.ChecksumsValid
+                pokemon = mons.Count,
+                legal = mons.Count(m => new LegalityAnalysis(m).Valid),
+                redetected = reread?.Version.ToString(),
             });
         }
 
         Console.WriteLine(JsonSerializer.Serialize(results, JsonOpts));
+        return 0;
+    }
+
+    private static SaveFile MakeBlank(GameVersion ver)
+    {
+        if (ver is not (GameVersion.D or GameVersion.P or GameVersion.Pt or GameVersion.HG or GameVersion.SS))
+        {
+            var s5 = BlankSaveFile.Get(ver, "Verity", LanguageID.English);
+            s5.Language = (int)LanguageID.English;
+            return s5;
+        }
+
+        // PKHeX's blank Gen 4 saves have no backing buffer; build one with valid block footers.
+        var (gSize, sStart, sSize) = ver switch
+        {
+            GameVersion.D or GameVersion.P => (SAV4DP.GeneralSize, SAV4DP.GeneralSize, 0x121E0),
+            GameVersion.Pt => (SAV4Pt.GeneralSize, SAV4Pt.GeneralSize, 0x121E4),
+            _ => (SAV4HGSS.GeneralSize, SAV4HGSS.GeneralSize + 0xD8, 0x12310),
+        };
+        var data = new byte[SaveUtil.SIZE_G4RAW];
+        Array.Fill(data, (byte)0xFF);
+        for (int part = 0; part < 2; part++)
+        {
+            int baseOfs = part * 0x40000;
+            foreach (var (ofs, len) in new[] { (0, gSize), (sStart, sSize) })
+            {
+                var block = data.AsSpan(baseOfs + ofs, len);
+                block.Clear();
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(block[^0x14..], (uint)part);
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(block[^0x10..], (uint)part);
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(block[^0xC..], (uint)len);
+                System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(block[^0x8..], SAV4.MAGIC_JAPAN_INTL);
+            }
+        }
+        var sav = SaveUtil.GetSaveFile(data) ?? throw new InvalidOperationException($"blank {ver} not detected");
+        sav.Version = ver;
+        sav.OT = "Verity";
+        sav.Language = (int)LanguageID.English;
+        return sav;
+    }
+
+    private static System.Collections.Generic.List<PKM> GenerateLegal(SaveFile sav, GameVersion ver, Random rnd, int count)
+    {
+        var list = new System.Collections.Generic.List<PKM>();
+        var max = sav.MaxSpeciesID;
+        int attempts = 0;
+        while (list.Count < count && attempts++ < count * 50)
+        {
+            var species = (ushort)rnd.Next(1, max + 1);
+            var blank = sav.BlankPKM;
+            blank.Species = species;
+            blank.Gender = blank.GetSaneGender();
+            var encs = EncounterMovesetGenerator.GenerateEncounters(blank, sav, ReadOnlyMemory<ushort>.Empty, ver);
+            var enc = encs.Skip(rnd.Next(0, 3)).FirstOrDefault() ?? encs.FirstOrDefault();
+            if (enc == null)
+                continue;
+            var pk = enc.ConvertToPKM(sav);
+            var converted = EntityConverter.ConvertToType(pk, sav.PKMType, out _);
+            if (converted == null)
+                continue;
+            if (!new LegalityAnalysis(converted).Valid)
+                continue;
+            list.Add(converted);
+        }
+        return list;
+    }
+
+    private static int HandleSavDump(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            Console.Error.WriteLine("Usage: sav-dump <sav-path> <out-dir>");
+            return 1;
+        }
+
+        var sav = SaveUtil.GetSaveFile(File.ReadAllBytes(args[1]));
+        if (sav == null)
+        {
+            Console.Error.WriteLine("Unrecognized save file format");
+            return 1;
+        }
+        var outDir = args[2];
+        Directory.CreateDirectory(outDir);
+        var ext = "." + sav.PKMType.Name.ToLowerInvariant();
+
+        var slots = new System.Collections.Generic.List<object>();
+        void Dump(PKM pk, string name, bool party)
+        {
+            if (pk.Species == 0)
+                return;
+            var dec = party ? pk.DecryptedPartyData : pk.DecryptedBoxData;
+            var enc = party ? pk.EncryptedPartyData : pk.EncryptedBoxData;
+            File.WriteAllBytes(Path.Combine(outDir, name + ext), dec);
+            File.WriteAllBytes(Path.Combine(outDir, name + ".enc"), enc);
+            slots.Add(new { name, species = pk.Species, pid = pk.PID, checksum_valid = pk.ChecksumValid, legal = new LegalityAnalysis(pk).Valid });
+        }
+
+        for (int i = 0; i < sav.PartyCount; i++)
+            Dump(sav.GetPartySlotAtIndex(i), $"party_{i}", true);
+        for (int b = 0; b < sav.BoxCount; b++)
+            for (int s = 0; s < sav.BoxSlotCount; s++)
+                Dump(sav.GetBoxSlotAtIndex(b, s), $"box{b:D2}_{s:D2}", false);
+
+        Console.WriteLine(JsonSerializer.Serialize(new { version = sav.Version.ToString(), slots }, JsonOpts));
         return 0;
     }
 
