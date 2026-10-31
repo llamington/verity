@@ -10,9 +10,11 @@ const BOX: usize = 0x400;
 const PARTY: usize = 0x18E00;
 pub(super) const PLAYER_DATA: usize = 0x19400;
 const MISC_BLOCK: usize = 52;
+const ITEMS_BLOCK: usize = 25;
 
 pub struct Layout5 {
     blocks: &'static [Block5],
+    dex_block: usize,
 }
 
 impl Layout5 {
@@ -22,7 +24,9 @@ impl Layout5 {
             SaveKind::B2W2 => &BLOCKS_B2W2,
             _ => unreachable!(),
         };
-        Self { blocks }
+        // `SaveBlockAccessor5BW.Zukan` is block 55, `SaveBlockAccessor5B2W2.Zukan` block 54.
+        let dex_block = if kind == SaveKind::B2W2 { 54 } else { 55 };
+        Self { blocks, dex_block }
     }
 
     pub fn party_count_offset(&self) -> usize {
@@ -35,6 +39,14 @@ impl Layout5 {
 
     pub fn box_slot_offset(&self, b: usize, s: usize) -> usize {
         BOX + SIZE_5STORED * BOX_SLOTS * b + b * 0x10 + s * SIZE_5STORED
+    }
+
+    pub fn dex_offset(&self) -> usize {
+        self.blocks[self.dex_block].offset as usize
+    }
+
+    pub fn items_offset(&self) -> usize {
+        self.blocks[ITEMS_BLOCK].offset as usize
     }
 
     pub fn misc_offset(&self) -> usize {

@@ -324,3 +324,111 @@ fn slot_from_name(name: &str) -> Slot {
         Slot::Box(b.parse().unwrap(), s.parse().unwrap())
     }
 }
+
+#[test]
+fn dex_registration_matches_pkhex() {
+    let Some(oracle) = oracle() else {
+        eprintln!("skipping: oracle not built");
+        return;
+    };
+    let reports = root().join("corpus/reports/oracle-smoke");
+    let Ok(rd) = fs::read_dir(&reports) else {
+        eprintln!("skipping: no reports");
+        return;
+    };
+    let mut pool: [Vec<PathBuf>; 2] = [Vec::new(), Vec::new()];
+    for e in rd.flatten() {
+        let dir = e.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        for f in fs::read_dir(&dir).unwrap().flatten() {
+            let p = f.path();
+            match p.extension().and_then(|x| x.to_str()) {
+                Some("pk4") => pool[0].push(p),
+                Some("pk5") => pool[1].push(p),
+                _ => {}
+            }
+        }
+    }
+    pool[0].sort();
+    pool[1].sort();
+
+    let mut paths = Vec::new();
+    let mut stack = vec![root().join("corpus")];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() && !p.ends_with("reports") {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "sav" || x == "dsv") {
+                paths.push(p);
+            }
+        }
+    }
+    paths.sort();
+    let tmp = std::env::temp_dir().join(format!("verity-dex-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+
+    for (n, path) in paths.iter().enumerate() {
+        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let mut buf = fs::read(path).unwrap();
+        let mut save = Save::open(&mut buf).unwrap();
+        let (format, pool) = match save.pkm_format() {
+            verity::pkm::Format::Pk4 => (verity::pkm::Format::Pk4, &pool[0]),
+            verity::pkm::Format::Pk5 => (verity::pkm::Format::Pk5, &pool[1]),
+        };
+        let mut rng = Rng(0x0DE0_5EED_0000_0001 ^ n as u64);
+        let mut ops = Vec::new();
+        for _ in 0..150 {
+            let pkp = &pool[rng.below(pool.len())];
+            let pk = verity::pkm::Pkm::from_decrypted(format, &fs::read(pkp).unwrap()).unwrap();
+            save.register_dex(&pk);
+            ops.push(serde_json::json!({"op": "dex", "pkm": pkp}));
+        }
+        const FORM_SPECIES: [u16; 22] = [
+            201, 386, 412, 413, 422, 423, 479, 487, 492, 172, 327, 351, 421, 585, 586, 641, 642,
+            645, 646, 647, 648, 555,
+        ];
+        for pkp in pool {
+            let pk = verity::pkm::Pkm::from_decrypted(format, &fs::read(pkp).unwrap()).unwrap();
+            if FORM_SPECIES.contains(&pk.species()) {
+                save.register_dex(&pk);
+                ops.push(serde_json::json!({"op": "dex", "pkm": pkp}));
+            }
+        }
+        save.finalize();
+
+        let ops_path = tmp.join(format!("{stem}.ops.json"));
+        let out_path = tmp.join(format!("{stem}.out.sav"));
+        fs::write(&ops_path, serde_json::to_vec(&ops).unwrap()).unwrap();
+        let out = Command::new(&oracle)
+            .env(
+                "DOTNET_ROOT",
+                format!("{}/.dotnet", std::env::var("HOME").unwrap()),
+            )
+            .arg("sav-apply")
+            .arg(path)
+            .arg(&ops_path)
+            .arg(&out_path)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let expected = fs::read(&out_path).unwrap();
+        if buf != expected {
+            let diffs: Vec<String> = (0..buf.len())
+                .filter(|&i| buf[i] != expected[i])
+                .take(8)
+                .map(|i| format!("{i:#X}:{:02X}/{:02X}", buf[i], expected[i]))
+                .collect();
+            panic!("{stem}: dex differs {diffs:?}");
+        }
+        eprintln!("ok {stem}: {} dex registrations byte-identical", ops.len());
+    }
+    let _ = fs::remove_dir_all(&tmp);
+}

@@ -28,3 +28,17 @@ saves (3 flag bytes + storage CRC).
 PKHeX `PKM.SetMoves` also refills PP from move data (`SetMaximumPPCurrent`). Move data arrives in
 P3, so `Pkm::set_moves` currently writes move IDs only and the differential test sets raw move
 IDs on the PKHeX side. A PP-aware setter follows with P3.
+
+## Pokédex registration (P2)
+
+`Save::register_dex` ports PKHeX `Zukan4.SetDex` / `Zukan5.SetDex` byte-for-byte, including
+behaviour that looks unintended and should be checked against the game in the harness (P11) and
+reported upstream:
+
+- `Zukan4.SetDexFormValues` ORs `0xFF << (bits * i)` for empty form slots, spilling into
+  neighbouring bits.
+- `Zukan5.SetDex` marks the species' *base* form index as seen (`SetFormSeen(formIndex, …)`)
+  rather than `formIndex + form`.
+- `Zukan5.GetFormDisplayed` checks the non-shiny displayed region twice (the shiny check reads
+  `FormDex + 2 * FormLen` again), and rejects `formIndex0 + formCount == FormLen * 8`.
+- `Zukan5.GetLanguageIndex` maps Korean (8) to -1, so Korean language flags are never set.

@@ -182,6 +182,20 @@ impl Layout4 {
         self.storage + base + 40 * b
     }
 
+    /// `SAV4DP/SAV4Pt/SAV4HGSS.PokeDex`.
+    pub fn dex_offset(&self) -> usize {
+        self.general
+            + match self.kind {
+                SaveKind::DP => 0x12DC,
+                SaveKind::Pt => 0x1328,
+                _ => 0x12B8,
+            }
+    }
+
+    pub fn general_offset(&self) -> usize {
+        self.general
+    }
+
     pub fn ot_offset(&self) -> usize {
         self.general + self.trainer
     }

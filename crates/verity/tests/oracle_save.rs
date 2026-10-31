@@ -150,6 +150,29 @@ fn saves_match_pkhex() {
             assert_eq!(got, want.as_str().unwrap(), "{name}: box {b} name");
         }
 
+        let pouches = info["inventory"].as_array().unwrap();
+        assert_eq!(pouches.len(), save.pouches().len(), "{name}: pouch count");
+        for (pi, (want, def)) in pouches.iter().zip(save.pouches()).enumerate() {
+            assert_eq!(
+                def.slots as u64,
+                want["slots"].as_u64().unwrap(),
+                "{name}: pouch {pi} slots"
+            );
+            assert_eq!(
+                def.max_count as u64,
+                want["max_count"].as_u64().unwrap(),
+                "{name}: pouch {pi} max"
+            );
+            for (si, it) in want["items"].as_array().unwrap().iter().enumerate() {
+                let (id, count) = save.bag_item(pi, si).unwrap();
+                assert_eq!(
+                    [id as u64, count as u64],
+                    [it[0].as_u64().unwrap(), it[1].as_u64().unwrap()],
+                    "{name}: pouch {pi} slot {si}"
+                );
+            }
+        }
+
         let ext = if save.generation() == 4 { "pk4" } else { "pk5" };
         let slots = dump["slots"].as_array().unwrap();
         assert!(!slots.is_empty());

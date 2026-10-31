@@ -115,6 +115,14 @@ public static class Program
             money = sav.Money,
             badges = sav switch { SAV4 s4 => s4.Badges, SAV5 s5 => s5.Misc.Badges, _ => -1 },
             played = new[] { sav.PlayedHours, sav.PlayedMinutes, sav.PlayedSeconds },
+            inventory = sav.Inventory.Select(p => new
+            {
+                type = p.Type.ToString(),
+                slots = p.Items.Length,
+                max_count = p.MaxCount,
+                items = p.Items.Select(i => new[] { i.Index, i.Count }).ToArray(),
+                legal = p.Info.GetItems(p.Type).ToArray(),
+            }).ToArray(),
             box_names = sav is IBoxDetailName bn ? Enumerable.Range(0, sav.BoxCount).Select(bn.GetBoxName).ToArray() : null,
         };
 
@@ -519,6 +527,14 @@ public static class Program
         foreach (var op in doc.RootElement.EnumerateArray())
         {
             var kind = op.GetProperty("op").GetString();
+            if (kind == "dex")
+            {
+                var pk = EntityFormat.GetFromBytes(File.ReadAllBytes(op.GetProperty("pkm").GetString()!))!;
+                if (sav is SAV4 s4) s4.Dex.SetDex(pk);
+                else if (sav is SAV5 s5) s5.Zukan.SetDex(pk);
+                applied++;
+                continue;
+            }
             if (kind == "set")
             {
                 var slot = op.GetProperty("slot").GetString()!;
