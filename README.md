@@ -6,8 +6,9 @@ Designed to target Nintendo DS homebrew (`.nds`), WebAssembly, and portable embe
 
 ## Architecture
 
-- **`crates/pkcore`**: Core logic (Rust `#![no_std] + alloc`, zero I/O, pure byte buffers)
-- **`crates/pkcore-ffi`**: C ABI static library for cross-language embedding
+- **`crates/verity`**: Core logic (Rust `#![no_std] + alloc`, zero I/O, pure byte buffers)
+- **`crates/verity-ffi`**: C ABI static library for cross-language embedding (`libverity.a` + `verity.h`)
+- **`crates/datagen`**: Build-time data compiler converting oracle exports to compact binary blobs
 - **`nds/`**: Nintendo DS front-end (BlocksDS / C++)
 - **`tools/pkhex-oracle/`**: Reference oracle test runner powered by `PKHeX.Core`
 - **`tools/emu-harness/`**: Headless melonDS emulator runner for automated verification
