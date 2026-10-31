@@ -38,15 +38,12 @@ pub fn advance_seed(mut seed: u32, n: usize) -> u32 {
 ///
 /// Ported from `PKHeX.Core.PokeCrypto.CryptArray`.
 pub fn crypt_array_16(data: &mut [u8], mut seed: u32) {
-    debug_assert!(data.len() % 2 == 0, "Data length must be multiple of 2");
+    debug_assert!(data.len().is_multiple_of(2));
 
-    for chunk in data.chunks_exact_mut(2) {
+    for chunk in data.as_chunks_mut::<2>().0 {
         seed = next_seed(seed);
-        let xor = (seed >> 16) as u16;
-        let val = u16::from_le_bytes([chunk[0], chunk[1]]) ^ xor;
-        let le_bytes = val.to_le_bytes();
-        chunk[0] = le_bytes[0];
-        chunk[1] = le_bytes[1];
+        let val = u16::from_le_bytes(*chunk) ^ (seed >> 16) as u16;
+        *chunk = val.to_le_bytes();
     }
 }
 
