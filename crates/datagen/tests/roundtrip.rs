@@ -319,6 +319,11 @@ fn encounter_blobs_roundtrip() {
                         t.static_slot(),
                         (n("StaticIndex", 0) as u8, n("StaticCount", 0) as u8)
                     );
+                    assert_eq!(t.can_radar(), w["CanUseRadar"].as_bool().unwrap_or(false));
+                    assert_eq!(
+                        t.pressure_level() as i64,
+                        n("PressureLevel", n("LevelMax", 0))
+                    );
                     assert!(t.template().is_none());
                     continue;
                 }

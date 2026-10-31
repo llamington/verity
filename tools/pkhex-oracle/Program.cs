@@ -462,9 +462,30 @@ public static class Program
         var pi = pk.PersonalInfo;
         var stats = pk.GetStats(pi);
         var pidiv = MethodFinder.Analyze(pk);
+        var la = new LegalityAnalysis(pk);
+        var enc = la.EncounterMatch;
+        var lead = la.Info.PIDIV;
         return new
         {
             name,
+            enc_kind = enc.GetType().Name,
+            enc_version = (int)enc.Version,
+            enc_location = enc.Location,
+            enc_species = enc.Species,
+            enc_form = enc.Form,
+            enc_level_min = enc.LevelMin,
+            enc_level_max = enc.LevelMax,
+            enc_slot_number = enc is EncounterSlot4 s4 ? s4.SlotNumber : -1,
+            enc_slot_type = enc is EncounterSlot4 t4 ? (int)t4.Type : -1,
+            enc_can_radar = enc is EncounterSlot4 r4 && r4.CanUseRadar,
+            enc_pressure = enc is EncounterSlot4 p4 ? p4.PressureLevel : 0,
+            enc_ground = enc is EncounterSlot4 g4 ? (long)g4.GroundTile : 0,
+            enc_magnet = enc is EncounterSlot4 m4 ? new[] { (int)m4.MagnetPullIndex, m4.MagnetPullCount } : null,
+            enc_static = enc is EncounterSlot4 x4 ? new[] { (int)x4.StaticIndex, x4.StaticCount } : null,
+            enc_rate = enc is EncounterSlot4 a4 ? a4.AreaRate : 0,
+            lead = (int)lead.Lead,
+            lead_type = (int)lead.Type,
+            lead_seed = lead.EncounterSeed,
             pidiv_type = (int)pidiv.Type,
             pidiv_seed = pidiv.OriginSeed,
             party,

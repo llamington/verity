@@ -41,3 +41,10 @@ reported upstream:
 - `Zukan5.GetFormDisplayed` checks the non-shiny displayed region twice (the shiny check reads
   `FormDex + 2 * FormLen` again), and rejects `formIndex0 + formCount == FormLen * 8`.
 - `Zukan5.GetLanguageIndex` maps Korean (8) to -1, so Korean language flags are never set.
+
+## LeadFinder radar shiny (P4)
+
+PKHeX 25.12.21 `LeadFinder.TryGetMatchRadarShiny` assigns `result` inside its loop and then
+unconditionally sets `result = default; return false;`, so a shiny Method 1 match is never
+re-checked as a Poké Radar chain shiny. `method_j::lead_info4_dppt` mirrors this (the branch is
+omitted). Report upstream.
