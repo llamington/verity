@@ -103,9 +103,10 @@ fn saves_match_pkhex() {
         }
 
         save.finalize();
+        let pkhex_export = fs::read(reports.join(format!("{name}.export"))).unwrap();
         assert!(
-            buf == original,
-            "{name}: finalize without edits must be byte-identical"
+            buf == pkhex_export,
+            "{name}: unedited export must match PKHeX's export"
         );
         eprintln!("ok {name}: {} slots", slots.len());
     }

@@ -21,15 +21,15 @@ while IFS= read -r -d '' sav; do
     if ! "$ORACLE" sav-info "$sav" >"$OUT/$name.info.json" 2>"$OUT/$name.err"; then
         echo "FAIL sav-info $sav"; fail=1; continue
     fi
-    if ! "$ORACLE" sav-roundtrip "$sav" --out "$OUT/$name.rt" | grep -q '"byte_identical": true'; then
+    if ! "$ORACLE" sav-roundtrip "$sav" --out "$OUT/$name.export" >"$OUT/$name.roundtrip.json"; then
         echo "FAIL roundtrip $sav"; fail=1
     fi
     "$ORACLE" sav-dump "$sav" "$OUT/$name.pkm" >"$OUT/$name.dump.json"
     "$ORACLE" legality-batch "$OUT/$name.pkm" >"$OUT/$name.legality.jsonl"
     total=$(wc -l <"$OUT/$name.legality.jsonl")
     legal=$(grep -c '"valid":true' "$OUT/$name.legality.jsonl" || true)
-    echo "ok   $name: $legal/$total legal"
-    rm -f "$OUT/$name.rt"
+    same=$(grep -q '"byte_identical": true' "$OUT/$name.roundtrip.json" && echo identical || echo "fixed-up")
+    echo "ok   $name: $legal/$total legal, export $same"
 done < <(find "$CORPUS" \( -name '*.sav' -o -name '*.dsv' \) -not -path "*/reports/*" -print0 | sort -z)
 
 exit $fail
