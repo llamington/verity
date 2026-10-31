@@ -7,7 +7,7 @@ pub mod gen5_blocks;
 pub use crc16::crc16_ccitt;
 pub use detect::{detect, SaveKind};
 
-use crate::pkm::{SIZE_4PARTY, SIZE_4STORED, SIZE_5PARTY, SIZE_5STORED};
+use crate::pkm::{Format, Pkm, SIZE_4PARTY, SIZE_4STORED, SIZE_5PARTY, SIZE_5STORED};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveError {
@@ -147,6 +147,48 @@ impl<'a> Save<'a> {
             return Err(SaveError::BadLength);
         }
         self.data[ofs..ofs + len].copy_from_slice(encrypted);
+        Ok(())
+    }
+
+    pub fn pkm_format(&self) -> Format {
+        match self.layout {
+            Layout::Gen4(_) => Format::Pk4,
+            Layout::Gen5(_) => Format::Pk5,
+        }
+    }
+
+    pub fn pkm(&self, slot: Slot) -> Result<Pkm, SaveError> {
+        let raw = self.slot_raw(slot)?;
+        Pkm::from_encrypted(self.pkm_format(), raw).ok_or(SaveError::BadLength)
+    }
+
+    /// Writes a Pokémon with a refreshed checksum. Party slots need party-format data and
+    /// update the party count like PKHeX `SetPartySlotAtIndex`.
+    pub fn set_pkm(&mut self, slot: Slot, pk: &Pkm) -> Result<(), SaveError> {
+        if pk.format() != self.pkm_format() {
+            return Err(SaveError::BadLength);
+        }
+        let mut pk = match slot {
+            Slot::Box(..) => pk.to_stored(),
+            Slot::Party(_) if pk.is_party_format() => pk.clone(),
+            Slot::Party(_) => return Err(SaveError::BadLength),
+        };
+        pk.refresh_checksum();
+        let (enc, len) = pk.encrypted();
+        self.set_slot_raw(slot, &enc[..len])?;
+        if let Slot::Party(i) = slot {
+            let count = self.party_count();
+            let i = i as usize;
+            let ofs = match &self.layout {
+                Layout::Gen4(l) => l.party_count_offset(),
+                Layout::Gen5(l) => l.party_count_offset(),
+            };
+            if pk.species() != 0 && count <= i {
+                self.data[ofs] = (i + 1) as u8;
+            } else if pk.species() == 0 && count > i {
+                self.data[ofs] = i as u8;
+            }
+        }
         Ok(())
     }
 

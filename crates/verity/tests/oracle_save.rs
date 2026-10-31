@@ -87,6 +87,19 @@ fn saves_match_pkhex() {
         assert_eq!(ids.tid as u64, info["tid"].as_u64().unwrap(), "{name}");
         assert_eq!(ids.sid as u64, info["sid"].as_u64().unwrap(), "{name}");
 
+        let raw = save.trainer_name_raw();
+        let mut tbuf = [0u16; 8];
+        let tlen = if save.generation() == 4 {
+            verity::text::decode4(&raw, &mut tbuf)
+        } else {
+            verity::text::decode5(&raw, &mut tbuf)
+        };
+        assert_eq!(
+            String::from_utf16_lossy(&tbuf[..tlen]),
+            info["trainer_name"].as_str().unwrap(),
+            "{name}: trainer name"
+        );
+
         let ext = if save.generation() == 4 { "pk4" } else { "pk5" };
         let slots = dump["slots"].as_array().unwrap();
         assert!(!slots.is_empty());
