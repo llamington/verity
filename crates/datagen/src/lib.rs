@@ -393,7 +393,7 @@ fn encode_slot(t: &Value, area: u16) -> Vec<u8> {
     r[8] = num(t, "MagnetPullCount", 0) as u8;
     r[9] = num(t, "StaticIndex", 0) as u8;
     r[10] = num(t, "StaticCount", 0) as u8;
-    use verity::data::encounters::{SLOT_HIDDEN_GROTTO, SLOT_RANDOM_FORM};
+    use verity::data::encounters::{SLOT_CAN_RADAR, SLOT_HIDDEN_GROTTO, SLOT_RANDOM_FORM};
     let mut f = 0u8;
     if truthy(t, "IsRandomUnspecificForm") {
         f |= SLOT_RANDOM_FORM;
@@ -401,12 +401,16 @@ fn encode_slot(t: &Value, area: u16) -> Vec<u8> {
     if truthy(t, "IsHiddenGrotto") {
         f |= SLOT_HIDDEN_GROTTO;
     }
+    if truthy(t, "CanUseRadar") {
+        f |= SLOT_CAN_RADAR;
+    }
     r[11] = f;
     r[12..14].copy_from_slice(&area.to_le_bytes());
     r[14] = num(t, "Type", 0) as u8;
     r[15] = num(t, "FixedBall", 0) as u8;
     r[16] = num(t, "Ability", 0) as u8;
     r[17] = num(t, "Shiny", 0) as u8;
+    r[18] = num(t, "PressureLevel", num(t, "LevelMax", 0)) as u8;
     r
 }
 

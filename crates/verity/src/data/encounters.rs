@@ -22,6 +22,7 @@ pub const RANGE_SLOTS: u32 = 1 << 31;
 /// Slot record flag bits (byte 11).
 pub const SLOT_RANDOM_FORM: u8 = 1 << 0;
 pub const SLOT_HIDDEN_GROTTO: u8 = 1 << 1;
+pub const SLOT_CAN_RADAR: u8 = 1 << 2;
 pub const NO_AREA: u16 = 0xFFFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -363,6 +364,19 @@ impl Encounter<'_> {
             |t: &Template| t.static_slot()
         )
     }
+    /// Gen 4 slot level after Pressure/Hustle/Vital Spirit (PKHeX `EncounterSlot4.PressureLevel`).
+    pub fn pressure_level(&self) -> u8 {
+        match self {
+            Encounter::Slot { slot, .. } => slot[18],
+            Encounter::Template(t) => t.level_max(),
+        }
+    }
+
+    /// PKHeX `EncounterSlot4.CanUseRadar`.
+    pub fn can_radar(&self) -> bool {
+        matches!(self, Encounter::Slot { slot, .. } if slot[11] & SLOT_CAN_RADAR != 0)
+    }
+
     pub fn area_rate(&self) -> u8 {
         pick!(self, |_: &[u8], a: &Area| a.rate(), (), |t: &Template| t
             .area_rate())

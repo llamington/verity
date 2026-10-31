@@ -1,5 +1,6 @@
 pub mod finder;
 pub mod lcrng;
+pub mod method_j;
 pub mod reversal;
 pub mod xdrng;
 
