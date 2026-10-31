@@ -1,1 +1,6 @@
-//! Pokémon entity codec and structures (Gen 3 origin, Gen 4, Gen 5).
+pub mod crypto;
+
+pub use crypto::{
+    calc_checksum, decrypt_45, encrypt_45, shuffle_blocks, SIZE_4PARTY, SIZE_4STORED, SIZE_5PARTY,
+    SIZE_5STORED,
+};
