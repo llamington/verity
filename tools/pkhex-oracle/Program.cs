@@ -36,6 +36,7 @@ public static class Program
                 "generate-synthetic" => HandleGenerateSynthetic(args),
                 "sav-dump" => HandleSavDump(args),
                 "sav-apply" => HandleSavApply(args),
+                "export-text4" => HandleExportText4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -416,7 +417,7 @@ public static class Program
             var enc = party ? pk.EncryptedPartyData : pk.EncryptedBoxData;
             File.WriteAllBytes(Path.Combine(outDir, name + ext), dec);
             File.WriteAllBytes(Path.Combine(outDir, name + ".enc"), enc);
-            slots.Add(new { name, species = pk.Species, pid = pk.PID, checksum_valid = pk.ChecksumValid, legal = new LegalityAnalysis(pk).Valid });
+            slots.Add(DescribeSlot(pk, name, party));
         }
 
         for (int i = 0; i < sav.PartyCount; i++)
@@ -430,6 +431,58 @@ public static class Program
     }
 
     // ops: [{"op":"copy"|"swap","from":"box00_00"|"party_0","to":...}]
+    private static object DescribeSlot(PKM pk, string name, bool party)
+    {
+        var pi = pk.PersonalInfo;
+        var stats = pk.GetStats(pi);
+        return new
+        {
+            name,
+            party,
+            legal = new LegalityAnalysis(pk).Valid,
+            checksum_valid = pk.ChecksumValid,
+            pid = pk.PID,
+            species = pk.Species,
+            form = pk.Form,
+            held_item = pk.HeldItem,
+            tid = pk.TID16,
+            sid = pk.SID16,
+            exp = pk.EXP,
+            level = pk.CurrentLevel,
+            friendship = pk.OriginalTrainerFriendship,
+            ability = pk.Ability,
+            language = pk.Language,
+            evs = new[] { pk.EV_HP, pk.EV_ATK, pk.EV_DEF, pk.EV_SPE, pk.EV_SPA, pk.EV_SPD },
+            ivs = new[] { pk.IV_HP, pk.IV_ATK, pk.IV_DEF, pk.IV_SPE, pk.IV_SPA, pk.IV_SPD },
+            moves = new[] { pk.Move1, pk.Move2, pk.Move3, pk.Move4 },
+            pp = new[] { pk.Move1_PP, pk.Move2_PP, pk.Move3_PP, pk.Move4_PP },
+            pp_ups = new[] { pk.Move1_PPUps, pk.Move2_PPUps, pk.Move3_PPUps, pk.Move4_PPUps },
+            is_egg = pk.IsEgg,
+            is_nicknamed = pk.IsNicknamed,
+            fateful = pk.FatefulEncounter,
+            gender = pk.Gender,
+            nature = (int)pk.Nature,
+            version = (int)pk.Version,
+            egg_location = pk.EggLocation,
+            met_location = pk.MetLocation,
+            ball = pk.Ball,
+            met_level = pk.MetLevel,
+            ot_gender = pk.OriginalTrainerGender,
+            is_shiny = pk.IsShiny,
+            hp_type = pk.HPType,
+            hp_power = pk.HPPower,
+            nickname = pk.Nickname,
+            ot_name = pk.OriginalTrainerName,
+            stored_stats = party ? new[] { pk.Stat_HPMax, pk.Stat_ATK, pk.Stat_DEF, pk.Stat_SPE, pk.Stat_SPA, pk.Stat_SPD } : null,
+            stored_level = party ? (int?)pk.Stat_Level : null,
+            calc_stats = stats,
+            base_stats = new[] { pi.HP, pi.ATK, pi.DEF, pi.SPE, pi.SPA, pi.SPD },
+            gender_ratio = pi.Gender,
+            exp_growth = pi.EXPGrowth,
+            abilities = new[] { pi.GetAbilityAtIndex(0), pi.GetAbilityAtIndex(1), pi.AbilityCount > 2 ? pi.GetAbilityAtIndex(2) : 0 },
+        };
+    }
+
     private static int HandleSavApply(string[] args)
     {
         if (args.Length < 4)
@@ -460,6 +513,37 @@ public static class Program
         foreach (var op in doc.RootElement.EnumerateArray())
         {
             var kind = op.GetProperty("op").GetString();
+            if (kind == "set")
+            {
+                var slot = op.GetProperty("slot").GetString()!;
+                var pk = Get(slot);
+                foreach (var f in op.GetProperty("fields").EnumerateObject())
+                {
+                    var v = f.Value;
+                    switch (f.Name)
+                    {
+                        case "held_item": pk.HeldItem = v.GetInt32(); break;
+                        case "exp": pk.EXP = v.GetUInt32(); break;
+                        case "friendship": pk.OriginalTrainerFriendship = v.GetByte(); break;
+                        case "ivs": pk.SetIVs(v.EnumerateArray().Select(x => x.GetInt32()).ToArray()); break;
+                        case "evs": pk.SetEVs(v.EnumerateArray().Select(x => x.GetInt32()).ToArray()); break;
+                        case "moves":
+                        {
+                            // Raw move IDs; SetMoves would also refill PP from move data (P3).
+                            var m = v.EnumerateArray().Select(x => (ushort)x.GetInt32()).ToArray();
+                            pk.Move1 = m[0]; pk.Move2 = m[1]; pk.Move3 = m[2]; pk.Move4 = m[3];
+                            break;
+                        }
+                        case "nickname": pk.IsNicknamed = true; pk.Nickname = v.GetString()!; break;
+                        default: throw new ArgumentException($"unknown field {f.Name}");
+                    }
+                }
+                if (slot.StartsWith("party_"))
+                    pk.ResetPartyStats();
+                Set(slot, pk);
+                applied++;
+                continue;
+            }
             var from = op.GetProperty("from").GetString()!;
             var to = op.GetProperty("to").GetString()!;
             var a = Get(from);
@@ -478,6 +562,19 @@ public static class Program
 
         File.WriteAllBytes(args[3], sav.Write().ToArray());
         Console.WriteLine(JsonSerializer.Serialize(new { applied }));
+        return 0;
+    }
+
+    private static int HandleExportText4(string[] args)
+    {
+        var res = new
+        {
+            pkhex_version = typeof(EntityFormat).Assembly.GetName().Version?.ToString(),
+            table_int = StringConverter4Util.TableINT.ToArray().Select(c => (int)c).ToArray(),
+            table_kor_start = 0x400,
+            table_kor = StringConverter4Util.TableKOR.ToArray().Select(c => (int)c).ToArray(),
+        };
+        File.WriteAllText(args[1], JsonSerializer.Serialize(res));
         return 0;
     }
 

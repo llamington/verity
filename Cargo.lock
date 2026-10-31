@@ -6,7 +6,7 @@ version = 4
 name = "datagen"
 version = "0.1.0"
 dependencies = [
- "verity",
+ "serde_json",
 ]
 
 [[package]]

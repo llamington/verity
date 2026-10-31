@@ -136,3 +136,191 @@ fn random_edits_match_pkhex() {
     }
     let _ = fs::remove_dir_all(&tmp);
 }
+
+fn base_info(dump: &serde_json::Value, slot: &str) -> Option<verity::pkm::BaseInfo> {
+    let s = dump["slots"]
+        .as_array()?
+        .iter()
+        .find(|s| s["name"] == slot)?;
+    let base: Vec<u16> = s["base_stats"]
+        .as_array()?
+        .iter()
+        .map(|v| v.as_u64().unwrap() as u16)
+        .collect();
+    Some(verity::pkm::BaseInfo {
+        base: base.try_into().ok()?,
+        gender_ratio: s["gender_ratio"].as_u64()? as u8,
+        growth: s["exp_growth"].as_u64()? as u8,
+    })
+}
+
+#[test]
+fn random_field_edits_match_pkhex() {
+    let Some(oracle) = oracle() else {
+        eprintln!("skipping: oracle not built");
+        return;
+    };
+    let reports = root().join("corpus/reports/oracle-smoke");
+    let mut paths = Vec::new();
+    let mut stack = vec![root().join("corpus")];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() && !p.ends_with("reports") {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "sav" || x == "dsv") {
+                paths.push(p);
+            }
+        }
+    }
+    paths.sort();
+    let tmp = std::env::temp_dir().join(format!("verity-fields-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let names: [&str; 5] = ["Verity", "Bob", "Sparky Ten", "a", "XYZ12"];
+
+    for (n, path) in paths.iter().enumerate() {
+        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let dump: serde_json::Value =
+            serde_json::from_slice(&fs::read(reports.join(format!("{stem}.dump.json"))).unwrap())
+                .unwrap();
+        let original = fs::read(path).unwrap();
+        let mut buf = original.clone();
+        let mut save = Save::open(&mut buf).unwrap();
+        let mut rng = Rng(0xA5A5_5A5A_1234_8765 ^ n as u64);
+
+        let slots: Vec<String> = dump["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|s| !s["is_egg"].as_bool().unwrap())
+            .map(|s| s["name"].as_str().unwrap().to_string())
+            .collect();
+        let mut ops = Vec::new();
+        for _ in 0..30 {
+            let sname = &slots[rng.below(slots.len())];
+            let slot = slot_from_name(sname);
+            let mut pk = save.pkm(slot).unwrap();
+            let mut fields = serde_json::Map::new();
+            for _ in 0..3 {
+                let pick = rng.below(7);
+                let key = [
+                    "held_item",
+                    "exp",
+                    "friendship",
+                    "ivs",
+                    "evs",
+                    "moves",
+                    "nickname",
+                ][pick];
+                if fields.contains_key(key) {
+                    continue;
+                }
+                match pick {
+                    0 => {
+                        let v = rng.below(300) as u16;
+                        pk.set_held_item(v);
+                        fields.insert("held_item".into(), v.into());
+                    }
+                    1 => {
+                        let v = rng.below(1_000_000) as u32;
+                        pk.set_exp(v);
+                        fields.insert("exp".into(), v.into());
+                    }
+                    2 => {
+                        let v = rng.below(256) as u8;
+                        pk.set_friendship(v);
+                        fields.insert("friendship".into(), v.into());
+                    }
+                    3 => {
+                        let v: [u8; 6] = core::array::from_fn(|_| rng.below(32) as u8);
+                        pk.set_ivs(v);
+                        fields.insert("ivs".into(), v.to_vec().into());
+                    }
+                    4 => {
+                        let v: [u8; 6] = core::array::from_fn(|_| rng.below(256) as u8);
+                        pk.set_evs(v);
+                        fields.insert("evs".into(), v.to_vec().into());
+                    }
+                    5 => {
+                        let v: [u16; 4] = core::array::from_fn(|_| 1 + rng.below(466) as u16);
+                        pk.set_moves(v);
+                        fields.insert("moves".into(), v.to_vec().into());
+                    }
+                    _ => {
+                        let name = names[rng.below(names.len())];
+                        let units: Vec<u16> = name.encode_utf16().collect();
+                        pk.set_is_nicknamed(true);
+                        pk.set_nickname(&units);
+                        fields.insert("nickname".into(), name.into());
+                    }
+                }
+            }
+            if let Slot::Party(_) = slot {
+                pk.reset_party_stats(&base_info(&dump, sname).unwrap());
+            }
+            save.set_pkm(slot, &pk).unwrap();
+            ops.push(serde_json::json!({"op": "set", "slot": sname, "fields": fields}));
+        }
+        save.finalize();
+
+        let ops_path = tmp.join(format!("{stem}.ops.json"));
+        let out_path = tmp.join(format!("{stem}.out.sav"));
+        fs::write(&ops_path, serde_json::to_vec(&ops).unwrap()).unwrap();
+        let out = Command::new(&oracle)
+            .env(
+                "DOTNET_ROOT",
+                format!("{}/.dotnet", std::env::var("HOME").unwrap()),
+            )
+            .arg("sav-apply")
+            .arg(path)
+            .arg(&ops_path)
+            .arg(&out_path)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let expected = fs::read(&out_path).unwrap();
+        if buf != expected {
+            let diffs: Vec<_> = (0..buf.len()).filter(|&i| buf[i] != expected[i]).collect();
+            let mut exp_buf = expected.clone();
+            let theirs = Save::open(&mut exp_buf).unwrap();
+            let mut our_buf = buf.clone();
+            let save = Save::open(&mut our_buf).unwrap();
+            let mut detail = String::new();
+            for sname in &slots {
+                let slot = slot_from_name(sname);
+                let (a, b) = (save.pkm(slot).unwrap(), theirs.pkm(slot).unwrap());
+                if a.decrypted() != b.decrypted() {
+                    let offs: Vec<String> = (0..a.decrypted().len())
+                        .filter(|&i| a.decrypted()[i] != b.decrypted()[i])
+                        .map(|i| {
+                            format!("{i:#04X}:{:02X}/{:02X}", a.decrypted()[i], b.decrypted()[i])
+                        })
+                        .collect();
+                    detail = format!("{sname} offsets {offs:?}");
+                    break;
+                }
+            }
+            panic!(
+                "{stem}: {} bytes differ, first at {:#X}; {detail}",
+                diffs.len(),
+                diffs[0]
+            );
+        }
+        eprintln!("ok {stem}: 30 field edits byte-identical");
+    }
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+fn slot_from_name(name: &str) -> Slot {
+    if let Some(i) = name.strip_prefix("party_") {
+        Slot::Party(i.parse().unwrap())
+    } else {
+        let (b, s) = name.strip_prefix("box").unwrap().split_once('_').unwrap();
+        Slot::Box(b.parse().unwrap(), s.parse().unwrap())
+    }
+}

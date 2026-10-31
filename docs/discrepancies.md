@@ -22,3 +22,9 @@ it always sets `FlagsBoxContentChanged = 0x3FFFF` (`SAV4HGSS.GetFinalData`) so a
 in-game save rewrites every box. verity does the same. The acceptance test compares verity's
 unedited export with PKHeX's export, which equals the input for every save except real HGSS
 saves (3 flag bytes + storage CRC).
+
+## Move edits and PP (P2)
+
+PKHeX `PKM.SetMoves` also refills PP from move data (`SetMaximumPPCurrent`). Move data arrives in
+P3, so `Pkm::set_moves` currently writes move IDs only and the differential test sets raw move
+IDs on the PKHeX side. A PP-aware setter follows with P3.
