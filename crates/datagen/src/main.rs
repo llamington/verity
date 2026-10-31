@@ -8,8 +8,16 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("text4") if args.len() == 4 => text4(&args[2], &args[3]),
+        Some("build") if args.len() == 4 => {
+            let mut total = 0;
+            for (name, size) in datagen::build_all(args[2].as_ref(), args[3].as_ref()) {
+                println!("{size:>8}  {name}");
+                total += size;
+            }
+            println!("{total:>8}  total");
+        }
         _ => {
-            eprintln!("usage: datagen text4 <text4.json> <out.rs>");
+            eprintln!("usage: datagen text4 <text4.json> <out.rs>\n       datagen build <exports-dir> <blobs-dir>");
             std::process::exit(1);
         }
     }

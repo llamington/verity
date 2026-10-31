@@ -37,6 +37,7 @@ public static class Program
                 "sav-dump" => HandleSavDump(args),
                 "sav-apply" => HandleSavApply(args),
                 "export-text4" => HandleExportText4(args),
+                "export-data" => HandleExportData(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -559,13 +560,7 @@ public static class Program
                         case "friendship": pk.OriginalTrainerFriendship = v.GetByte(); break;
                         case "ivs": pk.SetIVs(v.EnumerateArray().Select(x => x.GetInt32()).ToArray()); break;
                         case "evs": pk.SetEVs(v.EnumerateArray().Select(x => x.GetInt32()).ToArray()); break;
-                        case "moves":
-                        {
-                            // Raw move IDs; SetMoves would also refill PP from move data (P3).
-                            var m = v.EnumerateArray().Select(x => (ushort)x.GetInt32()).ToArray();
-                            pk.Move1 = m[0]; pk.Move2 = m[1]; pk.Move3 = m[2]; pk.Move4 = m[3];
-                            break;
-                        }
+                        case "moves": pk.SetMoves(v.EnumerateArray().Select(x => (ushort)x.GetInt32()).ToArray()); break;
                         case "nickname": pk.IsNicknamed = true; pk.Nickname = v.GetString()!; break;
                         default: throw new ArgumentException($"unknown field {f.Name}");
                     }
@@ -594,6 +589,128 @@ public static class Program
 
         File.WriteAllBytes(args[3], sav.Write().ToArray());
         Console.WriteLine(JsonSerializer.Serialize(new { applied }));
+        return 0;
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<GameVersion, SaveFile> Blanks = new();
+    private static SaveFile Sav(GameVersion v) => Blanks.TryGetValue(v, out var s) ? s : Blanks[v] = MakeBlank(v);
+
+    private static int[] Raw(PersonalInfo pi) => pi.Write().Select(b => (int)b).ToArray();
+
+    private static object ExportGame(string key, byte gen, IPersonalTable table, ushort maxSpecies,
+        Func<ushort, byte, Learnset> levelup, Func<ushort, byte, ReadOnlySpan<ushort>> eggs, ReadOnlySpan<ushort> held)
+    {
+        var personal = new System.Collections.Generic.List<int[]>();
+        var tutors = new System.Collections.Generic.List<int[]>();
+        for (int i = 0; i < table.Count; i++)
+        {
+            var pi = table[i];
+            personal.Add(Raw(pi));
+            if (pi is PersonalInfo4 p4)
+                tutors.Add(p4.TypeTutors.Select(b => b ? 1 : 0).ToArray());
+        }
+        var forms = new System.Collections.Generic.List<int[]>();
+        var learn = new System.Collections.Generic.Dictionary<int, int[][]>();
+        var egg = new System.Collections.Generic.List<object>();
+        for (ushort sp = 1; sp <= maxSpecies; sp++)
+        {
+            var fc = table.GetFormEntry(sp, 0).FormCount;
+            for (byte f = 0; f < Math.Max((byte)1, fc); f++)
+            {
+                var idx = table.GetFormIndex(sp, f);
+                forms.Add(new[] { sp, f, idx });
+                if (!learn.ContainsKey(idx))
+                {
+                    var ls = levelup(sp, f);
+                    var mv = ls.GetAllMoves(); var lv = ls.GetAllLevels();
+                    var arr = new int[mv.Length][];
+                    for (int k = 0; k < mv.Length; k++) arr[k] = new int[] { lv[k], mv[k] };
+                    learn[idx] = arr;
+                }
+                var e = eggs(sp, f).ToArray();
+                if (e.Length > 0)
+                    egg.Add(new { species = sp, form = f, moves = e });
+            }
+        }
+        return new
+        {
+            game = key,
+            generation = gen,
+            max_species = maxSpecies,
+            personal_size = personal[0].Length,
+            personal,
+            type_tutors = tutors.Count > 0 ? tutors : null,
+            forms,
+            levelup = learn.OrderBy(kv => kv.Key).Select(kv => new { index = kv.Key, moves = kv.Value }).ToArray(),
+            egg_moves = egg,
+            held_items = held.ToArray(),
+        };
+    }
+
+    private static int HandleExportData(string[] args)
+    {
+        var outDir = args.Length > 1 ? args[1] : "data/exports";
+        Directory.CreateDirectory(outDir);
+        var games = new (string key, Func<object> make)[]
+        {
+            ("dp", () => ExportGame("dp", 4, PersonalTable.DP, Sav(GameVersion.D).MaxSpeciesID, LearnSource4DP.Instance.GetLearnset, (s, f) => LearnSource4DP.Instance.GetEggMoves(s, f), Sav(GameVersion.D).HeldItems)),
+            ("pt", () => ExportGame("pt", 4, PersonalTable.Pt, Sav(GameVersion.Pt).MaxSpeciesID, LearnSource4Pt.Instance.GetLearnset, (s, f) => LearnSource4Pt.Instance.GetEggMoves(s, f), Sav(GameVersion.Pt).HeldItems)),
+            ("hgss", () => ExportGame("hgss", 4, PersonalTable.HGSS, Sav(GameVersion.HG).MaxSpeciesID, LearnSource4HGSS.Instance.GetLearnset, (s, f) => LearnSource4HGSS.Instance.GetEggMoves(s, f), Sav(GameVersion.HG).HeldItems)),
+            ("bw", () => ExportGame("bw", 5, PersonalTable.BW, Sav(GameVersion.B).MaxSpeciesID, LearnSource5BW.Instance.GetLearnset, (s, f) => LearnSource5BW.Instance.GetEggMoves(s, f), Sav(GameVersion.B).HeldItems)),
+            ("b2w2", () => ExportGame("b2w2", 5, PersonalTable.B2W2, Sav(GameVersion.B2).MaxSpeciesID, LearnSource5B2W2.Instance.GetLearnset, (s, f) => LearnSource5B2W2.Instance.GetEggMoves(s, f), Sav(GameVersion.B2).HeldItems)),
+        };
+        var manifest = new System.Collections.Generic.Dictionary<string, object>
+        {
+            ["pkhex_version"] = typeof(EntityFormat).Assembly.GetName().Version?.ToString() ?? "?",
+            ["timestamp"] = DateTime.UtcNow.ToString("o"),
+        };
+        foreach (var (key, make) in games)
+        {
+            var data = make();
+            File.WriteAllText(Path.Combine(outDir, $"{key}.json"), JsonSerializer.Serialize(data));
+            manifest[key] = "ok";
+        }
+
+        foreach (var (ctx, gen) in new[] { (EntityContext.Gen4, 4), (EntityContext.Gen5, 5) })
+        {
+            var max = (gen == 4 ? Sav(GameVersion.HG) : Sav(GameVersion.B2)).MaxMoveID;
+            var moves = Enumerable.Range(0, max + 1).Select(m => new { pp = MoveInfo.GetPP(ctx, (ushort)m), type = MoveInfo.GetType((ushort)m, ctx) }).ToArray();
+            File.WriteAllText(Path.Combine(outDir, $"moves{gen}.json"), JsonSerializer.Serialize(new { generation = gen, max_move = max, moves }));
+        }
+
+        File.WriteAllText(Path.Combine(outDir, "move_tables.json"), JsonSerializer.Serialize(new
+        {
+            g4_tutor_moves = PersonalInfo4.TutorMoves.ToArray(),
+            g4_tm = PersonalInfo4.MachineMovesTechnical.ToArray(),
+            g4_hm_dppt = PersonalInfo4.MachineMovesHiddenDPPt.ToArray(),
+            g4_hm_hgss = PersonalInfo4.MachineMovesHiddenHGSS.ToArray(),
+            g4_special_blast_burn = PersonalInfo4.SpecialTutorBlastBurn.ToArray(),
+            g4_special_hydro_cannon = PersonalInfo4.SpecialTutorHydroCannon.ToArray(),
+            g4_special_frenzy_plant = PersonalInfo4.SpecialTutorFrenzyPlant.ToArray(),
+            g4_special_draco_meteor = PersonalInfo4.SpecialTutorDracoMeteor.ToArray(),
+            g5_tmhm = PersonalInfo5BW.MachineMoves.ToArray(),
+            g5_type_tutor_moves = PersonalInfo5BW.TypeTutorMoves.ToArray(),
+            b2w2_tutor_moves = new[] { PersonalInfo5B2W2.TutorMoves1.ToArray(), PersonalInfo5B2W2.TutorMoves2.ToArray(), PersonalInfo5B2W2.TutorMoves3.ToArray(), PersonalInfo5B2W2.TutorMoves4.ToArray() },
+        }));
+
+        var langs = new[] { "ja", "en", "fr", "it", "de", "es", "ko" };
+        foreach (var lang in langs)
+        {
+            var gs = GameInfo.GetStrings(lang);
+            File.WriteAllText(Path.Combine(outDir, $"strings_{lang}.json"), JsonSerializer.Serialize(new
+            {
+                lang,
+                species = gs.specieslist.Take(Sav(GameVersion.B2).MaxSpeciesID + 1),
+                moves = gs.movelist.Take(Sav(GameVersion.B2).MaxMoveID + 1),
+                abilities = gs.abilitylist.Take(Sav(GameVersion.B2).MaxAbilityID + 1),
+                natures = gs.natures,
+                types = gs.types.Take(17),
+                items4 = gs.GetItemStrings(EntityContext.Gen4, GameVersion.HGSS).Take(Sav(GameVersion.HG).MaxItemID + 1),
+                items5 = gs.GetItemStrings(EntityContext.Gen5, GameVersion.B2W2).Take(Sav(GameVersion.B2).MaxItemID + 1),
+            }));
+        }
+        File.WriteAllText(Path.Combine(outDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+        Console.WriteLine(JsonSerializer.Serialize(manifest));
         return 0;
     }
 

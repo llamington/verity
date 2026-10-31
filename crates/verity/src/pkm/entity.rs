@@ -200,6 +200,13 @@ impl Pkm {
         }
     }
 
+    /// PKHeX `PKM.SetMoves`: set moves and refill PP to the maximum for current PP Ups.
+    pub fn set_moves_with_pp(&mut self, moves: [u16; 4], data: &crate::data::MoveData) {
+        self.set_moves(moves);
+        let ups = self.pp_ups();
+        self.set_pp(core::array::from_fn(|i| data.max_pp(moves[i], ups[i])));
+    }
+
     pub fn pp(&self) -> [u8; 4] {
         core::array::from_fn(|i| self.u8(0x30 + i))
     }

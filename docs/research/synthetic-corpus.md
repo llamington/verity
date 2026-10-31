@@ -25,3 +25,11 @@ Public test saves from other open-source editors' repositories, fetched 2026-10-
 | `pkhex-everywhere/` | github.com/arleypadua/PKHeX.Everywhere `src/PKHeX.Facade.Tests/data/save/` | HeartGold `.dsv` (DeSmuME footer) |
 
 Not covered yet: SoulSilver, White, Black 2 (real), Korean saves.
+
+# Data blobs (P3)
+
+`scripts/build-data.sh` runs `pkhex-oracle export-data` and `datagen build`, writing
+`data/blobs/` (gitignored): one game blob per save layout (`dp`, `pt`, `hgss`, `bw`, `b2w2`; 57–106 KB),
+`moves4.bin`/`moves5.bin`, and `strings_<lang>.bin` for ja/en/fr/it/de/es/ko (738 KB total).
+PLAN.md named blobs per concern (`g4_personal.bin`, …); grouping per game lets the DS load a single
+blob for the open save. Encounter and event blobs follow.
