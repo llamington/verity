@@ -21,6 +21,8 @@ pub const BOX_COUNT: usize = 18;
 const BOX_DATA_LEN_SINNOH: usize = BOX_SLOTS * SIZE_4STORED;
 
 const EXTRA_FOOTER: usize = 0x10;
+const HGSS_BOX_END: usize = BOX_COUNT * 0x1000;
+const HGSS_BOX_CHANGED_ALL: u32 = 0x3_FFFF;
 
 #[derive(Clone, Copy)]
 struct Extra {
@@ -195,6 +197,15 @@ impl Layout4 {
                 .extra
                 .iter()
                 .all(|e| e.checksum_valid(&data[PARTITION_SIZE..]))
+    }
+
+    /// PKHeX `SAV4HGSS.GetFinalData`: mark every box as changed so a single in-game save
+    /// rewrites all box data.
+    pub fn prepare_export(&self, data: &mut [u8]) {
+        if self.kind == SaveKind::HGSS {
+            let ofs = self.storage + HGSS_BOX_END + 4;
+            data[ofs..ofs + 4].copy_from_slice(&HGSS_BOX_CHANGED_ALL.to_le_bytes());
+        }
     }
 
     pub fn set_checksums(&self, data: &mut [u8]) {

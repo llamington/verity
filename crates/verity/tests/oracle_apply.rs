@@ -48,14 +48,25 @@ fn random_edits_match_pkhex() {
         eprintln!("skipping: oracle not built");
         return;
     };
-    let synth = root().join("corpus/synthetic");
-    let Ok(rd) = fs::read_dir(&synth) else {
+    let mut paths = Vec::new();
+    let mut stack = vec![root().join("corpus")];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() && !p.ends_with("reports") {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "sav" || x == "dsv") {
+                paths.push(p);
+            }
+        }
+    }
+    if paths.is_empty() {
         eprintln!("skipping: no corpus");
         return;
-    };
+    }
     let tmp = std::env::temp_dir().join(format!("verity-apply-{}", std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
-    let mut paths: Vec<_> = rd.flatten().map(|e| e.path()).collect();
     paths.sort();
 
     for (n, path) in paths.iter().enumerate() {

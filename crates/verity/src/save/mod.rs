@@ -44,8 +44,11 @@ enum Layout {
 }
 
 impl<'a> Save<'a> {
+    /// Accepts a raw 512 KB save, or a DeSmuME `.dsv` (raw save plus a 0x7A-byte footer, kept
+    /// unchanged; PKHeX `SaveHandlerDeSmuME`).
     pub fn open(data: &'a mut [u8]) -> Result<Self, SaveError> {
-        let kind = detect(data).ok_or(SaveError::Unrecognized)?;
+        let raw_len = raw_save_len(data);
+        let kind = detect(&data[..raw_len]).ok_or(SaveError::Unrecognized)?;
         let layout = match kind {
             SaveKind::DP | SaveKind::Pt | SaveKind::HGSS => {
                 Layout::Gen4(gen4::Layout4::new(kind, data))
@@ -154,16 +157,30 @@ impl<'a> Save<'a> {
         }
     }
 
-    /// Recomputes every checksum the way PKHeX's `SetChecksums` does.
+    /// Applies PKHeX's export fix-ups (`GetFinalData`) and recomputes every checksum.
     pub fn finalize(&mut self) {
         match &self.layout {
-            Layout::Gen4(l) => l.set_checksums(self.data),
+            Layout::Gen4(l) => {
+                l.prepare_export(self.data);
+                l.set_checksums(self.data);
+            }
             Layout::Gen5(l) => l.set_checksums(self.data),
         }
     }
 
     pub fn data(&self) -> &[u8] {
         self.data
+    }
+}
+
+const DESMUME_FOOTER: usize = 0x7A;
+const DESMUME_MAGIC: &[u8] = b"|-DESMUME SAVE-|";
+
+fn raw_save_len(data: &[u8]) -> usize {
+    if data.len() == detect::SIZE_G4RAW + DESMUME_FOOTER && data.ends_with(DESMUME_MAGIC) {
+        detect::SIZE_G4RAW
+    } else {
+        data.len()
     }
 }
 
