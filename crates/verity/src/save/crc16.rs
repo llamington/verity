@@ -46,8 +46,6 @@ mod tests {
     fn test_known_pattern() {
         // "123456789" ASCII
         let input = b"123456789";
-        let crc = crc16_ccitt(input);
-        // Verify determinism
-        assert_eq!(crc, crc16_ccitt(input));
+        assert_eq!(crc16_ccitt(input), 0x29B1);
     }
 }

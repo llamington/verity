@@ -12,7 +12,12 @@ roms/
 bios/
 *.nds
 *.sav
-*.bin
+bios/*.bin
+roms/*.bin
+
+# .NET build output
+tools/pkhex-oracle/bin/
+tools/pkhex-oracle/obj/
 
 # Local configurations
 *.local.toml
