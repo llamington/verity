@@ -461,9 +461,12 @@ public static class Program
     {
         var pi = pk.PersonalInfo;
         var stats = pk.GetStats(pi);
+        var pidiv = MethodFinder.Analyze(pk);
         return new
         {
             name,
+            pidiv_type = (int)pidiv.Type,
+            pidiv_seed = pidiv.OriginSeed,
             party,
             legal = new LegalityAnalysis(pk).Valid,
             checksum_valid = pk.ChecksumValid,
