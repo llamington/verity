@@ -1,0 +1,27 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+
+# Data & Exports (generated)
+data/exports/
+data/blobs/
+
+# Owner-supplied assets (Never commit ROMs, BIOS, or user saves)
+corpus/
+roms/
+bios/
+*.nds
+*.sav
+*.bin
+
+# Local configurations
+*.local.toml
+verity.local.toml
+pkds.local.toml
+
+# Editors & OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
