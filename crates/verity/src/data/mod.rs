@@ -1,6 +1,7 @@
 //! Static data loaded from blobs built by `datagen` from PKHeX exports.
 
 pub mod blob;
+pub mod encounters;
 
 use blob::{Blob, BlobError, BlobKind, Indexed, U16s};
 
@@ -14,6 +15,7 @@ pub mod game_table {
     pub const EGG_MOVES: u16 = 4;
     pub const HELD_ITEMS: u16 = 5;
     pub const MAX_SPECIES: u16 = 6;
+    pub const EVOLUTIONS: u16 = 7;
 }
 
 /// Table ids in a [`BlobKind::Moves`] blob.
@@ -237,6 +239,34 @@ impl<'a> GameData<'a> {
     pub fn held_items(&self) -> U16s<'a> {
         U16s(self.blob.bytes(game_table::HELD_ITEMS))
     }
+
+    /// Forward evolutions for a table index (PKHeX `EvolutionTree.Forward.GetForward`).
+    pub fn evolutions(&self, index: usize) -> impl Iterator<Item = Evolution> + 'a {
+        Indexed(self.blob.bytes(game_table::EVOLUTIONS))
+            .get(index)
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| Evolution {
+                species: u16::from_le_bytes([c[0], c[1]]),
+                argument: u16::from_le_bytes([c[2], c[3]]),
+                form: c[4],
+                method: c[5],
+                level: c[6],
+                level_up: c[7],
+            })
+    }
+}
+
+/// PKHeX `EvolutionMethod`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Evolution {
+    pub species: u16,
+    pub argument: u16,
+    pub form: u8,
+    pub method: u8,
+    pub level: u8,
+    pub level_up: u8,
 }
 
 /// Per-generation move data and move lists.

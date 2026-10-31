@@ -6,5 +6,6 @@ export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
 dotnet build tools/pkhex-oracle -c Release -v q --nologo >/dev/null
 ORACLE=tools/pkhex-oracle/bin/Release/net9.0/PkhexOracle
 "$ORACLE" export-data data/exports >/dev/null
+"$ORACLE" export-encounters data/exports >/dev/null
 "$ORACLE" export-text4 data/exports/text4.json
 cargo run -q -p datagen -- build data/exports data/blobs

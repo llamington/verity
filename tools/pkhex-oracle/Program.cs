@@ -38,6 +38,7 @@ public static class Program
                 "sav-apply" => HandleSavApply(args),
                 "export-text4" => HandleExportText4(args),
                 "export-data" => HandleExportData(args),
+                "export-encounters" => HandleExportEncounters(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -711,6 +712,116 @@ public static class Program
         }
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), JsonSerializer.Serialize(manifest));
         Console.WriteLine(JsonSerializer.Serialize(manifest));
+        return 0;
+    }
+
+    private static object? Simple(object? v) => v switch
+    {
+        null => null,
+        string str => str,
+        bool b => b,
+        Enum e => Convert.ToInt64(e),
+        byte or sbyte or short or ushort or int or uint or long or ulong => Convert.ToInt64(v),
+        System.Collections.IEnumerable list when v.GetType().IsArray && v.GetType().GetElementType() is { } et && (et.IsPrimitive || et.IsEnum)
+            => list.Cast<object>().Select(Simple).ToArray(),
+        _ => SimpleStruct(v),
+    };
+
+    private static object? SimpleStruct(object v)
+    {
+        var t = v.GetType();
+        if (!t.IsValueType || t.Namespace != "PKHeX.Core")
+            return null;
+        // Small PKHeX value types (e.g. Moveset, IndividualValueSet): flatten their simple properties.
+        var d = new System.Collections.Generic.Dictionary<string, object?>();
+        foreach (var p in t.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (p.GetIndexParameters().Length != 0) continue;
+            object? x;
+            try { x = p.GetValue(v); } catch { continue; }
+            if (x is null || x.GetType().IsValueType && x.GetType().Namespace == "PKHeX.Core" && !x.GetType().IsEnum) continue;
+            var sv = Simple(x);
+            if (sv != null) d[p.Name] = sv;
+        }
+        return d.Count > 0 ? d : null;
+    }
+
+    private static System.Collections.Generic.Dictionary<string, object?> Describe(object o)
+    {
+        var d = new System.Collections.Generic.Dictionary<string, object?> { ["kind"] = o.GetType().Name };
+        foreach (var p in o.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (p.GetIndexParameters().Length != 0 || p.Name is "Parent" or "EqualityContract" or "Name" or "LongName")
+                continue;
+            object? v;
+            try { v = p.GetValue(o); } catch { continue; }
+            var sv = Simple(v);
+            if (sv != null) d[p.Name] = sv;
+        }
+        foreach (var f in o.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            var sv = Simple(f.GetValue(o));
+            if (sv != null) d[f.Name] = sv;
+        }
+        return d;
+    }
+
+    private static int HandleExportEncounters(string[] args)
+    {
+        var outDir = args.Length > 1 ? args[1] : "data/exports";
+        Directory.CreateDirectory(outDir);
+        var asm = typeof(EntityFormat).Assembly;
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var summary = new System.Collections.Generic.Dictionary<string, object>();
+        foreach (var cls in new[] { "Encounters4DPPt", "Encounters4HGSS", "Encounters5BW", "Encounters5B2W2", "Encounters5DR" })
+        {
+            var t = asm.GetType("PKHeX.Core." + cls) ?? throw new InvalidOperationException(cls);
+            var groups = new System.Collections.Generic.Dictionary<string, object>();
+            foreach (var f in t.GetFields(all))
+            {
+                if (f.GetValue(null) is not Array arr || arr.Length == 0)
+                    continue;
+                var et = arr.GetType().GetElementType()!;
+                if (typeof(IEncounterArea<IEncounterable>).IsAssignableFrom(et) || et.GetProperty("Slots") is { } slotsProp && et.GetInterfaces().Any(i => i.Name.StartsWith("IEncounterArea")))
+                {
+                    var areas = new System.Collections.Generic.List<object>();
+                    foreach (var area in arr)
+                    {
+                        var ad = Describe(area);
+                        var slots = (Array)area.GetType().GetProperty("Slots")!.GetValue(area)!;
+                        ad["slots"] = slots.Cast<object>().Select(Describe).ToArray();
+                        areas.Add(ad);
+                    }
+                    groups[f.Name] = new { type = "areas", items = areas };
+                }
+                else if (typeof(IEncounterable).IsAssignableFrom(et))
+                {
+                    groups[f.Name] = new { type = "templates", items = arr.Cast<object>().Select(Describe).ToArray() };
+                }
+            }
+            File.WriteAllText(Path.Combine(outDir, $"enc_{cls}.json"), JsonSerializer.Serialize(groups));
+            summary[cls] = groups.ToDictionary(g => g.Key, g => (int)((System.Collections.ICollection)((dynamic)g.Value).items).Count);
+        }
+
+        foreach (var (ctx, gen, max) in new[] { (EntityContext.Gen4, 4, (int)Sav(GameVersion.HG).MaxSpeciesID), (EntityContext.Gen5, 5, (int)Sav(GameVersion.B2).MaxSpeciesID) })
+        {
+            var tree = EvolutionTree.GetEvolutionTree(ctx);
+            var table = gen == 4 ? (IPersonalTable)PersonalTable.HGSS : PersonalTable.B2W2;
+            var evos = new System.Collections.Generic.List<object>();
+            for (ushort sp = 1; sp <= max; sp++)
+            {
+                var fc = Math.Max((byte)1, table.GetFormEntry(sp, 0).FormCount);
+                for (byte f = 0; f < fc; f++)
+                {
+                    var fw = tree.Forward.GetForward(sp, f).ToArray();
+                    if (fw.Length == 0) continue;
+                    evos.Add(new { species = sp, form = f, evolutions = fw.Select(e => new { e.Species, e.Form, method = (int)e.Method, e.Argument, e.Level, e.LevelUp }) });
+                }
+            }
+            File.WriteAllText(Path.Combine(outDir, $"evolutions{gen}.json"), JsonSerializer.Serialize(new { generation = gen, evolutions = evos }));
+            summary[$"evolutions{gen}"] = evos.Count;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(summary, JsonOpts));
         return 0;
     }
 
