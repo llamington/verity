@@ -1,0 +1,8 @@
+[target.armv5te-none-eabi]
+rustflags = ["-Zunstable-options", "-Cpanic=immediate-abort"]
+
+
+
+
+[alias]
+build-ds = "build -p verity-ffi --release --no-default-features --features picolibc-allocator,alloc --target armv5te-none-eabi -Zbuild-std=core,alloc"

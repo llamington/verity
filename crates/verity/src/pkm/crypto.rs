@@ -48,9 +48,8 @@ pub static BLOCK_POSITION_INVERT: [u8; 32] = [
 pub fn calc_checksum(data: &[u8]) -> u16 {
     debug_assert!(data.len() >= SIZE_4STORED);
     let mut sum: u16 = 0;
-    for chunk in data[8..SIZE_4STORED].chunks_exact(2) {
-        let word = u16::from_le_bytes([chunk[0], chunk[1]]);
-        sum = sum.wrapping_add(word);
+    for chunk in data[8..SIZE_4STORED].as_chunks::<2>().0 {
+        sum = sum.wrapping_add(u16::from_le_bytes(*chunk));
     }
     sum
 }
