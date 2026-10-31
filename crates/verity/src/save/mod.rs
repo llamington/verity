@@ -1,5 +1,7 @@
+pub mod bag;
 pub mod crc16;
 pub mod detect;
+pub mod dex;
 pub mod gen4;
 pub mod gen5;
 pub mod gen5_blocks;
@@ -171,6 +173,62 @@ impl<'a> Save<'a> {
             played_minutes: minutes,
             played_seconds: seconds,
         }
+    }
+
+    fn dex_offset(&self) -> usize {
+        match &self.layout {
+            Layout::Gen4(l) => l.dex_offset(),
+            Layout::Gen5(l) => l.dex_offset(),
+        }
+    }
+
+    /// Registers a Pokémon in the Pokédex as PKHeX `SetDex` does on import.
+    pub fn register_dex(&mut self, pk: &Pkm) {
+        let ofs = self.dex_offset();
+        dex::set_dex(self.kind, &mut self.data[ofs..], pk);
+    }
+
+    pub fn dex_caught(&self, species: u16) -> bool {
+        dex::caught(self.kind, &self.data[self.dex_offset()..], species)
+    }
+
+    pub fn dex_seen(&self, species: u16) -> bool {
+        dex::seen(self.kind, &self.data[self.dex_offset()..], species)
+    }
+
+    pub fn pouches(&self) -> &'static [bag::PouchDef] {
+        bag::pouches(self.kind)
+    }
+
+    fn bag_entry_offset(&self, pouch: usize, slot: usize) -> Result<usize, SaveError> {
+        let def = self.pouches().get(pouch).ok_or(SaveError::OutOfRange)?;
+        if slot >= def.slots as usize {
+            return Err(SaveError::OutOfRange);
+        }
+        let base = match &self.layout {
+            Layout::Gen4(l) => l.general_offset(),
+            Layout::Gen5(l) => l.items_offset(),
+        };
+        Ok(base + def.offset as usize + 4 * slot)
+    }
+
+    /// (item id, count)
+    pub fn bag_item(&self, pouch: usize, slot: usize) -> Result<(u16, u16), SaveError> {
+        let ofs = self.bag_entry_offset(pouch, slot)?;
+        Ok((read_u16(self.data, ofs), read_u16(self.data, ofs + 2)))
+    }
+
+    pub fn set_bag_item(
+        &mut self,
+        pouch: usize,
+        slot: usize,
+        item: u16,
+        count: u16,
+    ) -> Result<(), SaveError> {
+        let ofs = self.bag_entry_offset(pouch, slot)?;
+        write_u16(self.data, ofs, item);
+        write_u16(self.data, ofs + 2, count);
+        Ok(())
     }
 
     /// Raw box name (Gen 4: 20 code units; Gen 5: 10, rest zero).
