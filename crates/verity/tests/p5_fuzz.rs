@@ -322,7 +322,12 @@ fn parity(
             || report.valid() != v["valid"].as_bool().unwrap()
         {
             bad.push(format!(
-                "{f}: ours {ours:?} {our_moves:?} pkhex {theirs:?} {their_moves:?} {}",
+                "{f} sp {} ball {} loc {} ml {} tile {}: ours {ours:?} {our_moves:?} pkhex {theirs:?} {their_moves:?} {}",
+                pk.species(),
+                pk.ball(),
+                pk.met_location(),
+                pk.met_level(),
+                pk.ground_tile(),
                 v["report"].as_str().unwrap_or("").replace('\n', " | ")
             ));
         }
@@ -343,4 +348,107 @@ fn p5_parity_report() {
         "checked {checked}, mismatched {}; per identifier (missing, extra): {per_id:?}",
         bad.len()
     );
+}
+
+#[test]
+fn p5_parity_fuzz() {
+    if !root().join("data/blobs/enc_dppt.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity(600, 77, 3);
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+/// PLAN P5 acceptance scale: >= 10^5 fuzzed. `cargo test --release -- --ignored p5_parity_1e5`.
+#[test]
+#[ignore]
+fn p5_parity_1e5() {
+    let mut total = 0;
+    for seed in 0..10u64 {
+        let (checked, bad, per_id) = parity(10_000, 1000 + seed, 4);
+        for b in bad.iter().take(10) {
+            eprintln!("{b}");
+        }
+        assert!(
+            bad.is_empty(),
+            "seed {seed}: {} of {checked} mismatched: {per_id:?}",
+            bad.len()
+        );
+        total += checked;
+    }
+    eprintln!("checked {total}");
+}
+
+#[test]
+fn p5_parity_corpus() {
+    if !root().join("data/blobs/enc_dppt.bin").exists() {
+        return;
+    }
+    let reports = root().join("corpus/reports/oracle-smoke");
+    let Ok(rd) = fs::read_dir(&reports) else {
+        return;
+    };
+    let ctx = Box::leak(Box::new(context()));
+    let (mut checked, mut bad) = (0, Vec::new());
+    for e in rd.flatten() {
+        let dir = e.path();
+        if !dir.is_dir() || !dir.to_string_lossy().ends_with(".pkm") {
+            continue;
+        }
+        let out = oracle(&["legality-batch".as_ref(), dir.as_os_str()]);
+        for line in String::from_utf8_lossy(&out).lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let f = v["file"].as_str().unwrap();
+            if !f.ends_with(".pk4")
+                || !matches!(
+                    v["enc_kind"].as_str().unwrap(),
+                    "EncounterSlot4" | "EncounterInvalid"
+                )
+            {
+                continue;
+            }
+            let pk = Pkm::from_decrypted(Format::Pk4, &fs::read(dir.join(f)).unwrap()).unwrap();
+            if !(10..=12).contains(&pk.version()) || pk.species() == 201 {
+                continue;
+            }
+            let r = verity::legality::analysis4::analyze4(ctx, &pk);
+            let ours: std::collections::BTreeSet<String> =
+                r.invalid.iter().map(|c| c.name().to_string()).collect();
+            let theirs: std::collections::BTreeSet<String> = v["invalid"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap().to_string())
+                .collect();
+            let mv: Vec<bool> = r.moves.iter().map(|m| m.valid()).collect();
+            let tmv: Vec<bool> = v["move_valid"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_bool().unwrap())
+                .collect();
+            if ours != theirs || mv != tmv || r.valid() != v["valid"].as_bool().unwrap() {
+                bad.push(format!(
+                    "{}/{f}: ours {ours:?} pkhex {theirs:?} {}",
+                    dir.display(),
+                    v["report"].as_str().unwrap_or("").replace('\n', " | ")
+                ));
+            }
+            checked += 1;
+        }
+    }
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    eprintln!("corpus checked {checked}");
+    assert!(checked > 0);
+    assert!(bad.is_empty(), "{} of {checked} mismatched", bad.len());
 }

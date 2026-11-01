@@ -16,3 +16,12 @@ Order:
    GroundTile, SlotType.
 5. Fuzz: mutate generated legal mons; verdict parity on ≥10^5.
 6. Widen: statics, gifts, trades, eggs, HGSS (Method K), Pal Park, Gen 5.
+
+## Status (2026-11-01)
+
+Steps 1–5 done for the M2 scope (Gen 4-format PK4 from D/P/Pt wild slots, Unown excluded):
+`legality::analysis4::analyze4` matches PKHeX's verdict, failing `CheckIdentifier` set and per-move
+validity on all 939 matching corpus PK4 and on 100,000 fuzzed mutations of generated legal mons
+(`tests/p5_fuzz.rs`, `p5_parity_1e5`). Not yet covered: statics/gifts/trades/eggs/events,
+HG/SS (Method K), Pal Park, Gen 5, Unown forms, the word filter, active-trainer checks
+(Korean save, HG/SS walking mood), stored-slot checks (Shaymin Sky in box, PP heal).
