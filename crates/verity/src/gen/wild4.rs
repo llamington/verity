@@ -16,6 +16,8 @@ pub enum Lead {
     CuteCharm {
         gender: u8,
     },
+    /// Poké Radar chain shiny (D/P/Pt grass slots that allow the radar). Always shiny.
+    PokeRadarChain,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -54,6 +56,7 @@ pub enum GenError {
     GenderImpossible,
     CuteCharmNeedsGenderedSpecies,
     UnownFormUnsupported,
+    RadarNotAllowedHere,
     BudgetExhausted,
 }
 
@@ -124,6 +127,7 @@ fn lead_matches(req: &Request, lead: LeadRequired) -> bool {
         Lead::None => matches!(lead, L::None | L::SynchronizeFail | L::CuteCharmFail),
         Lead::Synchronize(_) => lead == L::Synchronize,
         Lead::CuteCharm { .. } => lead == L::CuteCharm,
+        Lead::PokeRadarChain => lead == L::None,
     }
 }
 
@@ -225,6 +229,9 @@ pub fn generate(
     let nature = effective_nature(req)?;
     if let Lead::CuteCharm { gender } = req.lead {
         return generate_cute_charm(req, gender, nature, bounds, rand, budget, &ratio);
+    }
+    if req.lead == Lead::PokeRadarChain {
+        return generate_radar_chain(req, nature, bounds, rand, budget, &ratio);
     }
     if req.gender.is_some()
         && matches!(req.gender_ratio, 0 | 254 | 255)
@@ -383,6 +390,75 @@ fn generate_cute_charm(
             gender,
             pidiv_seed: 0,
             lead: fin,
+        });
+    }
+    Err(GenError::BudgetExhausted)
+}
+
+/// Forward chain-shiny roll (inverse of PKHeX `MethodFinder.IsChainShinyValid`): returns
+/// (pid, iv32) from an origin seed.
+pub fn chain_shiny_roll(origin: u32, tid: u16, sid: u16) -> (u32, u32) {
+    let mut s = next_n::<2>(origin);
+    let low3 = (s >> 16) & 7;
+    s = crate::rng::lcrng::next_seed(s);
+    let high3 = (s >> 16) & 7;
+    let mut low = low3;
+    for bit in 3..16 {
+        s = crate::rng::lcrng::next_seed(s);
+        low |= ((s >> 16) & 1) << bit;
+    }
+    let high = ((low ^ tid as u32 ^ sid as u32) & 0xFFF8) | high3;
+    let iv1 = next15(&mut s) as u32;
+    let iv2 = next15(&mut s) as u32;
+    (high << 16 | low, iv1 | iv2 << 15)
+}
+
+fn generate_radar_chain(
+    req: &Request,
+    nature: Option<u8>,
+    bounds: (u8, u8),
+    rand: &mut Rand,
+    budget: u32,
+    ratio: &impl Fn(u16) -> u8,
+) -> Result<Generated, GenError> {
+    if !(req.slot.can_radar && req.slot.slot_type == method_j::SlotType4::Grass) {
+        return Err(GenError::RadarNotAllowedHere);
+    }
+    let req = Request {
+        shiny: true,
+        ..*req
+    };
+    let (lo, hi) = (
+        bounds.0.max(req.slot.level_min),
+        bounds.1.min(req.slot.level_max),
+    );
+    if lo > hi {
+        return Err(GenError::LevelOutsideSlot);
+    }
+    for _ in 0..budget.saturating_mul(64) {
+        let origin = rand.next_u32();
+        let (pid, iv32) = chain_shiny_roll(origin, req.tid, req.sid);
+        if !pid_ok(&req, pid, nature) || !hidden_power_ok(&req, iv32) {
+            continue;
+        }
+        let level = lo + (rand.next_u32() % (hi - lo + 1) as u32) as u8;
+        let gender = gender_of(pid, req.gender_ratio);
+        let input = analyze_input(&req, pid, iv32, level, gender);
+        let pidiv = crate::rng::finder::analyze(&input, ratio);
+        if pidiv.kind != PidType::ChainShiny {
+            continue;
+        }
+        let lead = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+        if lead.lead != LeadRequired::None {
+            continue;
+        }
+        return Ok(Generated {
+            pid,
+            iv32,
+            level,
+            gender,
+            pidiv_seed: pidiv.seed,
+            lead,
         });
     }
     Err(GenError::BudgetExhausted)
