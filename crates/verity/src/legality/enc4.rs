@@ -47,6 +47,8 @@ pub enum Rating {
 pub struct SlotMatch<'a> {
     pub encounter: Encounter<'a>,
     pub lead: LeadSeed,
+    /// Only a partial match (PKHeX `EncounterMatchRating` worse than `Match`).
+    pub partial: bool,
 }
 
 fn wurmple_valid(species: u16, pid: u32) -> bool {
@@ -56,7 +58,7 @@ fn wurmple_valid(species: u16, pid: u32) -> bool {
     val == group
 }
 
-fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
+pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
     let species = pk.analyze.species;
     if (pk.ball == BALL_SAFARI) != (e.location() == MARSH_DPPT) {
         return Rating::PartialMatch;
@@ -191,6 +193,9 @@ pub fn wild_slots<'a>(
             fallback: None,
         };
     }
+    // EncounterEnumerator4: Match slots in data order, then the first partial match last.
+    let mut yielded: Vec<(Encounter<'a>, bool)> = Vec::new();
+    let mut partial: Option<Encounter<'a>> = None;
     for e in ed.group(group) {
         if e.location() != pk.met_location || e.species() == UNOWN {
             continue;
@@ -198,9 +203,22 @@ pub fn wild_slots<'a>(
         let Some(evo) = chain.iter().find(|c| c.species == e.species()) else {
             continue;
         };
-        if !is_match_exact(&e, pk, evo) || rating(&e, pk) != Rating::Match {
+        if !is_match_exact(&e, pk, evo) {
             continue;
         }
+        if rating(&e, pk) == Rating::Match {
+            yielded.push((e, false));
+        } else if partial.is_none() {
+            partial = Some(e);
+        }
+    }
+    // `mustBeSlot` (Safari/Sport Ball) iterates statics after slots and ends without reaching the
+    // enumerator's Fallback state, so the deferred partial match is never yielded.
+    let must_be_slot = pk.egg_location == 0 && (pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT);
+    if let Some(e) = partial.filter(|_| !must_be_slot) {
+        yielded.push((e, true));
+    }
+    for (e, is_partial) in yielded {
         if e.ground_tile() & (1u32 << pk.ground_tile) == 0 {
             defer(Deferral::Tile, e);
             continue;
@@ -222,7 +240,11 @@ pub fn wild_slots<'a>(
             defer(Deferral::SlotNumber, e);
             continue;
         }
-        let item = SlotMatch { encounter: e, lead };
+        let item = SlotMatch {
+            encounter: e,
+            lead,
+            partial: is_partial,
+        };
         let at = queue
             .iter()
             .position(|q| lead.lead > q.lead.lead)

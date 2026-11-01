@@ -250,18 +250,19 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
         ))
     };
     let mut chosen: Option<(Encounter, LeadSeed, Option<Deferral>, Vec<EvoCriteria>)> = None;
+    let mut partial_chosen = false;
     let mut evo_ok = true;
     if let Some(m) = &m {
-        let mut list: Vec<(Encounter, LeadSeed, Option<Deferral>)> = m
+        let mut list: Vec<(Encounter, LeadSeed, Option<Deferral>, bool)> = m
             .candidates
             .iter()
-            .map(|c| (c.encounter, c.lead, None))
+            .map(|c| (c.encounter, c.lead, None, c.partial))
             .collect();
         if let Some((e, d)) = m.fallback {
-            list.push((e, LeadSeed::default(), Some(d)));
+            list.push((e, LeadSeed::default(), Some(d), false));
         }
         let n = list.len();
-        for (i, (e, lead, d)) in list.into_iter().enumerate() {
+        for (i, (e, lead, d, is_partial)) in list.into_iter().enumerate() {
             let last = i + 1 == n;
             let history = ctx
                 .evo
@@ -276,8 +277,13 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
             if !ev && !last {
                 continue;
             }
+            // EncounterFinder: a partial match is only kept when nothing else follows.
+            if is_partial && !last {
+                continue;
+            }
             evo_ok = ev;
             report.moves = moves;
+            partial_chosen = super::enc4::rating(&e, &inp.matcher) != super::enc4::Rating::Match;
             chosen = Some((e, lead, d, history));
             break;
         }
@@ -288,7 +294,9 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
         let history = ctx
             .evo
             .chain_for_encounter(&inp.evo, pk.species(), pk.met_level());
-        report.moves = ctx.learn.verify(pk.moves(), pk.form(), 0, &history, None);
+        report.moves = ctx
+            .learn
+            .verify(pk.moves(), pk.form(), pk.species(), &history, None);
         verify_common(ctx, &inp, None, &mut report);
         return report;
     };
@@ -296,6 +304,10 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
         encounter: enc,
         lead,
     };
+    // EncounterFinder adds EncInvalid when the chosen encounter is only a partial match.
+    if partial_chosen {
+        report.flag(CheckId::Encounter);
+    }
     if !evo_ok {
         report.flag(CheckId::Evolution);
     }
@@ -350,14 +362,16 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
             report.flag(CheckId::EVs);
         }
         if evs.iter().any(|&e| e > 100) {
-            if let Some(e) = enc {
-                if e.level_min() == 100 {
+            // EncounterInvalid uses the current species and met level.
+            let (sp, lmin) = enc.map_or((pk.species(), pk.met_level()), |e| {
+                (e.species(), e.level_min())
+            });
+            if lmin == 100 {
+                report.flag(CheckId::EVs);
+            } else {
+                let g = ctx.hgss.personal(sp as usize).growth();
+                if crate::pkm::derived::exp_for_level(lmin, g) == pk.exp() {
                     report.flag(CheckId::EVs);
-                } else {
-                    let g = ctx.hgss.personal(e.species() as usize).growth();
-                    if crate::pkm::derived::exp_for_level(e.level_min(), g) == pk.exp() {
-                        report.flag(CheckId::EVs);
-                    }
                 }
             }
         }
@@ -441,9 +455,45 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
                     }
                 }
                 479 if pk.is_egg() && form != 0 => report.flag(CheckId::Egg),
+                // FormInfo.IsBattleOnlyForm: Castform and Cherrim forms only exist in battle.
+                351 | 421 if form != 0 => report.flag(CheckId::Form),
                 _ => {}
             }
         }
+    }
+
+    // BallVerifier (wild slot)
+    if let Some(e) = enc {
+        let ball = pk.ball();
+        let ok = if e.species() == 290 && pk.species() == 292 {
+            ball == 4 // Nincada -> Shedinja outside the Bug-Catching Contest: Poké Ball only
+        } else if e.ball() != 0 {
+            ball == e.ball()
+        } else {
+            // BallUseLegality.WildPokeBalls4_DPPt
+            const DPPT: u64 = (1 << 1)
+                | (1 << 2)
+                | (1 << 3)
+                | (1 << 4)
+                | (0x7F << 6)
+                | (1 << 13)
+                | (1 << 14)
+                | (1 << 15);
+            ball < 64 && DPPT & (1u64 << ball) != 0
+        };
+        if !ok {
+            report.flag(CheckId::Ball);
+        }
+    }
+
+    // GroundTileVerifier (reported as Encounter)
+    let tile = pk.ground_tile();
+    let tile_ok = match enc {
+        Some(e) if e.ground_tile() != 0 => tile < 32 && e.ground_tile() & (1u32 << tile) != 0,
+        _ => tile == 0,
+    };
+    if !tile_ok {
+        report.flag(CheckId::Encounter);
     }
 
     // ItemVerifier
@@ -479,6 +529,15 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
     let lang = pk.language();
     if lang == 0 || lang == 6 || lang > 8 {
         report.flag(CheckId::Language);
+    }
+
+    // TrainerNameVerifier (player OT; Gen 4 limits never exceed the 7-character field)
+    let mut ot = [0u16; 8];
+    let on = crate::text::decode4(&pk.ot_name_raw(), &mut ot);
+    let ot = &ot[..on];
+    let too_many_digits = on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
+    if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
+        report.flag(CheckId::Trainer);
     }
 
     // NicknameVerifier (wild slot, Gen 4 format)
