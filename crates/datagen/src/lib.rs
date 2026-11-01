@@ -203,6 +203,14 @@ pub fn build_moves(j: &Value, tables: &Value) -> Vec<u8> {
             .collect(),
     );
     let list = |name: &str| -> Vec<u16> { ints(&tables[name]).iter().map(|v| *v as u16).collect() };
+    w.u16s(
+        mt::RELEASED_HELD,
+        &list(if generation == 4 {
+            "g4_released_held"
+        } else {
+            "g5_released_held"
+        }),
+    );
     if generation == 4 {
         for (id, name) in [
             (mt::G4_TUTOR, "g4_tutor_moves"),

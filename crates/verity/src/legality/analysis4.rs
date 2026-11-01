@@ -404,6 +404,76 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         report.flag(CheckId::Memory);
     }
 
+    // FormVerifier (Gen 4 format)
+    let species = pk.species();
+    let form = pk.form();
+    let fc = pi.form_count();
+    if !(fc <= 1 && form == 0) {
+        let in_range = form < fc;
+        let oob_ok = match species {
+            201 => form < 28,
+            414 => form < 3,
+            _ => false,
+        };
+        if !in_range && !oob_ok {
+            report.flag(CheckId::Form);
+        } else {
+            match species {
+                487 if (form == 1) != (pk.held_item() == 112) => report.flag(CheckId::Form),
+                493 => {
+                    const PLATES: [u16; 17] = [
+                        303, 306, 304, 305, 309, 308, 310, 313, 298, 299, 301, 300, 307, 302, 311,
+                        312, 644,
+                    ];
+                    let it = pk.held_item();
+                    let expect = if (298..=313).contains(&it) || it == 644 {
+                        let f = PLATES.iter().position(|&p| p == it).map_or(0, |i| i + 1) as u8;
+                        if f < 9 {
+                            f
+                        } else {
+                            f + 1
+                        }
+                    } else {
+                        0
+                    };
+                    if expect != form {
+                        report.flag(CheckId::Form);
+                    }
+                }
+                479 if pk.is_egg() && form != 0 => report.flag(CheckId::Egg),
+                _ => {}
+            }
+        }
+    }
+
+    // ItemVerifier
+    let item = pk.held_item();
+    if pk.is_egg() && item != 0 {
+        report.flag(CheckId::HeldItem);
+    }
+    if item != 0
+        && !ctx
+            .learn
+            .moves
+            .list(crate::data::move_table::RELEASED_HELD)
+            .contains(item)
+    {
+        report.flag(CheckId::HeldItem);
+    }
+
+    // MovePPVerifier (not egg): PP Ups allowed except on empty/Sketch; PP within max.
+    if !pk.is_egg() {
+        let (moves, ups, pp) = (pk.moves(), pk.pp_ups(), pk.pp());
+        for i in 0..4 {
+            if ups[i] != 0 && matches!(moves[i], 0 | 166) {
+                report.flag(CheckId::CurrentMove);
+            }
+            if pp[i] > ctx.learn.moves.max_pp(moves[i], ups[i]) {
+                report.flag(CheckId::CurrentMove);
+            }
+        }
+    }
+
     // LanguageVerifier (Gen 4 origin: 1..=8, not 6). The Korean/non-Korean save check needs an
     // active trainer, as in PKHeX.
     let lang = pk.language();
