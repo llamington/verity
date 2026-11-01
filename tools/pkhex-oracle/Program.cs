@@ -39,6 +39,7 @@ public static class Program
                 "export-text4" => HandleExportText4(args),
                 "export-data" => HandleExportData(args),
                 "export-encounters" => HandleExportEncounters(args),
+                "check-wild4" => HandleCheckWild4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -846,6 +847,51 @@ public static class Program
             summary[$"evolutions{gen}"] = evos.Count;
         }
         Console.WriteLine(JsonSerializer.Serialize(summary, JsonOpts));
+        return 0;
+    }
+
+    // Input: JSON array of {group, location, slot_type, slot_number, species, form, level_min, level_max,
+    // tid, sid, pid, iv32, level}. Builds each with PKHeX from the matching slot and reports legality.
+    private static int HandleCheckWild4(string[] args)
+    {
+        var asm = typeof(EntityFormat).Assembly;
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var t = asm.GetType("PKHeX.Core.Encounters4DPPt")!;
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(args[1]));
+        var tr = Sav(GameVersion.Pt);
+        int valid = 0, total = 0;
+        var failures = new System.Collections.Generic.List<object>();
+        foreach (var r in doc.RootElement.EnumerateArray())
+        {
+            int I(string k) => r.GetProperty(k).GetInt32();
+            var areas = (EncounterArea4[])t.GetField(r.GetProperty("group").GetString()!, all)!.GetValue(null)!;
+            var slot = areas.SelectMany(a => a.Slots).First(sl =>
+                sl.Location == I("location") && (int)sl.Type == I("slot_type") && sl.SlotNumber == I("slot_number")
+                && sl.Species == I("species") && sl.Form == I("form") && sl.LevelMin == I("level_min") && sl.LevelMax == I("level_max")
+                && sl.GroundTile == (GroundTileAllowed)r.GetProperty("ground").GetInt64() && sl.AreaRate == I("rate"));
+            tr.TID16 = (ushort)I("tid");
+            tr.SID16 = (ushort)I("sid");
+            var pk = slot.ConvertToPKM(tr);
+            var pid = r.GetProperty("pid").GetUInt32();
+            var level = (byte)I("level");
+            pk.PID = pid;
+            pk.IV32 = r.GetProperty("iv32").GetUInt32();
+            pk.Gender = EntityGender.GetFromPIDAndRatio(pid, pk.PersonalInfo.Gender);
+            var pi = (PersonalInfo4)pk.PersonalInfo;
+            pk.Ability = (pid & 1) == 0 ? pi.Ability1 : pi.Ability2;
+            pk.MetLevel = level;
+            pk.CurrentLevel = level;
+            Span<ushort> moves = stackalloc ushort[4];
+            LearnSource4Pt.Instance.GetLearnset(pk.Species, pk.Form).SetEncounterMoves(level, moves);
+            pk.SetMoves(moves);
+            pk.RefreshChecksum();
+            var la = new LegalityAnalysis(pk);
+            total++;
+            if (la.Valid) valid++;
+            else if (failures.Count < 20)
+                failures.Add(new { index = total - 1, report = la.Report(), lead = (int)la.Info.PIDIV.Lead });
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { total, valid, failures }, JsonOpts));
         return 0;
     }
 
