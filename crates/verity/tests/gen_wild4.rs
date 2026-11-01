@@ -19,6 +19,7 @@ enum Case {
     SyncShiny,
     CuteCharm,
     ClosestIvs,
+    RadarChain,
 }
 
 fn run(per_case: usize) {
@@ -50,6 +51,7 @@ fn run(per_case: usize) {
         Case::SyncShiny,
         Case::CuteCharm,
         Case::ClosestIvs,
+        Case::RadarChain,
     ] {
         let mut dist_hist = std::collections::BTreeMap::new();
         let mut out = Vec::new();
@@ -73,6 +75,7 @@ fn run(per_case: usize) {
                     },
                 ),
                 Case::ClosestIvs => (false, Lead::None),
+                Case::RadarChain => (true, Lead::PokeRadarChain),
             };
             let req = Request {
                 slot,
@@ -103,7 +106,7 @@ fn run(per_case: usize) {
             };
             let g = match result {
                 Ok(g) => g,
-                Err(GenError::CuteCharmNeedsGenderedSpecies) => {
+                Err(GenError::CuteCharmNeedsGenderedSpecies | GenError::RadarNotAllowedHere) => {
                     skipped += 1;
                     continue;
                 }
@@ -141,7 +144,7 @@ fn run(per_case: usize) {
         );
         let v: serde_json::Value = serde_json::from_slice(&res.stdout).unwrap();
         eprintln!(
-            "{case:?}: {}/{} legal (skipped {skipped} genderless for Cute Charm)",
+            "{case:?}: {}/{} legal (skipped {skipped} slots that cannot use this method)",
             v["valid"], v["total"]
         );
         assert_eq!(v["valid"], v["total"], "{case:?}: {:#}", v["failures"]);
