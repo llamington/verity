@@ -399,3 +399,206 @@ pub fn method1_pid(mut seed: u32) -> u32 {
     let b = next16(&mut seed) as u32;
     b << 16 | a
 }
+
+/// Generates with exact IVs (HP, Atk, Def, Spe, SpA, SpD), if any legal frame yields them.
+pub fn generate_from_ivs(
+    req: &Request,
+    ivs: [u8; 6],
+    ratio: impl Fn(u16) -> u8,
+) -> Result<Generated, GenError> {
+    if req.species == 201 {
+        return Err(GenError::UnownFormUnsupported);
+    }
+    let bounds = level_bounds(req)?;
+    let nature = effective_nature(req)?;
+    let iv32 = ivs
+        .iter()
+        .enumerate()
+        .fold(0u32, |a, (i, v)| a | ((*v as u32) & 0x1F) << (5 * i));
+    if !hidden_power_ok(req, iv32) {
+        return Err(GenError::BudgetExhausted);
+    }
+    if let Lead::CuteCharm { gender } = req.lead {
+        let gr = req.gender_ratio;
+        if gr == 0 || gr >= 254 {
+            return Err(GenError::CuteCharmNeedsGenderedSpecies);
+        }
+        for nat in 0..25u32 {
+            if nature.is_some_and(|n| n as u32 != nat) {
+                continue;
+            }
+            let pid = if gender == 1 {
+                nat
+            } else {
+                25 * (gr as u32 / 25 + 1) + nat
+            };
+            if !pid_ok(
+                &Request {
+                    gender: Some(gender),
+                    ..*req
+                },
+                pid,
+                Some(nat as u8),
+            ) {
+                continue;
+            }
+            if let Some(g) = validate_cute_charm(req, pid, iv32, gender, bounds, &ratio) {
+                return Ok(g);
+            }
+        }
+        return Err(GenError::BudgetExhausted);
+    }
+    let mut buf = [0u32; MAX_SEEDS_IV];
+    let n = seeds_from_ivs(&mut buf, ivs);
+    for &s in &buf[..n] {
+        let origin = crate::rng::lcrng::prev_seed(crate::rng::lcrng::prev_seed(s));
+        let pid = method1_pid(origin);
+        if !pid_ok(req, pid, nature) {
+            continue;
+        }
+        if let Some(g) = validate(req, pid, iv32, bounds, &ratio) {
+            return Ok(g);
+        }
+    }
+    Err(GenError::BudgetExhausted)
+}
+
+fn validate_cute_charm(
+    req: &Request,
+    pid: u32,
+    iv32: u32,
+    gender: u8,
+    bounds: (u8, u8),
+    ratio: &impl Fn(u16) -> u8,
+) -> Option<Generated> {
+    let input = analyze_input(req, pid, iv32, bounds.0, gender);
+    if crate::rng::finder::analyze(&input, ratio).kind != PidType::CuteCharm {
+        return None;
+    }
+    let pidiv = PidIv {
+        kind: PidType::CuteCharm,
+        seed: 0,
+    };
+    let lead = method_j::lead_info4_dppt(&input, &req.slot, pidiv, bounds.0, bounds.1, 0, ratio);
+    if lead.lead != LeadRequired::CuteCharm {
+        return None;
+    }
+    let level = level_for(&req.slot, &lead, bounds.0);
+    let input = analyze_input(req, pid, iv32, level, gender);
+    let fin = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+    (fin.lead == LeadRequired::CuteCharm).then_some(Generated {
+        pid,
+        iv32,
+        level,
+        gender,
+        pidiv_seed: 0,
+        lead: fin,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IvProposal {
+    pub generated: Generated,
+    pub ivs: [u8; 6],
+    /// Per-stat change from the request (proposed - requested).
+    pub diff: [i8; 6],
+    /// False if the budget ran out before distance `distance` was fully searched.
+    pub exhaustive: bool,
+    pub distance: u32,
+}
+
+/// Closest legal IV spread to `target` (PLAN P4.6): ascending L1 distance, then fewest changed
+/// stats. `budget` caps the number of spreads tested.
+pub fn closest_legal_ivs(
+    req: &Request,
+    target: [u8; 6],
+    budget: u32,
+    ratio: impl Fn(u16) -> u8,
+) -> Result<IvProposal, GenError> {
+    let target = target.map(|v| v.min(31));
+    let mut tested = 0u32;
+    for d in 0..=(31 * 6) {
+        let ks = if d == 0 { 0..=0 } else { 1..=6.min(d) };
+        for k in ks {
+            let mut found = None;
+            let completed = for_each_spread(target, d, k, &mut |ivs| {
+                tested += 1;
+                if tested > budget {
+                    return false;
+                }
+                if let Ok(g) = generate_from_ivs(req, ivs, &ratio) {
+                    found = Some((g, ivs));
+                    return false;
+                }
+                true
+            });
+            if let Some((g, ivs)) = found {
+                return Ok(IvProposal {
+                    generated: g,
+                    ivs,
+                    diff: core::array::from_fn(|i| ivs[i] as i8 - target[i] as i8),
+                    exhaustive: true,
+                    distance: d as u32,
+                });
+            }
+            if !completed {
+                return Err(GenError::BudgetExhausted);
+            }
+        }
+    }
+    Err(GenError::BudgetExhausted)
+}
+
+/// Calls `f` for every spread at L1 distance `d` from `t` changing exactly `k` stats, until `f`
+/// returns false. Returns whether the enumeration completed.
+fn for_each_spread(t: [u8; 6], d: usize, k: usize, f: &mut impl FnMut([u8; 6]) -> bool) -> bool {
+    if k == 0 {
+        return d != 0 || f(t);
+    }
+    for mask in 0u8..64 {
+        if mask.count_ones() as usize != k {
+            continue;
+        }
+        let mut idx = [0usize; 6];
+        let mut n = 0;
+        for (i, slot) in (0..6).filter(|i| mask >> i & 1 != 0).zip(0..) {
+            idx[slot] = i;
+            n += 1;
+        }
+        if !distribute(t, &idx[..n], d, t, f) {
+            return false;
+        }
+    }
+    true
+}
+
+fn distribute(
+    t: [u8; 6],
+    stats: &[usize],
+    remaining: usize,
+    cur: [u8; 6],
+    f: &mut impl FnMut([u8; 6]) -> bool,
+) -> bool {
+    let Some((&s, rest)) = stats.split_first() else {
+        return remaining != 0 || f(cur);
+    };
+    if remaining < stats.len() {
+        return true;
+    }
+    let max_here = remaining - rest.len();
+    let min_here = if rest.is_empty() { remaining } else { 1 };
+    for amount in min_here..=max_here {
+        for sign in [1i32, -1] {
+            let v = t[s] as i32 + sign * amount as i32;
+            if !(0..=31).contains(&v) {
+                continue;
+            }
+            let mut next = cur;
+            next[s] = v as u8;
+            if !distribute(t, rest, remaining - amount, next, f) {
+                return false;
+            }
+        }
+    }
+    true
+}

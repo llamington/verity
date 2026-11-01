@@ -4,7 +4,7 @@ use std::process::Command;
 
 use verity::data::encounters::{Encounter, EncounterData};
 use verity::data::GameData;
-use verity::gen::wild4::{generate, GenError, Lead, Rand, Request};
+use verity::gen::wild4::{closest_legal_ivs, generate, GenError, Lead, Rand, Request};
 use verity::rng::method_j::Slot4;
 
 fn root() -> PathBuf {
@@ -18,6 +18,7 @@ enum Case {
     Sync,
     SyncShiny,
     CuteCharm,
+    ClosestIvs,
 }
 
 fn run(per_case: usize) {
@@ -48,7 +49,9 @@ fn run(per_case: usize) {
         Case::Sync,
         Case::SyncShiny,
         Case::CuteCharm,
+        Case::ClosestIvs,
     ] {
+        let mut dist_hist = std::collections::BTreeMap::new();
         let mut out = Vec::new();
         let mut skipped = 0;
         while out.len() < per_case {
@@ -69,6 +72,7 @@ fn run(per_case: usize) {
                         gender: (rand.next_u32() & 1) as u8,
                     },
                 ),
+                Case::ClosestIvs => (false, Lead::None),
             };
             let req = Request {
                 slot,
@@ -77,14 +81,27 @@ fn run(per_case: usize) {
                 species: e.species(),
                 gender_ratio: gr,
                 met_level: None,
-                nature: None,
+                nature: matches!(case, Case::ClosestIvs).then_some(nat),
                 gender: None,
                 ability_bit: None,
                 shiny,
                 lead,
                 hidden_power_type: None,
             };
-            let g = match generate(&req, &mut rand, 50_000, ratio) {
+            let result = if let Case::ClosestIvs = case {
+                let target: [u8; 6] = core::array::from_fn(|_| (rand.next_u32() % 32) as u8);
+                closest_legal_ivs(&req, target, 200_000, ratio).map(|p| {
+                    *dist_hist.entry(p.distance).or_insert(0u32) += 1;
+                    let got: [u8; 6] =
+                        core::array::from_fn(|i| ((p.generated.iv32 >> (5 * i)) & 31) as u8);
+                    assert_eq!(got, p.ivs);
+                    assert_eq!(p.generated.pid % 25, nat as u32);
+                    p.generated
+                })
+            } else {
+                generate(&req, &mut rand, 50_000, ratio)
+            };
+            let g = match result {
                 Ok(g) => g,
                 Err(GenError::CuteCharmNeedsGenderedSpecies) => {
                     skipped += 1;
@@ -142,4 +159,43 @@ fn generated_pt_grass_is_legal() {
 #[ignore]
 fn generated_pt_grass_is_legal_1e4() {
     run(10_000);
+}
+
+#[test]
+#[ignore]
+fn closest_ivs_timing() {
+    let b = root().join("data/blobs");
+    let (enc, pt) = (
+        fs::read(b.join("enc_dppt.bin")).unwrap(),
+        fs::read(b.join("pt.bin")).unwrap(),
+    );
+    let ed = EncounterData::load(&enc).unwrap();
+    let gd = GameData::load(&pt).unwrap();
+    let ratio = |s: u16| gd.personal(s as usize).gender_ratio();
+    let slots: Vec<Encounter> = ed
+        .group(b"SlotsPt")
+        .filter(|e| e.slot_type() == 0 && e.species() != 201)
+        .collect();
+    let mut rand = Rand::new(7);
+    for i in 0..20 {
+        let e = slots[rand.next_u32() as usize % slots.len()];
+        let req = Request {
+            slot: Slot4::from_encounter(&e).unwrap(),
+            tid: 1,
+            sid: 2,
+            species: e.species(),
+            gender_ratio: ratio(e.species()),
+            met_level: None,
+            nature: Some((rand.next_u32() % 25) as u8),
+            gender: None,
+            ability_bit: None,
+            shiny: false,
+            lead: Lead::None,
+            hidden_power_type: None,
+        };
+        let target: [u8; 6] = core::array::from_fn(|_| (rand.next_u32() % 32) as u8);
+        let t = std::time::Instant::now();
+        let r = closest_legal_ivs(&req, target, 200_000, ratio);
+        eprintln!("{i}: {:?} in {:?}", r.map(|p| p.distance), t.elapsed());
+    }
 }
