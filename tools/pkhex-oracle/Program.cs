@@ -898,6 +898,11 @@ public static class Program
             LearnSource4Pt.Instance.GetLearnset(pk.Species, pk.Form).SetEncounterMoves(level, moves);
             pk.SetMoves(moves);
             pk.RefreshChecksum();
+            if (args.Length > 2)
+            {
+                Directory.CreateDirectory(args[2]);
+                File.WriteAllBytes(Path.Combine(args[2], $"{total:D6}.pk4"), pk.DecryptedBoxData);
+            }
             var la = new LegalityAnalysis(pk);
             total++;
             if (la.Valid) valid++;
