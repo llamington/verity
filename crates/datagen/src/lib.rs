@@ -468,6 +468,28 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
     w.finish()
 }
 
+/// Gen 4-formatted species names (PKHeX `SpeciesName.GetSpeciesNameGeneration(_, lang, 4)`);
+/// the table id is the language ID.
+pub fn build_names4(j: &Value) -> Vec<u8> {
+    let mut w = BlobWriter::new(4, BlobKind::Strings);
+    for (lang, names) in j.as_object().unwrap() {
+        let recs: Vec<Vec<u8>> = names
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                s.as_str()
+                    .unwrap()
+                    .encode_utf16()
+                    .flat_map(|u| u.to_le_bytes())
+                    .collect()
+            })
+            .collect();
+        w.indexed(lang.parse().unwrap(), &recs);
+    }
+    w.finish()
+}
+
 /// Builds every blob from `exports` into `out`; returns (name, size) pairs.
 pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     fs::create_dir_all(out).unwrap();
@@ -502,6 +524,10 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
             build_moves(&load(&exports.join(format!("moves{gen}.json"))), &tables),
         );
     }
+    put(
+        "names4.bin".into(),
+        build_names4(&load(&exports.join("names4.json"))),
+    );
     for l in LANGS {
         put(
             format!("strings_{l}.bin"),

@@ -246,6 +246,7 @@ fn context() -> verity::legality::analysis4::Context4<'static> {
         evo: Evo4::new(dp, hgss),
         enc_dppt: EncounterData::load(load("enc_dppt.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
+        names4: verity::data::Strings::load(load("names4.bin")).unwrap(),
     }
 }
 

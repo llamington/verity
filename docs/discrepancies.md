@@ -48,3 +48,9 @@ PKHeX 25.12.21 `LeadFinder.TryGetMatchRadarShiny` assigns `result` inside its lo
 unconditionally sets `result = default; return false;`, so a shiny Method 1 match is never
 re-checked as a Poké Radar chain shiny. `method_j::lead_info4_dppt` mirrors this (the branch is
 omitted). Report upstream.
+
+## Nickname word filter (P5)
+
+PKHeX (default settings) runs its Nintendo Switch word filter, and older console filters by
+lookback, over every nickname including Gen 4 origins, which had no in-game filter. verity does not
+apply word filters yet (regex lists are costly on the DS); it does apply the digit-count rule.
