@@ -748,6 +748,12 @@ public static class Program
                 items5 = gs.GetItemStrings(EntityContext.Gen5, GameVersion.B2W2).Take(Sav(GameVersion.B2).MaxItemID + 1),
             }));
         }
+        var names4 = new System.Collections.Generic.Dictionary<string, string[]>();
+        foreach (var lang in Enumerable.Range(0, 11))
+            names4[lang.ToString()] = Enumerable.Range(0, Sav(GameVersion.HG).MaxSpeciesID + 1)
+                .Select(sp => SpeciesName.GetSpeciesNameGeneration((ushort)sp, lang, 4)).ToArray();
+        File.WriteAllText(Path.Combine(outDir, "names4.json"), JsonSerializer.Serialize(names4));
+
         File.WriteAllText(Path.Combine(outDir, "manifest.json"), JsonSerializer.Serialize(manifest));
         Console.WriteLine(JsonSerializer.Serialize(manifest));
         return 0;

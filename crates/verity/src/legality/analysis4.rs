@@ -88,6 +88,8 @@ pub struct Context4<'a> {
     pub enc_dppt: EncounterData<'a>,
     /// Gender ratio for species > 493 (for PKHeX `EntityGender` lookups).
     pub gen5: GameData<'a>,
+    /// Gen 4-formatted species names by language ID (`names4.bin`).
+    pub names4: crate::data::Strings<'a>,
 }
 
 impl Context4<'_> {
@@ -402,6 +404,16 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         report.flag(CheckId::Memory);
     }
 
+    // LanguageVerifier (Gen 4 origin: 1..=8, not 6). The Korean/non-Korean save check needs an
+    // active trainer, as in PKHeX.
+    let lang = pk.language();
+    if lang == 0 || lang == 6 || lang > 8 {
+        report.flag(CheckId::Language);
+    }
+
+    // NicknameVerifier (wild slot, Gen 4 format)
+    verify_nickname(ctx, pk, enc_species, report);
+
     // GenderVerifier
     let ratio = pi.gender_ratio();
     let gender = pk.gender();
@@ -445,4 +457,53 @@ fn valid_date(year: u8, month: u8, day: u8) -> bool {
         _ => return false,
     };
     (1..=days).contains(&day)
+}
+
+fn is_number(c: u16) -> bool {
+    matches!(c, 0x30..=0x39 | 0xFF10..=0xFF19 | 0xB2 | 0xB3 | 0xB9 | 0xBC..=0xBE | 0x2460..=0x2473)
+}
+
+fn name_matches(ctx: &Context4, lang: u8, species: u16, nick: &[u16]) -> bool {
+    let name = ctx.names4.get(lang as u16, species as usize);
+    !name.is_empty() && name.iter().eq(nick.iter().copied())
+}
+
+fn verify_nickname(ctx: &Context4, pk: &Pkm, enc_species: u16, report: &mut Report) {
+    let mut buf = [0u16; 11];
+    let n = crate::text::decode4(&pk.nickname_raw(), &mut buf);
+    let nick = &buf[..n];
+    if n == 0 || nick.contains(&0xFFFF) {
+        report.flag(CheckId::Nickname);
+        return;
+    }
+    if pk.is_egg() {
+        return;
+    }
+    let lang = pk.language();
+    let species = pk.species();
+    if pk.is_nicknamed() {
+        if nick.iter().any(|&c| (0x4E00..=0x9FFF).contains(&c)) {
+            report.flag(CheckId::Nickname);
+            return;
+        }
+        let max = if matches!(lang, 1 | 8) { 5 } else { 10 };
+        if n > max {
+            report.flag(CheckId::Nickname);
+            return;
+        }
+        // Word filter not applied (docs/discrepancies.md); digit count is.
+        if n > 4 && nick.iter().filter(|&&c| is_number(c)).count() > 4 {
+            report.flag(CheckId::Nickname);
+        }
+        return;
+    }
+    if name_matches(ctx, lang, species, nick) {
+        return;
+    }
+    let any = [1u8, 2, 3, 4, 5, 7, 8]
+        .iter()
+        .any(|&l| name_matches(ctx, l, species, nick));
+    if !(enc_species != species && any) {
+        report.flag(CheckId::Nickname);
+    }
 }
