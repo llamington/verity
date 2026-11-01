@@ -1,1 +1,4 @@
-//! Legality analysis engine (PKHeX parity).
+//! Legality checks (PKHeX `LegalityAnalysis` port).
+
+#[cfg(feature = "alloc")]
+pub mod evo;

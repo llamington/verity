@@ -466,9 +466,14 @@ public static class Program
         var la = new LegalityAnalysis(pk);
         var enc = la.EncounterMatch;
         var lead = la.Info.PIDIV;
+        static int[][] Evos(System.Collections.Generic.IEnumerable<EvoCriteria> c) =>
+            c.Select(e => new[] { (int)e.Species, e.Form, e.LevelMin, e.LevelMax, e.LevelUpRequired, (int)e.Method }).ToArray();
+        var gen4 = pk.Format == 4 && pk.Generation == 4;
         return new
         {
             name,
+            evo_origin = gen4 ? Evos(EncounterOrigin.GetOriginChain(pk, 4, EntityContext.Gen4)) : null,
+            evo_gen4 = gen4 ? Evos(la.Info.EvoChainsAllGens.Gen4) : null,
             enc_kind = enc.GetType().Name,
             enc_version = (int)enc.Version,
             enc_location = enc.Location,
