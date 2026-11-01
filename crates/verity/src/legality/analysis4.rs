@@ -43,6 +43,7 @@ pub enum CheckId {
     Marking,
     TrashBytes,
     SlotType,
+    Memory,
 }
 
 impl CheckId {
@@ -75,6 +76,7 @@ impl CheckId {
             Marking => "Marking",
             TrashBytes => "TrashBytes",
             SlotType => "SlotType",
+            Memory => "Memory",
         }
     }
 }
@@ -359,6 +361,47 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         }
     }
 
+    // AbilityVerifier (Gen 4 origin, format 4: must match PID bit 0)
+    let [a1, a2, _] = pi.abilities();
+    let ab = pk.ability();
+    if ab != a1 && ab != a2 {
+        report.flag(CheckId::Ability);
+    } else {
+        let expect = if pk.pid() & 1 == 0 { a1 } else { a2 };
+        if expect != ab {
+            report.flag(CheckId::Ability);
+        }
+    }
+
+    // MiscVerifier: Gen 4 fields, fateful flag, Pokérus duration, calendar dates.
+    let leaf = pk.shiny_leaf();
+    if (leaf > 0b1_1111 && leaf != 0b11_1111) || (leaf != 0 && pk.is_egg()) {
+        report.flag(CheckId::Misc);
+    }
+    if pk.fateful() {
+        report.flag(CheckId::Fateful);
+    }
+    let pkrs = pk.pokerus();
+    if (pkrs & 0xF) as u32 > ((pkrs >> 4) & 3) as u32 + 1 {
+        report.flag(CheckId::Misc);
+    }
+    let [my, mm, md] = pk.met_date();
+    if pk.met_location() != 0 {
+        if !valid_date(my, mm, md) {
+            report.flag(CheckId::Memory);
+        }
+    } else if enc.is_some() && (my, mm, md) != (0, 0, 0) {
+        report.flag(CheckId::Memory);
+    }
+    let [ey, em, ed] = pk.egg_date();
+    if pk.egg_location() != 0 {
+        if !valid_date(ey, em, ed) {
+            report.flag(CheckId::Memory);
+        }
+    } else if (ey, em, ed) != (0, 0, 0) {
+        report.flag(CheckId::Memory);
+    }
+
     // GenderVerifier
     let ratio = pi.gender_ratio();
     let gender = pk.gender();
@@ -388,4 +431,18 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
             report.flag(CheckId::Gender);
         }
     }
+}
+
+/// PKHeX `DateUtil.IsValidDate(2000 + year, month, day)`.
+fn valid_date(year: u8, month: u8, day: u8) -> bool {
+    let y = 2000 + year as u32;
+    let leap = y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400));
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days).contains(&day)
 }
