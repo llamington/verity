@@ -295,7 +295,13 @@ public static class Program
                     file = Path.GetFileName(file),
                     species = pkm.Species,
                     valid = la.Valid,
-                    report = la.Report()
+                    report = la.Report(),
+                    enc_kind = la.EncounterMatch.GetType().Name,
+                    move_valid = la.Info.Moves.Select(m => m.Valid).ToArray(),
+                    evo_gen4 = pkm.Format == 4 && pkm.Generation == 4
+                        ? la.Info.EvoChainsAllGens.Gen4.Select(e => new[] { (int)e.Species, e.Form, e.LevelMin, e.LevelMax, e.LevelUpRequired, (int)e.Method }).ToArray()
+                        : null,
+                    invalid = la.Results.Where(r => !r.Valid).Select(r => r.Identifier.ToString()).Distinct().ToArray(),
                 };
                 Console.WriteLine(JsonSerializer.Serialize(entry));
             }
@@ -474,6 +480,8 @@ public static class Program
             name,
             evo_origin = gen4 ? Evos(EncounterOrigin.GetOriginChain(pk, 4, EntityContext.Gen4)) : null,
             evo_gen4 = gen4 ? Evos(la.Info.EvoChainsAllGens.Gen4) : null,
+            move_valid = la.Info.Moves.Select(m => m.Valid).ToArray(),
+            move_method = la.Info.Moves.Select(m => m.Info.Method.ToString()).ToArray(),
             enc_kind = enc.GetType().Name,
             enc_version = (int)enc.Version,
             enc_location = enc.Location,
