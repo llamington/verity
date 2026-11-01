@@ -36,6 +36,8 @@ pub mod move_table {
     pub const B2W2_TUTOR_2: u16 = 23;
     pub const B2W2_TUTOR_3: u16 = 24;
     pub const B2W2_TUTOR_4: u16 = 25;
+    /// PKHeX `ItemRestrictions.IsHeldItemAllowed` for the generation (sorted item IDs).
+    pub const RELEASED_HELD: u16 = 30;
 }
 
 /// String categories in a [`BlobKind::Strings`] blob.

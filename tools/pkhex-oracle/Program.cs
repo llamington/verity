@@ -729,6 +729,8 @@ public static class Program
             g4_special_draco_meteor = PersonalInfo4.SpecialTutorDracoMeteor.ToArray(),
             g5_tmhm = PersonalInfo5BW.MachineMoves.ToArray(),
             g5_type_tutor_moves = PersonalInfo5BW.TypeTutorMoves.ToArray(),
+            g4_released_held = Enumerable.Range(1, 1000).Where(i => ItemRestrictions.IsHeldItemAllowed(i, EntityContext.Gen4)).ToArray(),
+            g5_released_held = Enumerable.Range(1, 1000).Where(i => ItemRestrictions.IsHeldItemAllowed(i, EntityContext.Gen5)).ToArray(),
             b2w2_tutor_moves = new[] { PersonalInfo5B2W2.TutorMoves1.ToArray(), PersonalInfo5B2W2.TutorMoves2.ToArray(), PersonalInfo5B2W2.TutorMoves3.ToArray(), PersonalInfo5B2W2.TutorMoves4.ToArray() },
         }));
 
