@@ -8,6 +8,8 @@ extern crate alloc;
 
 use core::slice;
 
+pub mod ui;
+
 /// C ABI: Calculates the CRC16-CCITT checksum over a buffer.
 ///
 /// Returns 0 if `data` is null and `len` is not 0.
@@ -31,6 +33,8 @@ pub enum VerityErr {
     Ok = 0,
     NullPointer = 1,
     Unrecognized = 2,
+    BadArgument = 3,
+    BadData = 4,
 }
 
 /// Save summary for the front end (`verity_save_info`).

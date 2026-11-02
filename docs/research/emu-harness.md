@@ -7,7 +7,7 @@ outputs are documented at the top of `src/main.cpp`.
 ```sh
 make emu-harness                       # configure + build (tools/emu-harness/build)
 make emu-accept                        # Phase H boot acceptance (skips without roms/ and bios/)
-tools/emu-harness/build/emu-harness tools/emu-harness/scripts/spike.json [--out DIR]
+tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json [--out DIR]
 ```
 
 ## Status (2026-11-01)
@@ -15,7 +15,7 @@ tools/emu-harness/build/emu-harness tools/emu-harness/scripts/spike.json [--out 
 | Requirement (PLAN §7) | Status |
 |---|---|
 | Headless, links the core only | done |
-| Determinism: fixed RTC, fixed firmware, JIT off | done; two runs of `spike.json` give identical frame counts, screen hashes and PNGs |
+| Determinism: fixed RTC, fixed firmware, JIT off | done; two runs of a script give identical frame counts, screen hashes and PNGs |
 | Steps: press/hold, touch, drag, wait, wait_until (screen hash / RAM), assert_ram, screenshot, hash, dump_save | done |
 | Outputs: PNGs, save dumps, `run.jsonl` (frame number + screen hashes per step) | done |
 | Homebrew with a DLDI SD card synced from a folder | done (`sd_dir`/`sd_image`) |
@@ -34,6 +34,11 @@ Exploration step `{"every": N, "frames": M, "prefix": "p"}` screenshots every N 
 finding menu paths before freezing a script. `direct_boot` (default true) skips the DS menu.
 
 ## Notes
+
+- melonDS DLDI folder sync decides what to copy back by file timestamps. The harness clock
+  is fixed, so a file rewritten in a later run keeps the same timestamp and is not synced back.
+  Reset the harness image (`sd-harness.img` and `.idx`) before runs that check files written
+  on the SD card (`make emu-ui` does this).
 
 - melonDS sets `GDBSTUB_ENABLED` with directory-scoped `add_definitions`; it changes the `NDS`
   and `ARM` class layouts, so the harness must define it too (it crashed in `GPU::GPU` without).

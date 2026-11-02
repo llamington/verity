@@ -48,7 +48,7 @@ and gaps are in `docs/research/p5-plan.md`.
 
 - Phase H (partial): `tools/emu-harness` runs melonDS 1.1 headless from JSON scripts,
   deterministically (see `docs/research/emu-harness.md`). Use it for DS visual checks
-  (`scripts/spike.json`). Retail acceptance passes: Platinum and Black 2 boot to
+  (`scripts/ui-boxes.json`, `make emu-ui`). Retail acceptance passes: Platinum and Black 2 boot to
   title and Continue with real saves, deterministically (`make emu-accept`). Two-instance
   multiplayer is still open. Owner ROMs (Pt, HG, W, B2) and BIOS are in `roms/`, `bios/`.
 
@@ -58,8 +58,14 @@ and gaps are in `docs/research/p5-plan.md`.
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
    NFLib/µLibrary/libdsf installed). Verified headless with `tools/emu-harness` and in the GUI with
-   `tools/emu/melon.py`. Next P9.1: scene
-   stack, file picker, save overview, box view, editor, add-Pokémon wizard; FFI per P9.2; blobs
-   from NitroFS.
+   `tools/emu/melon.py`. P9.1 slice 1 done
+   (read-only): scene stack with fades (`ui.cpp`), file picker that remembers the last file
+   (`/_nds/verity/last.txt`), save overview, box view (6x5 grid, L/R boxes, party panel by
+   Select or tap, details on the top screen); blobs from NitroFS (`nds/Makefile` copies
+   `data/blobs`); FFI `verity_data_attach`, `verity_box_name`, `verity_slot_view`,
+   `verity_name`. Walk-through: `make emu-ui`. Placeholder icons are original type-tinted art;
+   text is the 8x8 console font for now. Next slices: legality summary (Gen 4 context over the
+   FFI), Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
+   backups, proportional font.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.

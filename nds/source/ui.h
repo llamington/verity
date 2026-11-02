@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Front-end primitives: input, scene stack with fades, text consoles, sprites.
+#pragma once
+
+#include <nds.h>
+#include <stdint.h>
+
+#include "verity.h"
+
+namespace ui {
+
+// ---- input ---------------------------------------------------------------------------------
+
+struct Input
+{
+    uint32_t down = 0, held = 0, rep = 0;
+    bool touching = false;
+    int tx = 0, ty = 0;
+    // A completed tap (pen up without dragging), in bottom-screen pixels.
+    bool tapped = false;
+    int tap_x = 0, tap_y = 0;
+    // Vertical drag since pen down, in pixels (valid while touching).
+    bool dragging = false;
+    int drag_dy = 0;
+
+    void poll();
+
+private:
+    int start_y_ = -1, last_x_ = 0, last_y_ = 0;
+};
+
+// ---- scenes --------------------------------------------------------------------------------
+
+class Scene
+{
+public:
+    virtual ~Scene() = default;
+    // Called when the scene becomes the top of the stack (first time or after a pop).
+    virtual void enter() = 0;
+    // One frame. Returns false to pop this scene.
+    virtual bool update(const Input& in) = 0;
+};
+
+// Push takes ownership. The new scene is entered behind a fade.
+void push(Scene* s);
+// Runs the stack until it is empty.
+void run();
+
+// ---- text ----------------------------------------------------------------------------------
+
+PrintConsole* top();
+PrintConsole* bottom();
+void clear(PrintConsole* c);
+// printf at (col, row) on a console; clears to end of line.
+void at(PrintConsole* c, int col, int row, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// UTF-16 to the console font (ASCII; common accented letters folded, others '?').
+void utf16_to_ascii(const uint16_t* s, char* out, int cap);
+// A name from the strings blob as ASCII ("?" when unknown).
+const char* name(uint32_t category, uint32_t id);
+
+// ---- sprites -------------------------------------------------------------------------------
+
+void sprites_init();
+void sprites_hide_all();
+void sprites_commit();
+// Placeholder Pokémon icon (original art), coloured by type; egg and shiny variants.
+void icon(int oam_id, int x, int y, uint8_t type, bool egg, bool shiny);
+// Selection cursor (32x32 frame) on the bottom screen.
+void cursor(int oam_id, int x, int y);
+// Highlight bar (8 px high, full width) on the bottom screen.
+void bar(int oam_first, int y, bool visible);
+
+}  // namespace ui

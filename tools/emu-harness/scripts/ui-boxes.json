@@ -1,0 +1,35 @@
+// P9.1 slice 1: picker -> overview -> box view (L/R, cursor, party), on the real Platinum save.
+{
+  "rom": "../../../nds/verity.nds",
+  "sd_dir": "../../../sd",
+  "sd_image": "../../../sd-harness.img",
+  "steps": [
+    {"wait": 90},
+    {"screenshot": "00-picker.png"},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"screenshot": "01-picker-sel.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 60},
+    {"screenshot": "02-overview.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 40},
+    {"screenshot": "03-box1.png"},
+    {"press": ["Right"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"wait": 5},
+    {"screenshot": "04-box1-cursor.png"},
+    {"press": ["R"], "frames": 2},
+    {"wait": 5},
+    {"screenshot": "05-box2.png"},
+    {"press": ["Select"], "frames": 2},
+    {"wait": 5},
+    {"screenshot": "06-party.png"},
+    {"touch": [168, 72], "frames": 3},
+    {"wait": 5},
+    {"screenshot": "07-party-tap.png"}
+  ]
+}

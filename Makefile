@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept
+.PHONY: all nds test clean emu-harness emu-accept emu-ui
 
 all: nds
 
@@ -23,3 +23,9 @@ emu-accept: emu-harness
 	    tools/emu-harness/build/emu-harness tools/emu-harness/scripts/boot-$$g.json --out build/emu/boot-$$g || exit 1; \
 	  else echo "skip boot-$$g: ROM or BIOS missing"; fi; \
 	done
+
+# Front-end walk-throughs (screenshots in build/emu/<script>). The harness SD image is reset
+# first: melonDS folder sync compares timestamps and the harness clock is fixed.
+emu-ui: emu-harness nds
+	rm -rf sd/_nds sd-harness.img sd-harness.img.idx
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json --out build/emu/ui-boxes
