@@ -2,7 +2,7 @@
 //! `Encounters5BW`, `Encounters5B2W2` and `Encounters5DR`. Values keep PKHeX's conventions
 //! (gender 255 = random, nature 25 = random, `Shiny`/`AbilityPermission`/`Ball` enum values).
 
-use super::blob::{Blob, BlobError, BlobKind, Indexed};
+use super::blob::{Blob, BlobError, BlobKind, Indexed, U16s};
 
 pub mod table {
     pub const TEMPLATES: u16 = 1;
@@ -10,6 +10,8 @@ pub mod table {
     pub const GROUP_NAMES: u16 = 3;
     pub const GROUP_RANGES: u16 = 4;
     pub const SLOTS: u16 = 5;
+    /// In-game trade nicknames and OT names by language, one record per template.
+    pub const TRADE_NAMES: u16 = 6;
 }
 
 pub const TEMPLATE_LEN: usize = 68;
@@ -396,6 +398,16 @@ impl Encounter<'_> {
     }
 }
 
+impl<'a> Encounter<'a> {
+    /// The template's bytes inside the blob (for blob-relative lookups).
+    pub fn template_bytes(&self) -> Option<&'a [u8]> {
+        match self {
+            Encounter::Template(t) => Some(t.0),
+            Encounter::Slot { .. } => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct EncounterData<'a> {
     blob: Blob<'a>,
@@ -413,6 +425,31 @@ impl<'a> EncounterData<'a> {
             .bytes(table::TEMPLATES)
             .get(i * TEMPLATE_LEN..(i + 1) * TEMPLATE_LEN)
             .map(Template)
+    }
+
+    /// Fixed nickname and OT name (UTF-16 units) of a trade template for a language ID, if the
+    /// template has them (PKHeX `EncounterTrade4PID.Nicknames` / `TrainerNames`).
+    pub fn trade_names(&self, e: &Encounter<'a>, language: u8) -> Option<(U16s<'a>, U16s<'a>)> {
+        let t = e.template_bytes()?;
+        let base = self.blob.bytes(table::TEMPLATES).as_ptr() as usize;
+        let i = (t.as_ptr() as usize).checked_sub(base)? / TEMPLATE_LEN;
+        let rec = Indexed(self.blob.bytes(table::TRADE_NAMES)).get(i);
+        let mut o = 0usize;
+        let mut read = |rec: &'a [u8]| -> Option<U16s<'a>> {
+            let n = *rec.get(o)? as usize * 2;
+            let s = rec.get(o + 1..o + 1 + n)?;
+            o += 1 + n;
+            Some(U16s(s))
+        };
+        let mut found = None;
+        for lang in 0..=language {
+            let nick = read(rec)?;
+            let ot = read(rec)?;
+            if lang == language {
+                found = Some((nick, ot));
+            }
+        }
+        found
     }
 
     pub fn slot(&self, i: usize) -> Option<Encounter<'a>> {

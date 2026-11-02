@@ -482,6 +482,7 @@ fn p5_parity_corpus() {
                         | "EncounterStatic4"
                         | "EncounterEgg4"
                         | "EncounterStatic4Pokewalker"
+                        | "EncounterTrade4PID"
                 )
             {
                 continue;

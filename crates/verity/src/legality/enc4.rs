@@ -36,6 +36,8 @@ pub struct MatchPkm {
     pub ball: u8,
     pub ground_tile: u8,
     pub is_shiny: bool,
+    /// Contest stats (cool, beauty, cute, smart, tough, sheen).
+    pub contest: [u8; 6],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -296,6 +298,49 @@ fn static_rating(e: &Encounter, pk: &MatchPkm) -> u8 {
     }
 }
 
+pub fn is_trade(e: &Encounter) -> bool {
+    e.kind() == Some(crate::data::encounters::EncounterKind::Trade4Pid)
+}
+
+/// PKHeX `EncounterEnumerator4` trade groups (D's Pal Park ranch gifts not modelled yet).
+fn trade_groups(version: u8) -> &'static [&'static [u8]] {
+    match version {
+        7 | 8 => &[b"TradeGift_HGSS"],
+        _ => &[b"TradeGift_DPPtIngame"],
+    }
+}
+
+/// PKHeX `EncounterTrade4PID.IsMatchExact` (format 4).
+fn trade_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
+    let Some(t) = e.template() else {
+        return false;
+    };
+    let a = &pk.analyze;
+    let met_unset = t.met_location() == 0;
+    let level_ok = if met_unset {
+        a.met_level >= e.level_min()
+    } else {
+        a.met_level == e.level_min()
+    };
+    let ivs: [u8; 6] = core::array::from_fn(|i| ((a.iv32 >> (5 * i)) & 0x1F) as u8);
+    let t_ivs = t.ivs();
+    // IndividualValueSet order HP, Atk, Def, Spe, SpA, SpD (same as the PK4 IV32 order).
+    level_ok
+        && (a.sid as u32) << 16 | a.tid as u32 == (t.sid() as u32) << 16 | t.tid() as u32
+        && pk.met_location == e.location()
+        && ivs == t_ivs
+        && a.pid == t.pid()
+        && (a.pid % 25) as u8 == t.nature()
+        && !(evo.form != e.form() && !form_changeable(e.species()))
+        && a.ot_gender == t.ot_gender()
+        && pk.egg_location == 0
+        && !pk
+            .contest
+            .iter()
+            .zip(t.contest())
+            .any(|(&have, need)| have < need)
+}
+
 /// PKHeX `EncounterStatic4.IsCompatible` / `EncounterStatic4Pokewalker.IsCompatible`.
 fn static_compatible(
     e: &Encounter,
@@ -407,6 +452,16 @@ pub fn wild_slots<'a>(
             }
         }
     };
+    // Trades come before captures (TradeStart state), with no partial ratings.
+    for g in trade_groups(pk.analyze.version) {
+        for e in ed.group(g) {
+            if let Some(evo) = evo_of(e.species()) {
+                if trade_match_exact(&e, pk, evo) {
+                    seq.push((e, false));
+                }
+            }
+        }
+    }
     if must_be_slot {
         // Slots, then statics; the enumerator ends without reaching its Fallback state.
         push_slots(&mut seq, &mut partial);
@@ -423,6 +478,31 @@ pub fn wild_slots<'a>(
     let mut direct: Vec<SlotMatch<'a>> = Vec::new();
     let mut queue: Vec<SlotMatch<'a>> = Vec::new();
     for (e, is_partial) in seq {
+        if is_trade(&e) {
+            // Not an IGroundTypeTile: the tile must be 0; not an IRandomCorrelation: no PID-IV.
+            if pk.ground_tile != 0 {
+                defer(Deferral::Tile, e);
+                continue;
+            }
+            if pidiv.kind != PidType::None {
+                defer(Deferral::PidIv, e);
+                continue;
+            }
+            if !ball_compatible(&e, pk) {
+                defer(Deferral::Ball, e);
+                continue;
+            }
+            if pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT {
+                defer(Deferral::Ball, e);
+            } else {
+                direct.push(SlotMatch {
+                    encounter: e,
+                    lead: LeadSeed::default(),
+                    partial: false,
+                });
+            }
+            continue;
+        }
         if e.ground_tile() & (1u32 << pk.ground_tile) == 0 {
             defer(Deferral::Tile, e);
             continue;

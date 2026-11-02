@@ -436,6 +436,7 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
     let mut areas = Vec::new();
     let mut names = Vec::new();
     let mut ranges = Vec::new();
+    let mut trade_names: Vec<Vec<u8>> = Vec::new();
     let mut generation = 0;
     for (name, group) in j.as_object().unwrap() {
         let items = group["items"].as_array().unwrap();
@@ -467,6 +468,7 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
             for t in items {
                 generation = num(t, "Generation", generation);
                 templates.extend(encode_template(t, None));
+                trade_names.push(encode_trade_names(t));
             }
             (start, (templates.len() / TEMPLATE_LEN - start) as u32)
         };
@@ -480,7 +482,30 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
     w.table(table::AREAS, AREA_LEN as u16, areas);
     w.indexed(table::GROUP_NAMES, &names);
     w.table(table::GROUP_RANGES, 8, ranges);
+    w.indexed(table::TRADE_NAMES, &trade_names);
     w.finish()
+}
+
+/// Per language: nickname then OT name, each as a u8 length (UTF-16 units) and UTF-16 LE.
+/// Empty for templates without fixed trade names.
+fn encode_trade_names(t: &Value) -> Vec<u8> {
+    let (Some(nick), Some(ot)) = (t["Nicknames"].as_array(), t["TrainerNames"].as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for i in 0..nick.len().max(ot.len()) {
+        for list in [nick, ot] {
+            let s: Vec<u16> = list
+                .get(i)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .encode_utf16()
+                .collect();
+            out.push(s.len() as u8);
+            out.extend(s.iter().flat_map(|u| u.to_le_bytes()));
+        }
+    }
+    out
 }
 
 /// Gen 4-formatted species names (PKHeX `SpeciesName.GetSpeciesNameGeneration(_, lang, 4)`);

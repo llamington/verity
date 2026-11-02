@@ -98,7 +98,8 @@ and gaps are in `docs/research/p5-plan.md`.
      the PKHeX source by script); Link-trade eggs may hatch anywhere valid in any Gen 4 game;
      Korean language cannot hatch at 63/85.
    - Ball: Poké (FixedBall). Unhatched eggs (`LearnVerifierEgg`, `VerifyUnhatchedEgg`) later.
-0c. **Next — M4 in-game trades (EncounterTrade4PID: 17 of the 52 unchecked in the real Pt/HG
+0c. **Done (except D Ranch gifts) — M4 in-game trades.** Corpus parity 2,300 PK4. Names are in
+   the encounter blob (`table::TRADE_NAMES`, `EncounterData::trade_names`). Original plan (EncounterTrade4PID: 17 of the 52 unchecked in the real Pt/HG
    saves; Ranch gifts on D).** Pokéwalker done (corpus 2,273). Plan:
    - Data: the trade OT/nickname tables are private `ReadOnlyMemory<string>` fields
      (`TrainerNames`, `Nicknames`) on `EncounterTrade4PID`; export them in the oracle's
