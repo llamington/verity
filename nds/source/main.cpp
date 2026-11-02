@@ -57,7 +57,7 @@ void copy16(uint16_t *dst, const uint8_t *src, size_t bytes)
         dst[i] = src[2 * i] | (src[2 * i + 1] << 8);
 }
 
-// A 32x32 rounded badge (original placeholder art: ring + core).
+// A 32x32 rounded badge (original placeholder art: ring + diamond core).
 void draw_badge(uint16_t *gfx)
 {
     static uint8_t buf[32 * 32 / 2];
@@ -67,7 +67,7 @@ void draw_badge(uint16_t *gfx)
         {
             int dx = x - 16, dy = y - 16, d = dx * dx + dy * dy;
             if (d < 15 * 15)
-                put4(buf, 32, x, y, d < 11 * 11 ? (dy < 0 ? 2 : 3) : 1);
+                put4(buf, 32, x, y, abs(dx) + abs(dy) < 9 ? 2 : (d < 12 * 12 ? 3 : 1));
         }
     copy16(gfx, buf, sizeof(buf));
 }
@@ -251,9 +251,9 @@ int main(int argc, char **argv)
     draw_bar(bar);
     for (u16 *pal : {SPRITE_PALETTE, SPRITE_PALETTE_SUB})
     {
-        pal[1] = RGB15(8, 14, 24);
-        pal[2] = RGB15(28, 10, 8);
-        pal[3] = RGB15(30, 30, 30);
+        pal[1] = RGB15(8, 14, 24);   // ring / highlight bar
+        pal[2] = RGB15(31, 24, 6);   // gold core
+        pal[3] = RGB15(4, 20, 18);   // teal field
     }
 
     consoleSelect(&g_top);
