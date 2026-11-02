@@ -54,3 +54,17 @@ omitted). Report upstream.
 PKHeX (default settings) runs its Nintendo Switch word filter, and older console filters by
 lookback, over every nickname including Gen 4 origins, which had no in-game filter. verity does not
 apply word filters yet (regex lists are costly on the DS); it does apply the digit-count rule.
+
+## Game-safe validator bounds (P7)
+
+`safety/` rejects values a legitimately obtained Pokémon cannot carry, not only values known to
+crash: met/egg locations outside PKHeX's Gen 4/5 location tables (Gen 4 D/P/Pt field 0x80/0x7E
+≤ 111 or 2000–2014 / 3000–3076; the Pt/HG/SS fields ≤ 234 or those ranges; Gen 5 ≤ 153,
+30001–30015, 40001–40109, 60001–60003, plus Gen 4 egg locations on Gen 4 origins), DP/Pt ball
+byte 1–16 and HG/SS ball byte ≤ 24, PP above the move's max. What each game actually tolerates past
+these bounds needs the emulator harness (Phase H); widen only with evidence.
+
+Party stats: the games recompute stats only on level-up or a box round trip, so a real save can
+hold stale party stats (seen in `pkhex-everywhere/savedata_4hgss.dsv`). `check_pkm` accepts stale
+stats (it requires the level byte to match EXP, non-zero stats and HP ≤ max HP); verity's own party
+writes must have exactly computed stats (`party_stats_exact`).
