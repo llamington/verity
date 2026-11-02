@@ -39,8 +39,10 @@ public static class Program
                 "export-text4" => HandleExportText4(args),
                 "export-data" => HandleExportData(args),
                 "export-encounters" => HandleExportEncounters(args),
+                "export-gifts4" => HandleExportGifts4(args),
                 "check-wild4" => HandleCheckWild4(args),
                 "gen-wild4" => HandleGenWild4(args),
+                "gen-gift4" => HandleGenGift4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -298,6 +300,7 @@ public static class Program
                     valid = la.Valid,
                     report = la.Report(),
                     enc_kind = la.EncounterMatch.GetType().Name,
+                    enc_index = la.EncounterMatch is PCD pcdm ? Array.IndexOf(EncounterEvent.MGDB_G4, pcdm) : -1,
                     move_valid = la.Info.Moves.Select(m => m.Valid).ToArray(),
                     evo_gen4 = pkm.Format == 4 && pkm.Generation == 4
                         ? la.Info.EvoChainsAllGens.Gen4.Select(e => new[] { (int)e.Species, e.Form, e.LevelMin, e.LevelMax, e.LevelUpRequired, (int)e.Method }).ToArray()
@@ -965,6 +968,88 @@ public static class Program
             made++;
         }
         Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
+        return 0;
+    }
+
+    /// M6: `gen-gift4 <count> <seed> <out-dir>`: PKHeX-generated legal Gen 4 gift PK4s (random
+    /// Wonder Cards from `MGDB_G4`, plus Ranger Manaphy eggs) via `ConvertToPKM`.
+    private static int HandleGenGift4(string[] args)
+    {
+        int count = int.Parse(args[1]);
+        var rng = new Random(int.Parse(args[2]));
+        Directory.CreateDirectory(args[3]);
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var ranger = (PGT)typeof(EncounterGenerator4).GetField("RangerManaphy", all)!.GetValue(null)!;
+        var gifts = EncounterEvent.MGDB_G4.Where(g => g.IsEntity).ToArray();
+        GameVersion[] versions = [GameVersion.D, GameVersion.P, GameVersion.Pt, GameVersion.HG, GameVersion.SS];
+        int made = 0, tried = 0;
+        while (made < count && tried < count * 20)
+        {
+            tried++;
+            var tr = Sav(versions[rng.Next(versions.Length)]);
+            tr.TID16 = (ushort)rng.Next(65536);
+            tr.SID16 = (ushort)rng.Next(65536);
+            PK4 pk;
+            try
+            {
+                pk = (PK4)(rng.Next(8) == 0 ? ranger.ConvertToPKM(tr) : gifts[rng.Next(gifts.Length)].ConvertToPKM(tr));
+            }
+            catch { continue; }
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            File.WriteAllBytes(Path.Combine(args[3], $"{made:D6}.pk4"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
+        return 0;
+    }
+
+    /// M6: PKHeX's Gen 4 event database (`EncounterEvent.MGDB_G4`, wc4.pkl) as raw PCD records
+    /// with the inner PK4 decrypted, plus parsed fields for cross-checking.
+    private static int HandleExportGifts4(string[] args)
+    {
+        var outPath = args.Length > 1 ? args[1] : "data/exports/gifts4.json";
+        var list = new System.Collections.Generic.List<object>();
+        var db = EncounterEvent.MGDB_G4;
+        for (int i = 0; i < db.Length; i++)
+        {
+            var pcd = db[i];
+            var raw = pcd.Data.ToArray();
+            var g = pcd.Gift;
+            if (g.IsEntity && !g.IsManaphyEgg)
+                g.PK.Data.CopyTo(raw.AsSpan(8));
+            Span<int> ivs = stackalloc int[6];
+            pcd.GetIVs(ivs);
+            list.Add(new
+            {
+                index = i,
+                card_id = pcd.CardID,
+                gift_type = (int)pcd.GiftType,
+                entity = pcd.IsEntity,
+                raw = Convert.ToHexString(raw),
+                species = pcd.Species,
+                form = pcd.Form,
+                level = pcd.Level,
+                ball = pcd.Ball,
+                is_egg = pcd.IsEgg,
+                version = (int)pcd.Version,
+                shiny = pcd.Shiny.ToString(),
+                fateful = pcd.FatefulEncounter,
+                location = pcd.Location,
+                egg_location = pcd.EggLocation,
+                fixed_ivs = pcd.HasFixedIVs,
+                ivs = ivs.ToArray(),
+                random_pid = pcd.IsEntity && pcd.IsRandomPID(),
+                moves = new[] { pcd.Moves.Move1, pcd.Moves.Move2, pcd.Moves.Move3, pcd.Moves.Move4 },
+                tid = pcd.TID16,
+                sid = pcd.SID16,
+                ot = pcd.OriginalTrainerName,
+                title = pcd.CardTitle,
+                compat = pcd.CardCompatibility,
+            });
+        }
+        File.WriteAllText(outPath, JsonSerializer.Serialize(list));
+        Console.WriteLine($"{db.Length} gifts -> {outPath}");
         return 0;
     }
 

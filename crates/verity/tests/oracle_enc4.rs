@@ -94,7 +94,7 @@ fn dppt_wild_slot_match_equals_pkhex() {
                 11 => b"SlotsP",
                 _ => b"SlotsPt",
             };
-            let m = wild_slots(&mp, &chain, pidiv, &ed, group, ratio);
+            let m = wild_slots(&mp, &chain, pidiv, &ed, group, ratio, None);
             let n = |k: &str| s[k].as_i64().unwrap();
             let same = |x: &verity::data::encounters::Encounter| {
                 x.location() as i64 == n("enc_location")
@@ -106,14 +106,20 @@ fn dppt_wild_slot_match_equals_pkhex() {
                     && x.area_rate() as i64 == n("enc_rate")
             };
             if n("lead") == 0 {
-                if !m.fallback.as_ref().is_some_and(|(x, _)| same(x)) || !m.candidates.is_empty() {
+                if !m
+                    .fallback
+                    .as_ref()
+                    .and_then(|(x, _)| x.data())
+                    .is_some_and(same)
+                    || !m.candidates.is_empty()
+                {
                     bad.push(format!("{stem}/{sname}: fallback mismatch"));
                 }
                 checked += 1;
                 continue;
             }
             let pos = m.candidates.iter().position(|c| {
-                same(&c.encounter)
+                c.encounter.data().is_some_and(same)
                     && c.lead.lead as i64 == n("lead")
                     && c.lead.seed as i64 == n("lead_seed")
             });

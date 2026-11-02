@@ -66,20 +66,35 @@ and gaps are in `docs/research/p5-plan.md`.
   mismatch in 10,000: a mutated Dragon's Den Dratini where PKHeX falls back to the static gift
   (statics are not modelled yet).
 
+- M6 (legality, first part): Gen 4 Mystery Gifts. The oracle exports PKHeX's `MGDB_G4`
+  (`export-gifts4`, 590 cards; the 247 Pokémon cards go into `gifts4.bin`, ~210 KB, loaded from
+  NitroFS). `gift/pcd.rs` parses PCD/PGT; `legality/gift4.rs` ports `PCD.IsMatchExact` (template
+  level from EXP, not the stat byte), the version-partial rule (cards store version D or HG, so a
+  gift on another game is a PartialMatch flagged Encounter, as in PKHeX), `PGT.IsCompatible`,
+  `IsRangerManaphy`/`IsG4ManaphyPIDValid` and the Event states (events first for fateful mons;
+  once any card matches nothing else is tried; a partial joins the enumerator's deferral).
+  `enc4::Enc4` is the candidate type (blob template, gift, Ranger Manaphy); `Matched::Gift` /
+  `Matched::RangerManaphy`. Gift verifiers: met/current level, PCD ability, fateful,
+  receivability, Shiny rule + fixed PID, fixed IVs, fixed ball, no player-OT check, nicknamed
+  gift, event ribbons (Event3/Event4 for every encounter). Also new for all encounters: OT
+  length (6 JPN/KOR, 12 else) and `char.IsNumber` digit counting. Parity: corpus 2,922 PK4
+  incl. 61 PCD + 550 Ranger Manaphy (same MGDB index asserted); fuzz `p5_parity_fuzz_gifts`
+  600 (oracle `gen-gift4`, mutations incl. event ribbons/version), ignored 1e4 run 9,999/9,999.
+
 ## Next steps
 
 M4 status (2026-11-02): Gen 4 legality covers wild slots (D/P/Pt Method J, HG/SS Method K),
 statics, Pokéwalker, in-game trades, bred eggs and gift eggs (hatched). Corpus parity 2,318 PK4
-(`p5_parity_corpus`); real saves: Pt 519/525, HG 525/531 verdicts, all matching PKHeX (the rest
-are Mystery Gift PGT/PCD plus one PKHeX-invalid). Remaining M4: unhatched eggs, D Ranch gifts,
+(`p5_parity_corpus`, 2,922 since M6 gifts); real saves `gen4_*`: every PK4 has a verdict
+matching PKHeX (D 531, Pt 531, HG 537). Still out of scope in the corpus: Gen 3 origins (Pal
+Park, ~99 in the JP HG save) and D Ranch trades (6). Remaining M4: unhatched eggs, D Ranch gifts,
 Pal Park (Gen 3 origins), egg generation. HG/SS generation is done: the generator dispatches
 Method J/K by `Request::version`; P6 acceptance 10,562 PKHeX-legal across D/P/Pt/HG/SS; the DS
 wizard offers HeartGold slots on HG/SS saves (verified end to end with `ui-add-hgss.json` +
 PKHeX). Perf note: Ruins of Alph Unown legality takes ~107 ms on DS (the form recursion);
 optimise before P9 acceptance (budget 50 ms).
-Then M6 mystery gifts (PGT/PCD: 626 in corpus) and M5 Gen 5.
 
-**M6 starting point:** PKHeX's Gen 4 event DB is `Resources/legality/mgdb/wc4.pkl` (590 PCD
+**M6 starting point (legality done, see Done):** PKHeX's Gen 4 event DB is `Resources/legality/mgdb/wc4.pkl` (590 PCD
 records of 0x358 bytes, `EncounterEvent.MGDB_G4`); legality matching lives in
 `MysteryGifts/PGT.cs` (`IsMatchExact`, PID types/shiny locks, egg gifts) and `PCD.cs`, and the
 enumerator checks events first for fateful Pokémon (`EncounterEnumerator4` Event/EventLocal,
@@ -93,10 +108,15 @@ editor (Main/Stats/Moves, Legal/Game-safe mode), add-Pokémon wizard (D/P/Pt/HG 
 shiny/level/gender/lead/ball). Details: `docs/research/ui-stack.md`, `emu-harness.md`.
 
 Order from here:
-1. **M6 mystery gifts** (see the M6 starting point above), then P8 injection.
-2. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
+1. **Gen 4 ribbon verifier** (PKHeX `RibbonVerifierCommon3/Unique3/Common4/Unique4` +
+   `RibbonRules`): only the event ribbons are checked so far; PKHeX also rejects e.g. Record and
+   unearned Gorgeous Royal. Then widen the fuzz `ribbon` mutation to all ribbon bytes.
+2. **M6 P8 injection**: R3 region research, R4 unlock flags, pending-gift slots, duplicate
+   prevention, harness collection test; generation of gift Pokémon (`ConvertToPKM` port:
+   random-PID gifts, Ranger Manaphy egg) for the wizard.
+3. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
    of Alph Unown legality perf (107 ms on DS, budget 50).
-3. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
+4. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
-4. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
+5. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.

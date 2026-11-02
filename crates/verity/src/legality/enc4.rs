@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 
 use super::evo::EvoCriteria;
 use crate::data::encounters::{Encounter, EncounterData};
+use crate::gift::pcd::Gift4;
 use crate::rng::finder::{AnalyzeInput, PidIv, PidType};
 use crate::rng::method_j::{self, LeadSeed, Slot4, SlotType4};
 
@@ -46,9 +47,27 @@ pub enum Rating {
     PartialMatch,
 }
 
+/// A Gen 4 encounter candidate: a blob template (slot, static, trade, Pokéwalker), a Wonder
+/// Card, or the Ranger Manaphy egg (PKHeX `EncounterGenerator4.RangerManaphy`).
+#[derive(Clone, Copy)]
+pub enum Enc4<'a> {
+    Data(Encounter<'a>),
+    Gift(Gift4<'a>),
+    Ranger,
+}
+
+impl<'a> Enc4<'a> {
+    pub fn data(&self) -> Option<&Encounter<'a>> {
+        match self {
+            Enc4::Data(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SlotMatch<'a> {
-    pub encounter: Encounter<'a>,
+    pub encounter: Enc4<'a>,
     pub lead: LeadSeed,
     /// Only a partial match (PKHeX `EncounterMatchRating` worse than `Match`).
     pub partial: bool,
@@ -183,7 +202,58 @@ pub struct WildMatches<'a> {
     /// Valid candidates in PKHeX yield order (lead quality, then data order).
     pub candidates: Vec<SlotMatch<'a>>,
     /// Yielded as a last resort when there are no candidates.
-    pub fallback: Option<(Encounter<'a>, Deferral)>,
+    pub fallback: Option<(Enc4<'a>, Deferral)>,
+}
+
+/// `EncounterGenerator4.GetEncounters` filters for a non-slot that is not an
+/// `IGroundTypeTile` (tile must be 0), then PID-IV type, then ball. Returns the deferral, or
+/// `None` when the encounter is yielded.
+fn gift_filter(ball: u8, compatible: bool, pk: &MatchPkm) -> Option<Deferral> {
+    if pk.ground_tile != 0 {
+        return Some(Deferral::Tile);
+    }
+    if !compatible {
+        return Some(Deferral::PidIv);
+    }
+    let ball_ok = match ball {
+        BALL_SAFARI if pk.ball == BALL_SAFARI => true,
+        BALL_SPORT if pk.ball == BALL_SPORT => true,
+        _ => pk.ball != BALL_SAFARI && pk.ball != BALL_SPORT,
+    };
+    if !ball_ok || pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT {
+        return Some(Deferral::Ball);
+    }
+    None
+}
+
+/// Event encounters (Wonder Cards or the Ranger Manaphy) that the enumerator yielded, run
+/// through the generator filters. `list` holds each candidate with its ball and whether its
+/// PID type is compatible (`IRandomCorrelation.IsCompatible`).
+pub fn event_matches<'a>(pk: &MatchPkm, list: &[(Enc4<'a>, u8, bool)]) -> WildMatches<'a> {
+    let mut fallback: Option<(Enc4<'a>, Deferral)> = None;
+    let mut candidates = Vec::new();
+    for &(e, ball, compatible) in list {
+        match gift_filter(ball, compatible, pk) {
+            None => candidates.push(SlotMatch {
+                encounter: e,
+                lead: LeadSeed::default(),
+                partial: false,
+            }),
+            Some(d) => {
+                if fallback.is_none_or(|(_, cur)| d < cur) {
+                    fallback = Some((e, d));
+                }
+            }
+        }
+    }
+    WildMatches {
+        fallback: if candidates.is_empty() {
+            fallback
+        } else {
+            None
+        },
+        candidates,
+    }
 }
 
 /// PKHeX `EncounterEnumerator4` static groups per origin version (Pokéwalker not modelled yet).
@@ -217,7 +287,7 @@ fn roamer_location_ok(location: u16, met: u16, tile: u8) -> bool {
 }
 
 /// PKHeX `FormInfo.IsFormChangeable` (Gen 4 species).
-fn form_changeable(species: u16) -> bool {
+pub(crate) fn form_changeable(species: u16) -> bool {
     matches!(species, 412 | 479 | 386 | 483 | 484 | 487 | 492 | 493)
 }
 
@@ -382,9 +452,10 @@ pub fn wild_slots<'a>(
     ed: &EncounterData<'a>,
     group: &[u8],
     ratio: impl Fn(u16) -> u8,
+    event_partial: Option<Gift4<'a>>,
 ) -> WildMatches<'a> {
-    let mut fallback: Option<(Encounter<'a>, Deferral)> = None;
-    let mut defer = |d: Deferral, e: Encounter<'a>| {
+    let mut fallback: Option<(Enc4<'a>, Deferral)> = None;
+    let mut defer = |d: Deferral, e: Enc4<'a>| {
         if fallback.is_none_or(|(_, cur)| d < cur) {
             fallback = Some((e, d));
         }
@@ -404,16 +475,16 @@ pub fn wild_slots<'a>(
 
     // EncounterEnumerator4: (encounter, partial) in yield order; the first partial match is
     // deferred to the end (shared across statics and slots).
-    let mut seq: Vec<(Encounter<'a>, bool)> = Vec::new();
-    // The enumerator's Deferred: the best (lowest) non-Match rating, first on ties.
-    let mut partial: Option<(Encounter<'a>, u8)> = None;
-    fn keep<'b>(partial: &mut Option<(Encounter<'b>, u8)>, e: Encounter<'b>, r: u8) {
+    let mut seq: Vec<(Enc4<'a>, bool)> = Vec::new();
+    // The enumerator's Deferred: the best (lowest) non-Match rating, first on ties. A gift
+    // that only partially matched (Event state, PartialMatch) comes first.
+    let mut partial: Option<(Enc4<'a>, u8)> = event_partial.map(|g| (Enc4::Gift(g), 2));
+    fn keep<'b>(partial: &mut Option<(Enc4<'b>, u8)>, e: Enc4<'b>, r: u8) {
         if partial.is_none_or(|(_, cur)| r < cur) {
             *partial = Some((e, r));
         }
     }
-    let push_statics = |seq: &mut Vec<(Encounter<'a>, bool)>,
-                        partial: &mut Option<(Encounter<'a>, u8)>| {
+    let push_statics = |seq: &mut Vec<(Enc4<'a>, bool)>, partial: &mut Option<(Enc4<'a>, u8)>| {
         for g in static_groups(pk.analyze.version) {
             for e in ed.group(g) {
                 let Some(evo) = evo_of(e.species()) else {
@@ -428,14 +499,13 @@ pub fn wild_slots<'a>(
                     continue;
                 }
                 match static_rating(&e, pk) {
-                    0 => seq.push((e, false)),
-                    r => keep(partial, e, r),
+                    0 => seq.push((Enc4::Data(e), false)),
+                    r => keep(partial, Enc4::Data(e), r),
                 }
             }
         }
     };
-    let push_slots = |seq: &mut Vec<(Encounter<'a>, bool)>,
-                      partial: &mut Option<(Encounter<'a>, u8)>| {
+    let push_slots = |seq: &mut Vec<(Enc4<'a>, bool)>, partial: &mut Option<(Enc4<'a>, u8)>| {
         for e in ed.group(group) {
             if e.location() != pk.met_location {
                 continue;
@@ -447,9 +517,9 @@ pub fn wild_slots<'a>(
                 continue;
             }
             if rating(&e, pk) == Rating::Match {
-                seq.push((e, false));
+                seq.push((Enc4::Data(e), false));
             } else {
-                keep(partial, e, 2);
+                keep(partial, Enc4::Data(e), 2);
             }
         }
     };
@@ -461,7 +531,7 @@ pub fn wild_slots<'a>(
         for e in ed.group(g) {
             if let Some(evo) = evo_of(e.species()) {
                 if trade_match_exact(&e, pk, evo) {
-                    seq.push((e, false));
+                    seq.push((Enc4::Data(e), false));
                 }
             }
         }
@@ -486,26 +556,43 @@ pub fn wild_slots<'a>(
     // EncounterGenerator4.GetEncounters: non-slots yield as they pass; slots queue by lead.
     let mut direct: Vec<SlotMatch<'a>> = Vec::new();
     let mut queue: Vec<SlotMatch<'a>> = Vec::new();
-    for (e, is_partial) in seq {
+    for (enc, is_partial) in seq {
+        let e = match enc {
+            Enc4::Data(e) => e,
+            Enc4::Gift(g) => {
+                let t = g.pk();
+                let ok = crate::legality::gift4::pcd_compatible(&t, pidiv.kind);
+                match gift_filter(t.ball(), ok, pk) {
+                    Some(d) => defer(d, enc),
+                    None => direct.push(SlotMatch {
+                        encounter: enc,
+                        lead: LeadSeed::default(),
+                        partial: is_partial,
+                    }),
+                }
+                continue;
+            }
+            Enc4::Ranger => continue,
+        };
         if is_trade(&e) {
             // Not an IGroundTypeTile: the tile must be 0; not an IRandomCorrelation: no PID-IV.
             if pk.ground_tile != 0 {
-                defer(Deferral::Tile, e);
+                defer(Deferral::Tile, Enc4::Data(e));
                 continue;
             }
             if pidiv.kind != PidType::None {
-                defer(Deferral::PidIv, e);
+                defer(Deferral::PidIv, Enc4::Data(e));
                 continue;
             }
             if !ball_compatible(&e, pk) {
-                defer(Deferral::Ball, e);
+                defer(Deferral::Ball, Enc4::Data(e));
                 continue;
             }
             if pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT {
-                defer(Deferral::Ball, e);
+                defer(Deferral::Ball, Enc4::Data(e));
             } else {
                 direct.push(SlotMatch {
-                    encounter: e,
+                    encounter: Enc4::Data(e),
                     lead: LeadSeed::default(),
                     partial: false,
                 });
@@ -513,7 +600,7 @@ pub fn wild_slots<'a>(
             continue;
         }
         if e.ground_tile() & (1u32 << pk.ground_tile) == 0 {
-            defer(Deferral::Tile, e);
+            defer(Deferral::Tile, Enc4::Data(e));
             continue;
         }
         let compatible = if e.is_slot() {
@@ -522,19 +609,19 @@ pub fn wild_slots<'a>(
             static_compatible(&e, pk, pidiv.kind, &ratio)
         };
         if !compatible {
-            defer(Deferral::PidIv, e);
+            defer(Deferral::PidIv, Enc4::Data(e));
             continue;
         }
         if !ball_compatible(&e, pk) {
-            defer(Deferral::Ball, e);
+            defer(Deferral::Ball, Enc4::Data(e));
             continue;
         }
         if !e.is_slot() {
             if pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT {
-                defer(Deferral::Ball, e);
+                defer(Deferral::Ball, Enc4::Data(e));
             } else {
                 direct.push(SlotMatch {
-                    encounter: e,
+                    encounter: Enc4::Data(e),
                     lead: LeadSeed {
                         seed: pidiv.seed,
                         lead: method_j::LeadRequired::None,
@@ -554,11 +641,11 @@ pub fn wild_slots<'a>(
             method_j::lead_info4_dppt(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio)
         };
         if !lead.is_valid() {
-            defer(Deferral::SlotNumber, e);
+            defer(Deferral::SlotNumber, Enc4::Data(e));
             continue;
         }
         let item = SlotMatch {
-            encounter: e,
+            encounter: Enc4::Data(e),
             lead,
             partial: is_partial,
         };

@@ -530,6 +530,31 @@ pub fn build_names4(j: &Value) -> Vec<u8> {
     w.finish()
 }
 
+/// M6: the Gen 4 event database (`gifts4.json`, PKHeX `MGDB_G4`) as table 1 of fixed-size
+/// records: u16 MGDB index, u16 reserved, then the 0x358-byte PCD with its PK4 decrypted.
+/// Only Pokémon gifts are kept (items and other card types cannot match an entity).
+pub fn build_gifts4(j: &Value) -> Vec<u8> {
+    const REC: usize = 4 + 0x358;
+    let mut w = BlobWriter::new(4, BlobKind::Gifts);
+    let mut out = Vec::new();
+    for g in j.as_array().unwrap() {
+        if !g["entity"].as_bool().unwrap() {
+            continue;
+        }
+        let hex = g["raw"].as_str().unwrap();
+        let raw: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        assert_eq!(raw.len(), 0x358);
+        out.extend((g["index"].as_u64().unwrap() as u16).to_le_bytes());
+        out.extend(0u16.to_le_bytes());
+        out.extend(raw);
+    }
+    w.table(1, REC as u16, out);
+    w.finish()
+}
+
 /// Builds every blob from `exports` into `out`; returns (name, size) pairs.
 pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     fs::create_dir_all(out).unwrap();
@@ -567,6 +592,10 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     put(
         "names4.bin".into(),
         build_names4(&load(&exports.join("names4.json"))),
+    );
+    put(
+        "gifts4.bin".into(),
+        build_gifts4(&load(&exports.join("gifts4.json"))),
     );
     for l in LANGS {
         put(

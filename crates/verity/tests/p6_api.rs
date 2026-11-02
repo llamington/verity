@@ -69,6 +69,7 @@ fn context() -> &'static Context4<'static> {
         enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: Strings::load(load("names4.bin")).unwrap(),
+        gifts: verity::gift::pcd::Gifts4::load(load("gifts4.bin")).unwrap(),
     }))
 }
 

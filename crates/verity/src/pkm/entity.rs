@@ -247,6 +247,17 @@ impl Pkm {
         self.iv32() & 0x8000_0000 != 0
     }
 
+    /// PK4 event ribbons (PKHeX `IRibbonSetEvent3` + `IRibbonSetEvent4`), masked from bytes
+    /// 0x26 (Event, Champion World, Birthday, Special), 0x27 (Souvenir, Wishing, Classic,
+    /// Premier) and 0x3F (Champion Battle/Regional/National, Country, National, Earth, World).
+    pub fn event_ribbons4(&self) -> [u8; 3] {
+        [
+            self.u8(0x26) & 0xE8,
+            self.u8(0x27) & 0x0F,
+            self.u8(0x3F) & 0xFE,
+        ]
+    }
+
     pub fn fateful(&self) -> bool {
         self.u8(0x40) & 1 != 0
     }
