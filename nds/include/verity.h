@@ -166,6 +166,9 @@ typedef struct verity_save_check_result {
 } verity_save_check_result;
 verity_err verity_save_check(uint8_t *buf, size_t len, verity_save_check_result *out);
 
+/** Met/egg location name (generation 4 or 5); returns its length (0 if unknown). */
+size_t verity_location_name(uint8_t generation, uint16_t id, uint16_t *out, size_t cap);
+
 /** A name from the attached strings blob; returns its length (0 if unknown). */
 size_t verity_name(uint32_t category, uint32_t id, uint16_t *out, size_t cap);
 

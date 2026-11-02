@@ -165,6 +165,19 @@ const char* name(uint32_t category, uint32_t id)
     return out;
 }
 
+const char* location(uint8_t generation, uint16_t id)
+{
+    static char buf[2][32];
+    static int k = 0;
+    char* out = buf[k++ & 1];
+    uint16_t w[32];
+    if (verity_location_name(generation, id, w, 32) == 0)
+        snprintf(out, 32, "Loc %u", id);
+    else
+        utf16_to_ascii(w, out, 32);
+    return out;
+}
+
 // ---- sprites -------------------------------------------------------------------------------
 
 namespace {

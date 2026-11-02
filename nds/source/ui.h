@@ -57,6 +57,8 @@ void at(PrintConsole* c, int col, int row, const char* fmt, ...) __attribute__((
 void utf16_to_ascii(const uint16_t* s, char* out, int cap);
 // A name from the strings blob as ASCII ("?" when unknown).
 const char* name(uint32_t category, uint32_t id);
+// A location name as ASCII ("Loc <id>" when unknown).
+const char* location(uint8_t generation, uint16_t id);
 
 // ---- sprites -------------------------------------------------------------------------------
 

@@ -466,7 +466,8 @@ private:
         at(top(), 0, 14, "EVs %4u%4u%4u%4u%4u%4u", v.evs[0], v.evs[1], v.evs[2], v.evs[3],
            v.evs[4], v.evs[5]);
         at(top(), 0, 16, "OT %s  %05u/%05u", ot, v.tid, v.sid);
-        at(top(), 0, 17, "Met Lv %u  loc %u  ball %u", v.met_level, v.met_location, v.ball);
+        at(top(), 0, 17, "Met %.20s Lv %u", ui::location(core::doc().info.generation, v.met_location),
+           v.met_level);
         at(top(), 0, 18, "PID %08lX", (unsigned long)v.pid);
         if (!v.checksum_ok)
             at(top(), 0, 19, "! checksum mismatch");
@@ -701,7 +702,6 @@ private:
         else if (step_ == 1)
         {
             at(top(), 0, 3, "2. Encounter: %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
-            at(top(), 0, 5, "Locations are IDs for now.");
             draw_list();
         }
         else
@@ -737,12 +737,13 @@ private:
                 else if (i < enc_count_)
                 {
                     const auto& e = enc_[i];
+                    char lv[8];
                     if (e.level_min == e.level_max)
-                        at(bottom(), 0, 2 + r, " Loc %3u %-9s Lv %u", e.location, slot_type(e.slot_type),
-                           e.level_min);
+                        snprintf(lv, sizeof(lv), "%u", e.level_min);
                     else
-                        at(bottom(), 0, 2 + r, " Loc %3u %-9s Lv %u-%u", e.location,
-                           slot_type(e.slot_type), e.level_min, e.level_max);
+                        snprintf(lv, sizeof(lv), "%u-%u", e.level_min, e.level_max);
+                    at(bottom(), 0, 2 + r, " %-15.15s %-8.8s %s", ui::location(4, e.location),
+                       slot_type(e.slot_type), lv);
                 }
                 else
                     at(bottom(), 0, 2 + r, "%s", "");

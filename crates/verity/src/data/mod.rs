@@ -49,6 +49,15 @@ pub mod string_table {
     pub const TYPES: u16 = 5;
     pub const ITEMS4: u16 = 6;
     pub const ITEMS5: u16 = 7;
+    /// Met location names (PKHeX `GameStrings.Gen4.Met0/Met2/Met3`, `Gen5.Met0/3/4/6`), one
+    /// category per bank; see [`super::Strings::location`].
+    pub const LOC4_0: u16 = 8;
+    pub const LOC4_2000: u16 = 9;
+    pub const LOC4_3000: u16 = 10;
+    pub const LOC5_0: u16 = 11;
+    pub const LOC5_30000: u16 = 12;
+    pub const LOC5_40000: u16 = 13;
+    pub const LOC5_60000: u16 = 14;
 }
 
 /// A species/form entry (PKHeX `PersonalInfo4` / `PersonalInfo5BW` / `PersonalInfo5B2W2`).
@@ -333,5 +342,26 @@ impl<'a> Strings<'a> {
 
     pub fn get(&self, category: u16, id: usize) -> U16s<'a> {
         U16s(Indexed(self.blob.bytes(category)).get(id))
+    }
+
+    /// Met/egg location name for a Gen 4 or 5 location ID (empty if unknown). Mirrors PKHeX
+    /// `GameStrings.GetLocationName` bank selection.
+    pub fn location(&self, generation: u8, id: u16) -> U16s<'a> {
+        use string_table as st;
+        let (cat, base) = match (generation, id) {
+            (4, 0..=1999) => (st::LOC4_0, 0),
+            (4, 2000..=2999) => (st::LOC4_2000, 2000),
+            (4, 3000..=3999) => (st::LOC4_3000, 3000),
+            (5, 0..=29999) => (st::LOC5_0, 0),
+            (5, 30000..=39999) => (st::LOC5_30000, 30000),
+            (5, 40000..=59999) => (st::LOC5_40000, 40000),
+            (5, 60000..) => (st::LOC5_60000, 60000),
+            _ => return U16s(&[]),
+        };
+        let i = (id - base) as usize;
+        if i >= self.count(cat) {
+            return U16s(&[]);
+        }
+        self.get(cat, i)
     }
 }

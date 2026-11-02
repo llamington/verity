@@ -327,6 +327,39 @@ pub unsafe extern "C" fn verity_name(category: u32, id: u32, out: *mut u16, cap:
     n
 }
 
+/// C ABI: a met/egg location name (Gen 4 or 5) from the attached strings blob, UTF-16 and
+/// 0-terminated in `out` (`cap` units). Returns the length (0 if unknown).
+///
+/// # Safety
+///
+/// `out` must point to `cap` writable `u16`s.
+#[no_mangle]
+pub unsafe extern "C" fn verity_location_name(
+    generation: u8,
+    id: u16,
+    out: *mut u16,
+    cap: usize,
+) -> usize {
+    if out.is_null() || cap == 0 {
+        return 0;
+    }
+    let out = slice::from_raw_parts_mut(out, cap);
+    out[0] = 0;
+    let Some(strings) = blob(BlobKind::Strings).and_then(|b| Strings::load(b).ok()) else {
+        return 0;
+    };
+    let mut n = 0;
+    for c in strings.location(generation, id).iter() {
+        if n + 1 >= cap {
+            break;
+        }
+        out[n] = c;
+        n += 1;
+    }
+    out[n] = 0;
+    n
+}
+
 /// Legality verdict for one slot (`verity_legality_report`).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -541,6 +574,15 @@ mod tests {
             let mut sp = [0u16; 16];
             assert!(verity_name(NAME_SPECIES, v.species as u32, sp.as_mut_ptr(), 16) > 0);
             assert_eq!(verity_name(NAME_SPECIES, 60000, sp.as_mut_ptr(), 16), 0);
+            let mut loc = [0u16; 24];
+            let loc_len = verity_location_name(4, 53, loc.as_mut_ptr(), 24);
+            assert_eq!(
+                std::string::String::from_utf16_lossy(&loc[..loc_len]),
+                "Solaceon Ruins"
+            );
+            assert!(verity_location_name(4, 3002, loc.as_mut_ptr(), 24) > 0);
+            assert!(verity_location_name(5, 30001, loc.as_mut_ptr(), 24) > 0);
+            assert_eq!(verity_location_name(4, 999, loc.as_mut_ptr(), 24), 0);
             // Beyond the party count: empty.
             let past = VerityLoc {
                 box_index: 0xFF,

@@ -748,6 +748,13 @@ public static class Program
                 types = gs.types.Take(17),
                 items4 = gs.GetItemStrings(EntityContext.Gen4, GameVersion.HGSS).Take(Sav(GameVersion.HG).MaxItemID + 1),
                 items5 = gs.GetItemStrings(EntityContext.Gen5, GameVersion.B2W2).Take(Sav(GameVersion.B2).MaxItemID + 1),
+                loc4_0 = gs.Gen4.Met0.ToArray(),
+                loc4_2000 = gs.Gen4.Met2.ToArray(),
+                loc4_3000 = gs.Gen4.Met3.ToArray(),
+                loc5_0 = gs.Gen5.Met0.ToArray(),
+                loc5_30000 = gs.Gen5.Met3.ToArray(),
+                loc5_40000 = gs.Gen5.Met4.ToArray(),
+                loc5_60000 = gs.Gen5.Met6.ToArray(),
             }));
         }
         var names4 = new System.Collections.Generic.Dictionary<string, string[]>();
