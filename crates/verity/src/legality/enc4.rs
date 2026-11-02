@@ -115,7 +115,7 @@ pub fn munchlax_trees(tid: u16, sid: u16) -> [u8; 4] {
     r
 }
 
-fn is_munchlax_tree(tid: u16, sid: u16, location: u16) -> bool {
+pub fn is_munchlax_tree(tid: u16, sid: u16, location: u16) -> bool {
     munchlax_trees(tid, sid)
         .iter()
         .any(|&t| HONEY_TREE_LOCATIONS[t as usize] == location)

@@ -35,6 +35,8 @@ pub struct Request {
     pub shiny: bool,
     pub lead: Lead,
     pub hidden_power_type: Option<u8>,
+    /// Met location (needed for honey-tree Munchlax).
+    pub location: u16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,6 +59,8 @@ pub enum GenError {
     CuteCharmNeedsGenderedSpecies,
     UnownFormUnsupported,
     RadarNotAllowedHere,
+    /// Munchlax only appears in the four honey trees chosen by the trainer's ID.
+    MunchlaxTreeUnavailable,
     BudgetExhausted,
 }
 
@@ -225,6 +229,12 @@ pub fn generate(
     if req.species == 201 {
         return Err(GenError::UnownFormUnsupported);
     }
+    if req.species == 446
+        && req.slot.slot_type == method_j::SlotType4::HoneyTree
+        && !munchlax_ok(req)
+    {
+        return Err(GenError::MunchlaxTreeUnavailable);
+    }
     let bounds = level_bounds(req)?;
     let nature = effective_nature(req)?;
     if let Lead::CuteCharm { gender } = req.lead {
@@ -259,6 +269,18 @@ pub fn generate(
         }
     }
     Err(GenError::BudgetExhausted)
+}
+
+fn munchlax_ok(req: &Request) -> bool {
+    #[cfg(feature = "alloc")]
+    {
+        crate::legality::enc4::is_munchlax_tree(req.tid, req.sid, req.location)
+    }
+    #[cfg(not(feature = "alloc"))]
+    {
+        let _ = req;
+        false
+    }
 }
 
 fn gender_fixed(ratio: u8) -> u8 {
