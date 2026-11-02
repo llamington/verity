@@ -30,3 +30,7 @@ pkds.local.toml
 *.swp
 *~
 .DS_Store
+
+# melonDS DLDI SD folder and image (copies of saves)
+/sd/
+/sd.img
