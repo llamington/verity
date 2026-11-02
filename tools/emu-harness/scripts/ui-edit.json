@@ -5,6 +5,7 @@
   "sd_image": "../../../build/emu/sd.img",
   "steps": [
     {"wait": 90},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
     {"press": ["Down"], "frames": 2}, {"press": ["Down"], "frames": 2},
     {"press": ["Down"], "frames": 2}, {"press": ["Down"], "frames": 2},
     {"screenshot": "00-picker.png"},

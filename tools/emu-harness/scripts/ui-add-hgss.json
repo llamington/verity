@@ -1,0 +1,27 @@
+// Wizard on the HG save: add a legal HeartGold wild Pokemon, then save to SD.
+{
+  "rom": "../../../nds/verity.nds",
+  "sd_dir": "../../../build/emu/sd",
+  "sd_image": "../../../build/emu/sd.img",
+  "rtc": [2026, 11, 2, 12, 0, 0],
+  "steps": [
+    {"wait": 90},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"press": ["Down"], "frames": 2},
+    {"screenshot": "00-picker.png"},
+    {"press": ["A"], "frames": 2}, {"wait": 60},
+    {"press": ["A"], "frames": 2}, {"wait": 40},
+    {"press": ["L"], "frames": 2}, {"wait": 5},
+    {"press": ["X"], "frames": 2}, {"wait": 60},
+    {"screenshot": "01-species.png"},
+    {"press": ["A"], "frames": 2}, {"wait": 5},
+    {"screenshot": "02-encounters.png"},
+    {"press": ["A"], "frames": 2}, {"wait": 5},
+    {"press": ["Start"], "frames": 2}, {"wait": 60},
+    {"screenshot": "03-placed.png"},
+    {"press": ["B"], "frames": 2}, {"wait": 40},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2}, {"wait": 180},
+    {"screenshot": "04-saved.png"}
+  ]
+}

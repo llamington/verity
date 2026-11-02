@@ -6,6 +6,7 @@
   "rtc": [2026, 11, 2, 12, 0, 0],
   "steps": [
     {"wait": 90},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
     {"press": ["Down"], "frames": 2}, {"press": ["Down"], "frames": 2},
     {"press": ["Down"], "frames": 2}, {"press": ["Down"], "frames": 2},
     {"press": ["Down"], "frames": 2},

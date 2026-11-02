@@ -18,6 +18,8 @@ use crate::save::{Save, SaveError, SaveKind, Slot};
 pub const VERSION_D: u8 = 10;
 pub const VERSION_P: u8 = 11;
 pub const VERSION_PT: u8 = 12;
+pub const VERSION_HG: u8 = 7;
+pub const VERSION_SS: u8 = 8;
 
 /// Which encounter to generate from.
 #[derive(Clone, Copy)]
@@ -118,7 +120,21 @@ fn group(version: u8) -> Result<&'static [u8], Error> {
         VERSION_D => Ok(b"SlotsD"),
         VERSION_P => Ok(b"SlotsP"),
         VERSION_PT => Ok(b"SlotsPt"),
+        VERSION_HG => Ok(b"SlotsHG"),
+        VERSION_SS => Ok(b"SlotsSS"),
         _ => Err(Error::VersionUnsupported),
+    }
+}
+
+/// The encounter data holding a version's slots.
+fn enc_data<'c, 'a>(
+    ctx: &'c Context4<'a>,
+    version: u8,
+) -> &'c crate::data::encounters::EncounterData<'a> {
+    if matches!(version, VERSION_HG | VERSION_SS) {
+        &ctx.enc_hgss
+    } else {
+        &ctx.enc_dppt
     }
 }
 
@@ -134,19 +150,20 @@ pub fn encounters<'a>(
     form: u8,
 ) -> Result<Vec<Encounter<'a>>, Error> {
     let g = group(version)?;
-    Ok(ctx
-        .enc_dppt
+    Ok(enc_data(ctx, version)
         .group(g)
         .filter(|e| e.species() == species && form_matches(e, form))
         .collect())
 }
 
-/// D/P/Pt wild balls (PKHeX `BallUseLegality.WildPokeBalls4_DPPt`) or the slot's required ball.
-fn ball_allowed(e: &Encounter, ball: u8) -> bool {
-    if e.ball() != 0 {
-        return ball == e.ball();
+/// Gen 4 wild balls (PKHeX `BallUseLegality.WildPokeBalls4_DPPt`, plus Kurt's Apricorn Balls
+/// on HG/SS) or the slot's required ball.
+fn ball_allowed(e: &Encounter, ball: u8, version: u8) -> bool {
+    let required = super::build4::required_ball(e);
+    if required != 0 {
+        return ball == required;
     }
-    matches!(ball, 1..=4 | 6..=15)
+    matches!(ball, 1..=4 | 6..=15) || (matches!(version, 7 | 8) && (17..=23).contains(&ball))
 }
 
 fn trainer_of(save: &Save) -> Trainer4 {
@@ -201,7 +218,7 @@ fn generate_slot(
         e.form()
     };
     if let Some(b) = req.ball {
-        if !ball_allowed(e, b) {
+        if !ball_allowed(e, b, req.version) {
             return Err(Error::BallNotAllowed);
         }
     }
@@ -225,6 +242,7 @@ fn generate_slot(
         hidden_power_type: req.hidden_power_type,
         location: e.location(),
         form,
+        version: req.version,
     };
     let (frame, iv_proposal) = match req.ivs {
         IvRequest::Random => (wild4::generate(&wreq, rand, req.budget, ratio)?, None),
@@ -236,10 +254,10 @@ fn generate_slot(
     };
     let bd = BuildData {
         hgss: ctx.hgss,
-        learn: if req.version == VERSION_PT {
-            ctx.learn.pt
-        } else {
-            ctx.learn.dp
+        learn: match req.version {
+            VERSION_PT => ctx.learn.pt,
+            VERSION_HG | VERSION_SS => ctx.learn.hgss,
+            _ => ctx.learn.dp,
         },
         moves: ctx.learn.moves,
         names4: ctx.names4,

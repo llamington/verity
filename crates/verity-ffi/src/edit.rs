@@ -16,7 +16,20 @@ fn group(version: u8) -> Option<&'static [u8]> {
         10 => Some(b"SlotsD"),
         11 => Some(b"SlotsP"),
         12 => Some(b"SlotsPt"),
+        7 => Some(b"SlotsHG"),
+        8 => Some(b"SlotsSS"),
         _ => None,
+    }
+}
+
+fn enc_data(
+    ctx: &'static verity::legality::analysis4::Context4<'static>,
+    version: u8,
+) -> &'static verity::data::encounters::EncounterData<'static> {
+    if matches!(version, 7 | 8) {
+        &ctx.enc_hgss
+    } else {
+        &ctx.enc_dppt
     }
 }
 
@@ -36,7 +49,8 @@ pub struct VerityEncounter {
     pub can_radar: u8,
 }
 
-/// C ABI: the distinct species with wild slots in `version` (10 D, 11 P, 12 Pt), ascending.
+/// C ABI: the distinct species with wild slots in `version` (10 D, 11 P, 12 Pt, 7 HG, 8 SS),
+/// ascending.
 /// Returns how many were written (at most `cap`).
 ///
 /// # Safety
@@ -52,7 +66,7 @@ pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: us
     }
     let out = slice::from_raw_parts_mut(out, cap);
     let mut seen = [false; 494];
-    for e in ctx.enc_dppt.group(g) {
+    for e in enc_data(ctx, version).group(g) {
         if let Some(s) = seen.get_mut(e.species() as usize) {
             *s = true;
         }
@@ -87,7 +101,7 @@ pub unsafe extern "C" fn verity_wild_encounters(
     }
     let out = slice::from_raw_parts_mut(out, cap);
     let mut n = 0;
-    for (i, e) in ctx.enc_dppt.group(g).enumerate() {
+    for (i, e) in enc_data(ctx, version).group(g).enumerate() {
         if e.species() != species || n >= cap {
             continue;
         }
@@ -186,7 +200,7 @@ fn status(e: Error) -> GenStatus {
 pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
     let s: &'static [u8] = match code {
         0 => b"OK\0",
-        1 => b"Only D/P/Pt wild encounters for now\0",
+        1 => b"Only Gen 4 wild encounters for now\0",
         2 => b"No wild encounter in this game\0",
         3 => b"Not in that encounter\0",
         4 => b"Level outside the slot\0",
@@ -240,8 +254,7 @@ pub unsafe extern "C" fn verity_gen_insert(
     let encounter = if r.encounter_index == 0xFFFF {
         EncounterChoice::Any
     } else {
-        match ctx
-            .enc_dppt
+        match enc_data(ctx, r.version)
             .group(group(r.version).unwrap())
             .nth(r.encounter_index as usize)
         {

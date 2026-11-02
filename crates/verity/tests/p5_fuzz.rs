@@ -68,6 +68,7 @@ pub fn build_legal(n: usize, dir: &Path, seed: u64) {
             lead,
             hidden_power_type: None,
             form: 0,
+            version: 12,
             location: e.location(),
         };
         let Ok(g) = generate(&req, &mut rand, 50_000, ratio) else {
@@ -582,6 +583,7 @@ fn built_legal(n: usize, seed: u64) -> (usize, usize) {
             lead,
             hidden_power_type: None,
             form: 0,
+            version: 12,
             location: e.location(),
         };
         let g = match generate(&req, &mut r, 50_000, ratio) {

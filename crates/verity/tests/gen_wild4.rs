@@ -91,6 +91,7 @@ fn run(per_case: usize) {
                 lead,
                 hidden_power_type: None,
                 form: 0,
+                version: 12,
                 location: e.location(),
             };
             let result = if let Case::ClosestIvs = case {
@@ -198,6 +199,7 @@ fn closest_ivs_timing() {
             lead: Lead::None,
             hidden_power_type: None,
             form: 0,
+            version: 12,
             location: e.location(),
         };
         let target: [u8; 6] = core::array::from_fn(|_| (rand.next_u32() % 32) as u8);

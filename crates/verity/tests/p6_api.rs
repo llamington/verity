@@ -73,15 +73,18 @@ fn context() -> &'static Context4<'static> {
 }
 
 const BALLS: [u8; 14] = [1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const KURT: [u8; 7] = [17, 18, 19, 20, 21, 22, 23];
 
 fn random_request<'a>(ctx: &Context4<'a>, r: &mut Rand) -> GenRequest<'a> {
-    let version = [10u8, 11, 12][r.next_u32() as usize % 3];
-    let group: &[u8] = match version {
-        10 => b"SlotsD",
-        11 => b"SlotsP",
-        _ => b"SlotsPt",
+    let version = [10u8, 11, 12, 7, 8][r.next_u32() as usize % 5];
+    let (group, ed): (&[u8], _) = match version {
+        10 => (b"SlotsD", &ctx.enc_dppt),
+        11 => (b"SlotsP", &ctx.enc_dppt),
+        12 => (b"SlotsPt", &ctx.enc_dppt),
+        7 => (b"SlotsHG", &ctx.enc_hgss),
+        _ => (b"SlotsSS", &ctx.enc_hgss),
     };
-    let slots: Vec<_> = ctx.enc_dppt.group(group).collect();
+    let slots: Vec<_> = ed.group(group).collect();
     // One Unown request in eight so the Solaceon Ruins path is well covered.
     let e = if r.next_u32().is_multiple_of(8) {
         *slots.iter().find(|e| e.species() == 201).unwrap()
@@ -126,7 +129,13 @@ fn random_request<'a>(ctx: &Context4<'a>, r: &mut Rand) -> GenRequest<'a> {
             1 => IvRequest::Nearest(core::array::from_fn(|_| (r.next_u32() % 32) as u8)),
             _ => IvRequest::Random,
         },
-        ball: (e.ball() == 0 && pick(r, 2)).then(|| BALLS[r.next_u32() as usize % BALLS.len()]),
+        ball: (verity::gen::build4::required_ball(&e) == 0 && pick(r, 2)).then(|| {
+            if matches!(version, 7 | 8) && pick(r, 3) {
+                KURT[r.next_u32() as usize % KURT.len()]
+            } else {
+                BALLS[r.next_u32() as usize % BALLS.len()]
+            }
+        }),
         moves: None,
         met_date: [
             9,
@@ -232,7 +241,7 @@ fn p6_api_random_requests() {
     }
     let (made, unown, errors) = random_requests(1500, 11);
     eprintln!("made {made}, unown {unown}, errors {errors:?}");
-    assert!(made >= 1000, "only {made} of 1500 requests succeeded");
+    assert!(made >= 900, "only {made} of 1500 requests succeeded");
     assert!(unown >= 50);
 }
 

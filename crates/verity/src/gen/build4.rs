@@ -33,6 +33,20 @@ const FARAWAY4: u16 = 3002;
 const BALL_POKE: u8 = 4;
 const BALL_CHERISH: u8 = 16;
 
+/// PKHeX `EncounterSlot4.GetRequiredBallValue`: Sport Ball in the Bug-Catching Contest,
+/// Safari Ball in the Great Marsh / HG/SS Safari Zone, else the template's ball (0 = none).
+pub fn required_ball(enc: &Encounter) -> u8 {
+    if enc.is_slot() {
+        if enc.slot_type() == crate::rng::method_j::SlotType4::BugContest as u8 {
+            return 24;
+        }
+        if matches!(enc.location(), 52 | 202) {
+            return 5;
+        }
+    }
+    enc.ball()
+}
+
 /// PKHeX `Language.GetSafeLanguage456`.
 pub fn safe_language(lang: u8) -> u8 {
     if matches!(lang, 1..=5 | 7 | 8) {
@@ -114,7 +128,7 @@ pub fn build_wild4(
     put16(&mut raw, 0x80, dp_loc);
     put16(&mut raw, 0x46, ext_loc);
 
-    let ball = match enc.ball() {
+    let ball = match required_ball(enc) {
         0 => BALL_POKE,
         b => b,
     };
@@ -132,6 +146,8 @@ pub fn build_wild4(
     };
 
     let mut pk = Pkm::from_decrypted(Format::Pk4, &raw).expect("stored length");
+    // G4PKM.Ball setter: D/P/Pt byte clamped to Cherish, HG/SS byte for HG/SS origins.
+    pk.set_ball(ball);
 
     let name = d.names4.get(language as u16, species as usize);
     let units: alloc::vec::Vec<u16> = name.iter().collect();
