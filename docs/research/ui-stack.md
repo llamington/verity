@@ -53,7 +53,7 @@ melonDS runs under X11 (`flatpak run --nosocket=wayland --env=QT_QPA_PLATFORM=xc
 can capture its window and XTest can send keys and touch. `melon.py launch|shot|key|hold|tap|
 drag|quit`; keyboard mapping is melonDS's default (set in the melonDS config). Window at 1x,
 vertical layout. For scripted, headless and deterministic checks use `tools/emu-harness`
-(`scripts/spike.json` replays this walk-through; see `emu-harness.md`).
+(the spike walk-through was replaced by `scripts/ui-boxes.json` once P9.1 began).
 
 ### melonDS setup for SD access
 

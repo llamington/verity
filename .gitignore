@@ -39,3 +39,6 @@ pkds.local.toml
 tools/emu-harness/build/
 *.json.out/
 /build/
+
+# Generated NitroFS data (copied from data/blobs)
+nds/nitrofiles/data/
