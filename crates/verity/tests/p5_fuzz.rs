@@ -90,7 +90,7 @@ pub fn build_legal(n: usize, dir: &Path, seed: u64) {
     fs::remove_file(req).unwrap();
 }
 
-pub const MUTATIONS: [&str; 18] = [
+pub const MUTATIONS: [&str; 19] = [
     "ivs",
     "evs",
     "level_exp",
@@ -109,6 +109,7 @@ pub const MUTATIONS: [&str; 18] = [
     "form",
     "fateful",
     "tid",
+    "ribbon",
 ];
 
 /// Applies mutation `kind` with randomness `r`.
@@ -164,13 +165,12 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
         "fateful" => pk.set_fateful_gender_form(!pk.fateful(), pk.gender(), pk.form()),
         "tid" => pk.set_ids(r.next_u32() as u16, pk.sid()),
         "ribbon" => {
-            // Event ribbons only (Event3/Event4 sets); the other Gen 4 ribbon rules are not
-            // ported yet.
+            // Any ribbon bit (PK4 ribbon bytes 0x24-0x27, 0x3C-0x3F, 0x60-0x63).
             let mut d = pk.decrypted().to_vec();
-            let (ofs, mask) =
-                [(0x26, 0xE8u8), (0x27, 0x0F), (0x3F, 0xFE)][r.next_u32() as usize % 3];
-            let bits: Vec<u8> = (0..8).filter(|b| mask & (1 << b) != 0).collect();
-            d[ofs] ^= 1 << bits[r.next_u32() as usize % bits.len()];
+            let ofs = [
+                0x24, 0x25, 0x26, 0x27, 0x3C, 0x3D, 0x3E, 0x3F, 0x60, 0x61, 0x62, 0x63,
+            ][r.next_u32() as usize % 12];
+            d[ofs] ^= 1 << (r.next_u32() % 8);
             *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
         }
         "version" => {

@@ -80,6 +80,11 @@ and gaps are in `docs/research/p5-plan.md`.
   length (6 JPN/KOR, 12 else) and `char.IsNumber` digit counting. Parity: corpus 2,922 PK4
   incl. 61 PCD + 550 Ranger Manaphy (same MGDB index asserted); fuzz `p5_parity_fuzz_gifts`
   600 (oracle `gen-gift4`, mutations incl. event ribbons/version), ignored 1e4 run 9,999/9,999.
+- Gen 4 ribbon verifier (`legality/ribbons4.rs`): PKHeX's PK4 ribbon sets for Gen 4 origins
+  (Event3/4 as the encounter had them, no Gen 3 contest/Winning/Victory/Champion G3/Artist,
+  Record never, frontier ability ribbons by ban list, Sinnoh contest ranks in sequence,
+  Gorgeous -> Royal -> Gorgeous Royal, spiky Pichu static exclusions, eggs carry nothing). All
+  fuzzers now flip any ribbon bit: 1e5 wild, HG/SS 1e4 and gifts 1e4 clean.
 
 ## Next steps
 
@@ -108,15 +113,12 @@ editor (Main/Stats/Moves, Legal/Game-safe mode), add-Pokémon wizard (D/P/Pt/HG 
 shiny/level/gender/lead/ball). Details: `docs/research/ui-stack.md`, `emu-harness.md`.
 
 Order from here:
-1. **Gen 4 ribbon verifier** (PKHeX `RibbonVerifierCommon3/Unique3/Common4/Unique4` +
-   `RibbonRules`): only the event ribbons are checked so far; PKHeX also rejects e.g. Record and
-   unearned Gorgeous Royal. Then widen the fuzz `ribbon` mutation to all ribbon bytes.
-2. **M6 P8 injection**: R3 region research, R4 unlock flags, pending-gift slots, duplicate
+1. **M6 P8 injection**: R3 region research, R4 unlock flags, pending-gift slots, duplicate
    prevention, harness collection test; generation of gift Pokémon (`ConvertToPKM` port:
    random-PID gifts, Ranger Manaphy egg) for the wizard.
-3. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
+2. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
    of Alph Unown legality perf (107 ms on DS, budget 50).
-4. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
+3. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
-5. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
+4. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.
