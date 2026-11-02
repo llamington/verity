@@ -98,6 +98,19 @@ and gaps are in `docs/research/p5-plan.md`.
      the PKHeX source by script); Link-trade eggs may hatch anywhere valid in any Gen 4 game;
      Korean language cannot hatch at 63/85.
    - Ball: Poké (FixedBall). Unhatched eggs (`LearnVerifierEgg`, `VerifyUnhatchedEgg`) later.
+0c. **Next — M4 in-game trades (EncounterTrade4PID: 17 of the 52 unchecked in the real Pt/HG
+   saves; Ranch gifts on D).** Pokéwalker done (corpus 2,273). Plan:
+   - Data: the trade OT/nickname tables are private `ReadOnlyMemory<string>` fields
+     (`TrainerNames`, `Nicknames`) on `EncounterTrade4PID`; export them in the oracle's
+     `Describe` via NonPublic reflection, then add an indexed table to the encounter blob
+     (per template: nicknames and OT names by language).
+   - Match (`IsMatchExact`): met level == Level (or >= LevelMin when met is unset), ID32,
+     met location == Location, fixed IVs (`GetIsFixedIVSequenceValidNoRand`), PID == fixed PID,
+     nature, form, OT gender, egg location, contest stats not below the template. Rating Match.
+     Order: trades come after bred eggs and before statics (D: RanchGifts first).
+   - Verify: OT name and nickname against the language tables, with
+     `DetectOriginalLanguage` quirks (Meister Magikarp, Surge's Pikachu, D/P English-as-Japanese).
+   - After trades: gift-egg statics (8 left), unhatched eggs, then Pal Park, then M6 gifts.
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
