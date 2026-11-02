@@ -62,6 +62,22 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Next steps
 
+0. **In progress — M4 statics (EncounterStatic4).** Plan, from PKHeX `EncounterEnumerator4`,
+   `EncounterGenerator4.GetEncounters` and `EncounterStatic4`:
+   - Order: events (fateful) → bred eggs → trades → statics (D: StaticD, StaticDP, StaticDPPt;
+     P: StaticP, StaticDP, StaticDPPt; Pt: StaticPt, StaticDPPt; HG: StaticHG, Encounter_HGSS,
+     Encounter_PokeWalker; SS likewise) → slots → fallback (first partial). Safari/Sport Ball
+     (`mustBeSlot`) puts slots first and never yields statics.
+   - Static `IsMatchExact`: egg location (non-egg statics need egg location 0), met location ==
+     Location (roamers: permit masks `PermitGrassS/J/H`, `PermitWaterS/J/H`), met level ==
+     Level, fixed gender, form (or `FormInfo.IsFormChangeable`). Partial: gift (FixedBall ==
+     Poké) with a different ball.
+   - Generator filters for non-slots: ground tile, `IsCompatible` (Pichu → Pokéwalker PID;
+     Shiny.Always → ChainShiny; Method 1; Cute Charm valid), ball; Safari/Sport → defer Ball.
+   - Checks: fixed ball, fixed nature/gender, AbilityPermission, fixed moves (HAS_MOVES),
+     fateful flag must match the template, Giratina-O orb.
+   - Egg statics (EGG flag: Togepi/Riolu/etc.) and Pokéwalker: later; report "not checked".
+   - Parity: extend the corpus test filter to `EncounterStatic4` (451 in corpus).
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
