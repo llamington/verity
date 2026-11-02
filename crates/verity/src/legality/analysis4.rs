@@ -109,6 +109,10 @@ pub enum Matched<'a> {
         encounter: Encounter<'a>,
         lead: LeadSeed,
     },
+    /// A bred egg (PKHeX `EncounterEgg4`) of this species, hatched in this version.
+    Egg {
+        species: u16,
+    },
     Invalid,
 }
 
@@ -233,6 +237,10 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
 
     // EncounterFinder.FindVerifiedEncounter
     let chain = ctx.evo.encounter_origin_chain(&inp.evo);
+    if !pk.is_egg() && egg_location_bred4(pk.egg_location(), pk.version()) {
+        analyze_bred_egg(ctx, &inp, &chain, &mut report);
+        return report;
+    }
     let pidiv = analyze(&inp.analyze, ratio);
     let (group, enc_data): (&[u8], _) = match pk.version() {
         7 => (b"SlotsHG", &ctx.enc_hgss),
@@ -330,6 +338,176 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
 }
 
 const WURMPLE: u16 = 265;
+const PICHU: u16 = 172;
+const VOLT_TACKLE: u16 = 344;
+const DAYCARE4: u16 = 2000;
+const LINK_TRADE4: u16 = 2002;
+const FARAWAY4: u16 = 3002;
+
+/// PKHeX `Locations.IsEggLocationBred4`.
+fn egg_location_bred4(loc: u16, version: u8) -> bool {
+    matches!(loc, DAYCARE4 | LINK_TRADE4) || (loc == FARAWAY4 && matches!(version, 7 | 8 | 12))
+}
+
+/// PKHeX `Breeding.IsSplitBreedNotBabySpecies4`.
+fn split_breed4(species: u16) -> bool {
+    matches!(species, 183 | 202 | 113 | 122 | 143 | 185 | 226 | 315 | 358)
+}
+
+/// PKHeX `Breeding.CanHatchAsEgg(species)` for Gen 4 species.
+fn can_hatch(species: u16) -> bool {
+    !matches!(
+        species,
+        132 | 144..=146 | 150 | 151 | 201 | 243..=245 | 249..=251 | 377..=386 | 480..=493
+    ) || matches!(species, 489 | 490)
+}
+
+/// PKHeX `EncounterGenerator4.TryGetEgg` / `TryGetSplit`: candidate egg species, in order.
+fn egg_species(ctx: &Context4, chain: &[EvoCriteria]) -> Vec<u16> {
+    let mut out = Vec::new();
+    let Some(devolved) = chain.last() else {
+        return out;
+    };
+    if !(devolved.level_min..=devolved.level_max).contains(&1) {
+        return out;
+    }
+    let (species, form) = ctx.evo.base_species_form(devolved.species, devolved.form);
+    if species != devolved.species && !split_breed4(devolved.species) {
+        return out;
+    }
+    // CanHatchAsEgg (species; form: Pichu forms cannot be bred) and presence in HG/SS.
+    if !can_hatch(species) || (form != 0 && matches!(species, 25 | 133 | 172)) {
+        return out;
+    }
+    if !ctx.evo.is_present(species, form) {
+        return out;
+    }
+    out.push(species);
+    // TryGetSplit
+    let mut d = *devolved;
+    if species == d.species {
+        if chain.len() < 2 {
+            return out;
+        }
+        d = chain[chain.len() - 2];
+    }
+    if split_breed4(d.species) {
+        out.push(d.species);
+    }
+    out
+}
+
+/// LearnGroup4.CheckEncounterMoves for a bred egg: egg moves, inherited level-up moves, and
+/// Volt Tackle on Pichu, for moves the regular sources did not explain.
+fn apply_egg_moves(ctx: &Context4, pk: &Pkm, egg: u16, moves: &mut [MoveResult; 4]) {
+    let learn = match pk.version() {
+        7 | 8 => &ctx.learn.hgss,
+        12 => &ctx.learn.pt,
+        _ => &ctx.learn.dp,
+    };
+    let idx = learn.form_index(egg, 0);
+    let current = pk.moves();
+    for i in (0..4).rev() {
+        if moves[i].valid() || !matches!(moves[i], MoveResult::Unobtainable | MoveResult::Unparsed)
+        {
+            continue;
+        }
+        let mv = current[i];
+        let egg_move = learn.egg_moves(idx).iter().any(|m| m == mv);
+        let inherit = learn.levelup(idx).any(|(_, m)| m == mv);
+        if egg_move || inherit || (mv == VOLT_TACKLE && egg == PICHU) {
+            moves[i] = MoveResult::Initial;
+        }
+    }
+}
+
+/// The bred-egg branch of the Gen 4 encounter search (`EncounterEnumerator4` Bred state and
+/// `EncounterGenerator4` filters), then `EncounterVerifier.VerifyEncounterEgg4`.
+fn analyze_bred_egg(ctx: &Context4, inp: &Inputs, chain: &[EvoCriteria], report: &mut Report) {
+    let pk = &inp.pk;
+    let pidiv = analyze(&inp.analyze, |s| ctx.ratio(s));
+    let list = egg_species(ctx, chain);
+    // Generator filters: no ground tile, no PID-IV correlation, no Safari/Sport Ball.
+    let mut chosen: Option<(u16, bool)> = None; // (species, deferred)
+    let mut deferred: Option<(u16, u8)> = None;
+    let mut defer = |sp: u16, rank: u8| {
+        if deferred.is_none_or(|(_, r)| rank < r) {
+            deferred = Some((sp, rank));
+        }
+    };
+    let mut passing: Vec<u16> = Vec::new();
+    for &sp in &list {
+        if pk.ground_tile() != 0 {
+            defer(sp, 4);
+            continue;
+        }
+        if pidiv.kind != crate::rng::finder::PidType::None {
+            defer(sp, 5);
+            continue;
+        }
+        if matches!(pk.ball(), 5 | 24) {
+            defer(sp, 3);
+            continue;
+        }
+        passing.push(sp);
+    }
+    // EncounterFinder: the first candidate whose moves and evolution check out, else the last.
+    let n = passing.len();
+    for (i, &sp) in passing.iter().enumerate() {
+        let history = ctx.evo.chain_for_encounter(&inp.evo, sp, 1);
+        let mut moves = ctx.learn.verify(pk.moves(), pk.form(), sp, &history, None);
+        apply_egg_moves(ctx, pk, sp, &mut moves);
+        let ev = evolution_valid(ctx, inp, sp, &history, &moves);
+        let last = i + 1 == n;
+        if (!moves.iter().all(|m| m.valid()) || !ev) && !last {
+            continue;
+        }
+        report.moves = moves;
+        if !ev {
+            report.flag(CheckId::Evolution);
+        }
+        chosen = Some((sp, false));
+        break;
+    }
+    if chosen.is_none() {
+        if let Some((sp, rank)) = deferred {
+            let history = ctx.evo.chain_for_encounter(&inp.evo, sp, 1);
+            let mut moves = ctx.learn.verify(pk.moves(), pk.form(), sp, &history, None);
+            apply_egg_moves(ctx, pk, sp, &mut moves);
+            report.moves = moves;
+            if rank == 5 {
+                report.flag(CheckId::PID);
+            }
+            chosen = Some((sp, true));
+        }
+    }
+    let Some((species, _)) = chosen else {
+        report.flag(CheckId::Encounter);
+        let history = ctx
+            .evo
+            .chain_for_encounter(&inp.evo, pk.species(), pk.met_level());
+        report.moves = ctx
+            .learn
+            .verify(pk.moves(), pk.form(), pk.species(), &history, None);
+        verify_common(ctx, inp, None, report);
+        return;
+    };
+    report.matched = Matched::Egg { species };
+    // EncounterVerifier.VerifyEncounterEgg4 (native format 4, hatched).
+    if pk.met_level() != 0 {
+        report.flag(CheckId::Encounter);
+    } else {
+        let met = pk.met_location();
+        let korean_shaymin = pk.language() == 8 && matches!(met, 63 | 85);
+        let ok = !korean_shaymin
+            && (super::hatch4::valid_met4(met, pk.version())
+                || (pk.egg_location() == LINK_TRADE4 && super::hatch4::valid_met4_any(met)));
+        if !ok {
+            report.flag(CheckId::Encounter);
+        }
+    }
+    verify_common_egg(ctx, inp, species, report);
+}
 
 /// A static encounter's fixed moveset (PKHeX `IMoveset`), if it has one.
 fn static_moves(e: &Encounter) -> Option<[u16; 4]> {
@@ -340,8 +518,22 @@ fn static_moves(e: &Encounter) -> Option<[u16; 4]> {
 }
 
 fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: &mut Report) {
+    verify_common_inner(ctx, inp, enc, None, report);
+}
+
+fn verify_common_egg(ctx: &Context4, inp: &Inputs, egg: u16, report: &mut Report) {
+    verify_common_inner(ctx, inp, None, Some(egg), report);
+}
+
+fn verify_common_inner(
+    ctx: &Context4,
+    inp: &Inputs,
+    enc: Option<&Encounter>,
+    egg: Option<u16>,
+    report: &mut Report,
+) {
     let pk = &inp.pk;
-    let enc_species = enc.map_or(pk.species(), |e| e.species());
+    let enc_species = egg.unwrap_or_else(|| enc.map_or(pk.species(), |e| e.species()));
     let pi = ctx.hgss.species_form(pk.species(), pk.form());
     let growth = pi.growth();
 
@@ -379,9 +571,11 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         }
         if evs.iter().any(|&e| e > 100) {
             // EncounterInvalid uses the current species and met level.
-            let (sp, lmin) = enc.map_or((pk.species(), pk.met_level()), |e| {
-                (e.species(), e.level_min())
-            });
+            let (sp, lmin) = match (egg, enc) {
+                (Some(sp), _) => (sp, 1),
+                (None, Some(e)) => (e.species(), e.level_min()),
+                (None, None) => (pk.species(), pk.met_level()),
+            };
             if lmin == 100 {
                 report.flag(CheckId::EVs);
             } else {
@@ -442,7 +636,7 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         if !valid_date(my, mm, md) {
             report.flag(CheckId::Memory);
         }
-    } else if enc.is_some() && (my, mm, md) != (0, 0, 0) {
+    } else if (enc.is_some() || egg.is_some()) && (my, mm, md) != (0, 0, 0) {
         report.flag(CheckId::Memory);
     }
     let [ey, em, ed] = pk.egg_date();
@@ -498,7 +692,11 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
         }
     }
 
-    // BallVerifier (wild slot)
+    // BallVerifier: Gen 4 eggs hatch in a Poké Ball.
+    if egg.is_some() && pk.ball() != 4 {
+        report.flag(CheckId::Ball);
+    }
+    // BallVerifier (wild slot / static)
     if let Some(e) = enc {
         let ball = pk.ball();
         let ok = if e.species() == 290 && pk.species() == 292 {

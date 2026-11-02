@@ -259,6 +259,30 @@ impl<'a> Learn4<'a> {
                 self.check_internal(&mut result, &current, evo, current_form);
             }
         }
+        // LearnGroup4.CheckNincadaMoves: a Shedinja from a Nincada encounter may keep one
+        // Ninjask level-up move learned within Nincada's level range.
+        if enc_species == NINCADA && history.len() == 2 && history[0].species == SHEDINJA {
+            let nincada = history[history.len() - 1];
+            let idx = self.pt.form_index(NINJASK, 0);
+            for i in 0..4 {
+                if result[i].valid() {
+                    continue;
+                }
+                let mv = current[i];
+                if mv == 0 {
+                    break;
+                }
+                let Some(level) = self.pt.levelup(idx).find(|&(_, m)| m == mv).map(|(l, _)| l)
+                else {
+                    continue;
+                };
+                if !(nincada.level_min..=nincada.level_max).contains(&level) {
+                    continue;
+                }
+                result[i] = MoveResult::LevelUp { level };
+                break;
+            }
+        }
         for r in result.iter_mut() {
             if !r.parsed() {
                 *r = MoveResult::Unobtainable;
@@ -268,6 +292,10 @@ impl<'a> Learn4<'a> {
         result
     }
 }
+
+const NINCADA: u16 = 290;
+const NINJASK: u16 = 291;
+const SHEDINJA: u16 = 292;
 
 fn finalize(result: &mut [MoveResult; 4], current: &[u16; 4]) {
     let mut empty = false;

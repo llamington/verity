@@ -175,6 +175,20 @@ impl<'a> Evo4<'a> {
             .take(2)
     }
 
+    /// PKHeX `IEvolutionNetwork.GetBaseSpeciesForm`: the deepest pre-evolution (first links).
+    pub fn base_species_form(&self, mut species: u16, mut form: u8) -> (u16, u8) {
+        for _ in 0..8 {
+            match self.links(species, form).next() {
+                Some(l) => {
+                    species = l.species;
+                    form = l.form;
+                }
+                None => break,
+            }
+        }
+        (species, form)
+    }
+
     fn try_devolve(
         &self,
         head: &EvoCriteria,

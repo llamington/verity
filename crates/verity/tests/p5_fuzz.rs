@@ -477,7 +477,7 @@ fn p5_parity_corpus() {
             if !f.ends_with(".pk4")
                 || !matches!(
                     v["enc_kind"].as_str().unwrap(),
-                    "EncounterSlot4" | "EncounterInvalid" | "EncounterStatic4"
+                    "EncounterSlot4" | "EncounterInvalid" | "EncounterStatic4" | "EncounterEgg4"
                 )
             {
                 continue;
