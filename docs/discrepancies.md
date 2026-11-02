@@ -68,3 +68,10 @@ Party stats: the games recompute stats only on level-up or a box round trip, so 
 hold stale party stats (seen in `pkhex-everywhere/savedata_4hgss.dsv`). `check_pkm` accepts stale
 stats (it requires the level byte to match EXP, non-zero stats and HP ≤ max HP); verity's own party
 writes must have exactly computed stats (`party_stats_exact`).
+
+## Method K re-roll seed (M4)
+
+PKHeX 25.12.21 `MethodK.TryGetMatch`, Synchronize branch: `IsSlotValidRegular(ctx, out seed)`
+reuses `seed` as its out parameter, so the following `Recurse4x` call (HG/SS Safari Zone and
+Bug-Catching Contest re-rolls) starts from the slot seed, or 0 when no slot matched, instead of
+the frame's seed. `rng::method_k` mirrors this. Report upstream.
