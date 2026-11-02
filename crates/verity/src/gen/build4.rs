@@ -75,7 +75,11 @@ pub fn build_wild4(
 ) -> Pkm {
     let mut raw = [0u8; SIZE_4STORED];
     let species = enc.species();
-    let form = enc.form();
+    let form = if enc.has(crate::data::encounters::flag::RANDOM_UNSPECIFIC_FORM) {
+        g.form
+    } else {
+        enc.form()
+    };
     let pi = d.hgss.species_form(species, form);
     let language = safe_language(tr.language);
     let version = enc.version();

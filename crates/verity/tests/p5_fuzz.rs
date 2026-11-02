@@ -67,6 +67,7 @@ pub fn build_legal(n: usize, dir: &Path, seed: u64) {
             shiny,
             lead,
             hidden_power_type: None,
+            form: 0,
             location: e.location(),
         };
         let Ok(g) = generate(&req, &mut rand, 50_000, ratio) else {
@@ -286,7 +287,7 @@ fn parity(
     let mut per_id: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     let mut checked = 0;
     for (f, pk) in &files {
-        if !(10..=12).contains(&pk.version()) || pk.species() == 201 {
+        if !(10..=12).contains(&pk.version()) {
             continue;
         }
         let v = &pkhex[f];
@@ -417,7 +418,7 @@ fn p5_parity_corpus() {
                 continue;
             }
             let pk = Pkm::from_decrypted(Format::Pk4, &fs::read(dir.join(f)).unwrap()).unwrap();
-            if !(10..=12).contains(&pk.version()) || pk.species() == 201 {
+            if !(10..=12).contains(&pk.version()) {
                 continue;
             }
             let r = verity::legality::analysis4::analyze4(ctx, &pk);
@@ -510,6 +511,7 @@ fn built_legal(n: usize, seed: u64) -> (usize, usize) {
             shiny: r.next_u32().is_multiple_of(4) && !matches!(lead, Lead::CuteCharm { .. }),
             lead,
             hidden_power_type: None,
+            form: 0,
             location: e.location(),
         };
         let g = match generate(&req, &mut r, 50_000, ratio) {

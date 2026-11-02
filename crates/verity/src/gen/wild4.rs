@@ -37,6 +37,8 @@ pub struct Request {
     pub hidden_power_type: Option<u8>,
     /// Met location (needed for honey-tree Munchlax).
     pub location: u16,
+    /// Requested form. Only Unown's form depends on the frame; other species ignore it.
+    pub form: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +50,8 @@ pub struct Generated {
     /// PID-IV origin seed (PKHeX `PIDIV.OriginSeed`).
     pub pidiv_seed: u32,
     pub lead: LeadSeed,
+    /// The request's form (meaningful for slots with a random form, i.e. Unown).
+    pub form: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,7 +61,8 @@ pub enum GenError {
     ShinyImpossibleForCuteCharm,
     GenderImpossible,
     CuteCharmNeedsGenderedSpecies,
-    UnownFormUnsupported,
+    /// The requested Unown form cannot appear here.
+    FormUnavailable,
     RadarNotAllowedHere,
     /// Munchlax only appears in the four honey trees chosen by the trainer's ID.
     MunchlaxTreeUnavailable,
@@ -97,10 +102,25 @@ fn hidden_power_ok(req: &Request, iv32: u32) -> bool {
     })
 }
 
+const UNOWN: u16 = 201;
+
+fn unown_form_possible(req: &Request) -> Result<(), GenError> {
+    if req.species == UNOWN && req.form >= 28 {
+        return Err(GenError::FormUnavailable);
+    }
+    Ok(())
+}
+
+/// PKHeX `SolaceonRuins4.IsFormValid`: Unown's form comes from the frame after the IVs.
+fn form_ok(req: &Request, pid: u32, iv32: u32) -> bool {
+    req.species != UNOWN || crate::rng::unown4::form_valid(pid, iv32, req.form)
+}
+
 fn level_bounds(req: &Request) -> Result<(u8, u8), GenError> {
     let s = &req.slot;
     match req.met_level {
-        Some(l) if l < s.level_min || l > s.pressure_level.max(s.level_max) => {
+        // PKHeX `EncounterSlot4.IsMatchExact`: the slot's range, or exactly the Pressure level.
+        Some(l) if !(s.level_min..=s.level_max).contains(&l) && !pressure_only(req, l) => {
             Err(GenError::LevelOutsideSlot)
         }
         Some(l) => Ok((l, l)),
@@ -125,9 +145,20 @@ fn level_for(slot: &Slot4, lead: &LeadSeed, fallback: u8) -> u8 {
     (r % modulo + slot.level_min as u32) as u8
 }
 
+/// A met level only a Pressure/Hustle/Vital Spirit lead reaches (grass slots).
+fn pressure_only(req: &Request, level: u8) -> bool {
+    let s = &req.slot;
+    s.slot_type == method_j::SlotType4::Grass
+        && level == s.pressure_level
+        && !(s.level_min..=s.level_max).contains(&level)
+}
+
 fn lead_matches(req: &Request, lead: LeadRequired) -> bool {
     use LeadRequired as L;
     match req.lead {
+        Lead::None if req.met_level.is_some_and(|l| pressure_only(req, l)) => {
+            lead == L::PressureHustleSpirit
+        }
         Lead::None => matches!(lead, L::None | L::SynchronizeFail | L::CuteCharmFail),
         Lead::Synchronize(_) => lead == L::Synchronize,
         Lead::CuteCharm { .. } => lead == L::CuteCharm,
@@ -157,6 +188,9 @@ fn validate(
     level_hint: (u8, u8),
     ratio: &impl Fn(u16) -> u8,
 ) -> Option<Generated> {
+    if !form_ok(req, pid, iv32) {
+        return None;
+    }
     let gender = gender_of(pid, req.gender_ratio);
     let input = analyze_input(req, pid, iv32, level_hint.0, gender);
     let pidiv = crate::rng::finder::analyze(&input, ratio);
@@ -193,6 +227,7 @@ fn validate(
         gender,
         pidiv_seed: pidiv.seed,
         lead: final_lead,
+        form: req.form,
     })
 }
 
@@ -226,9 +261,7 @@ pub fn generate(
     budget: u32,
     ratio: impl Fn(u16) -> u8,
 ) -> Result<Generated, GenError> {
-    if req.species == 201 {
-        return Err(GenError::UnownFormUnsupported);
-    }
+    unown_form_possible(req)?;
     if req.species == 446
         && req.slot.slot_type == method_j::SlotType4::HoneyTree
         && !munchlax_ok(req)
@@ -375,7 +408,7 @@ fn generate_cute_charm(
         }
         let pid = cc_pid(nat);
         let iv32 = rand.next_u32() & 0x3FFF_FFFF;
-        if !hidden_power_ok(req, iv32) {
+        if !hidden_power_ok(req, iv32) || !form_ok(req, pid, iv32) {
             continue;
         }
         let input = analyze_input(req, pid, iv32, bounds.0, gender);
@@ -412,6 +445,7 @@ fn generate_cute_charm(
             gender,
             pidiv_seed: 0,
             lead: fin,
+            form: req.form,
         });
     }
     Err(GenError::BudgetExhausted)
@@ -460,7 +494,7 @@ fn generate_radar_chain(
     for _ in 0..budget.saturating_mul(64) {
         let origin = rand.next_u32();
         let (pid, iv32) = chain_shiny_roll(origin, req.tid, req.sid);
-        if !pid_ok(&req, pid, nature) || !hidden_power_ok(&req, iv32) {
+        if !pid_ok(&req, pid, nature) || !hidden_power_ok(&req, iv32) || !form_ok(&req, pid, iv32) {
             continue;
         }
         let level = lo + (rand.next_u32() % (hi - lo + 1) as u32) as u8;
@@ -481,6 +515,7 @@ fn generate_radar_chain(
             gender,
             pidiv_seed: pidiv.seed,
             lead,
+            form: req.form,
         });
     }
     Err(GenError::BudgetExhausted)
@@ -504,9 +539,7 @@ pub fn generate_from_ivs(
     ivs: [u8; 6],
     ratio: impl Fn(u16) -> u8,
 ) -> Result<Generated, GenError> {
-    if req.species == 201 {
-        return Err(GenError::UnownFormUnsupported);
-    }
+    unown_form_possible(req)?;
     let bounds = level_bounds(req)?;
     let nature = effective_nature(req)?;
     let iv32 = ivs
@@ -570,7 +603,9 @@ fn validate_cute_charm(
     ratio: &impl Fn(u16) -> u8,
 ) -> Option<Generated> {
     let input = analyze_input(req, pid, iv32, bounds.0, gender);
-    if crate::rng::finder::analyze(&input, ratio).kind != PidType::CuteCharm {
+    if !form_ok(req, pid, iv32)
+        || crate::rng::finder::analyze(&input, ratio).kind != PidType::CuteCharm
+    {
         return None;
     }
     let pidiv = PidIv {
@@ -591,6 +626,7 @@ fn validate_cute_charm(
         gender,
         pidiv_seed: 0,
         lead: fin,
+        form: req.form,
     })
 }
 

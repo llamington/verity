@@ -384,6 +384,25 @@ impl Pkm {
         }
     }
 
+    /// PKHeX `G4PKM.Ball` setter: D/P/Pt byte clamped to Cherish, HG/SS byte only for HG/SS
+    /// non-event origins (clamped to Sport). Gen 5 writes the byte directly.
+    pub fn set_ball(&mut self, ball: u8) {
+        match self.format {
+            Format::Pk4 => {
+                let clamp = |v: u8, max: u8| if v <= max { v } else { 4 };
+                self.set_u8(0x83, clamp(ball, 16));
+                let hgss = matches!(self.version(), 7 | 8);
+                let v = if !hgss || self.fateful() {
+                    0
+                } else {
+                    clamp(ball, 24)
+                };
+                self.set_u8(0x86, v);
+            }
+            Format::Pk5 => self.set_u8(0x83, ball),
+        }
+    }
+
     pub fn met_level(&self) -> u8 {
         self.u8(0x84) & 0x7F
     }

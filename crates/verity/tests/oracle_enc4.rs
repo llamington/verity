@@ -55,7 +55,6 @@ fn dppt_wild_slot_match_equals_pkhex() {
             if s["enc_kind"] != "EncounterSlot4"
                 || !(10..=12).contains(&v)
                 || s["evo_origin"].is_null()
-                || s["enc_species"] == 201
             {
                 continue;
             }
