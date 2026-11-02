@@ -980,12 +980,20 @@ fn verify_common_inner(
         // (TrashByteVerifier.VerifyTrashBytesPCD only runs for format 7+.)
     }
 
-    // RibbonVerifierEvent3/Event4: event ribbons only as the gift had them (eggs: no Event3).
-    let mut ribbons = gift.as_ref().map_or([0; 3], |(_, t)| t.event_ribbons4());
-    if pk.is_egg() {
-        ribbons[2] &= 0x80;
-    }
-    if pk.event_ribbons4() != ribbons {
+    // RibbonVerifier (event ribbons only as the gift had them).
+    let raw = pk.decrypted();
+    let ribbon_args = super::ribbons4::RibbonArgs {
+        sinnoh: [raw[0x24], raw[0x25], raw[0x26], raw[0x27]],
+        hoenn: [raw[0x3C], raw[0x3D], raw[0x3E], raw[0x3F]],
+        contest4: [raw[0x60], raw[0x61], raw[0x62]],
+        is_egg: pk.is_egg(),
+        event: gift.as_ref().map_or([0; 3], |(_, t)| t.event_ribbons4()),
+        gen4: !ctx.evo.encounter_origin_chain(&inp.evo).is_empty(),
+        species: pk.species(),
+        form: pk.form(),
+        spiky_static: data.is_some_and(|e| !e.is_slot() && e.species() == PICHU && e.form() == 1),
+    };
+    if super::ribbons4::ribbons_invalid(&ribbon_args) {
         report.flag(CheckId::Ribbon);
     }
 

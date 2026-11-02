@@ -10,3 +10,4 @@ pub mod evo;
 pub mod gift4;
 pub mod hatch4;
 pub mod moves4;
+pub mod ribbons4;
