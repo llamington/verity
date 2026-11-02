@@ -56,6 +56,31 @@ impl SlotType4 {
     pub fn is_level_rand_dppt(self) -> bool {
         self != Self::Grass
     }
+
+    pub fn is_safari(self) -> bool {
+        matches!(
+            self,
+            Self::SafariGrass
+                | Self::SafariSurf
+                | Self::SafariOldRod
+                | Self::SafariGoodRod
+                | Self::SafariSuperRod
+        )
+    }
+
+    /// PKHeX `IsLevelRandHGSS`: all types except Grass and Safari.
+    pub fn is_level_rand_hgss(self) -> bool {
+        self != Self::Grass && !self.is_safari()
+    }
+
+    /// PKHeX `MethodK.IsFishingRodType` (includes the Safari rods).
+    pub fn is_fishing_rod_hgss(self) -> bool {
+        self.is_fishing_rod()
+            || matches!(
+                self,
+                Self::SafariOldRod | Self::SafariGoodRod | Self::SafariSuperRod
+            )
+    }
 }
 
 /// PKHeX `LeadRequired`; ordering matters (`IsBetterThan` compares discriminants).
@@ -115,6 +140,10 @@ pub struct Slot4 {
     pub static_slot: (u8, u8),
     pub can_radar: bool,
     pub coronet_feebas: bool,
+    /// Area encounter rate (HG/SS Rock Smash and Bug-Catching Contest activation).
+    pub area_rate: u8,
+    /// HG/SS Safari Zone slot (location 202) or Bug-Catching Contest slot: Method K re-rolls.
+    pub rerolls_for_31: bool,
 }
 
 impl Slot4 {
@@ -130,10 +159,12 @@ impl Slot4 {
             static_slot: e.static_slot(),
             can_radar: e.can_radar(),
             coronet_feebas: e.has(crate::data::encounters::flag::CORONET_FEEBAS),
+            area_rate: e.area_rate(),
+            rerolls_for_31: e.slot_type() == SlotType4::BugContest as u8 || e.location() == 202,
         })
     }
 
-    fn is_fixed_level(&self) -> bool {
+    pub(crate) fn is_fixed_level(&self) -> bool {
         self.level_min == self.level_max
     }
 
@@ -142,7 +173,7 @@ impl Slot4 {
     }
 
     /// `IMagnetStatic.IsSlotValidStaticMagnet`.
-    fn static_magnet_lead(&self, rand: u32) -> Option<LeadRequired> {
+    pub(crate) fn static_magnet_lead(&self, rand: u32) -> Option<LeadRequired> {
         let (si, sc) = self.static_slot;
         if sc != 0 && rand % sc as u32 == si as u32 {
             return Some(LeadRequired::Static);
@@ -155,7 +186,7 @@ impl Slot4 {
     }
 }
 
-const FORMAT: u8 = 4;
+pub(crate) const FORMAT: u8 = 4;
 
 fn is_cute_charm_fail(r: u32) -> bool {
     r / 0x5556 == 0
@@ -275,18 +306,18 @@ pub fn slot_range(t: SlotType4, slot: u8) -> (u8, u8) {
 
 /// `FrameCheckDetails`: seeds 1..3 before the nature roll.
 #[derive(Clone, Copy)]
-struct Frame<'a> {
-    enc: &'a Slot4,
-    level_min: u8,
-    level_max: u8,
-    format: u8,
-    seed1: u32,
-    seed2: u32,
-    seed3: u32,
+pub(crate) struct Frame<'a> {
+    pub(crate) enc: &'a Slot4,
+    pub(crate) level_min: u8,
+    pub(crate) level_max: u8,
+    pub(crate) format: u8,
+    pub(crate) seed1: u32,
+    pub(crate) seed2: u32,
+    pub(crate) seed3: u32,
 }
 
 impl<'a> Frame<'a> {
-    fn new(enc: &'a Slot4, seed: u32, level_min: u8, level_max: u8, format: u8) -> Self {
+    pub(crate) fn new(enc: &'a Slot4, seed: u32, level_min: u8, level_max: u8, format: u8) -> Self {
         let seed1 = prev_seed(seed);
         let seed2 = prev_seed(seed1);
         let seed3 = prev_seed(seed2);
@@ -300,21 +331,21 @@ impl<'a> Frame<'a> {
             seed3,
         }
     }
-    fn seed4(&self) -> u32 {
+    pub(crate) fn seed4(&self) -> u32 {
         prev_seed(self.seed3)
     }
-    fn prev1(&self) -> u32 {
+    pub(crate) fn prev1(&self) -> u32 {
         self.seed1 >> 16
     }
-    fn prev2(&self) -> u32 {
+    pub(crate) fn prev2(&self) -> u32 {
         self.seed2 >> 16
     }
-    fn prev3(&self) -> u32 {
+    pub(crate) fn prev3(&self) -> u32 {
         self.seed3 >> 16
     }
 }
 
-fn sequential_pid(mut seed: u32) -> u32 {
+pub(crate) fn sequential_pid(mut seed: u32) -> u32 {
     let r1 = next16(&mut seed) as u32;
     let r2 = next16(&mut seed) as u32;
     r2 << 16 | r1
@@ -557,7 +588,7 @@ fn random_level(enc: &Slot4, rand: u32) -> u32 {
     rand % modulo + enc.level_min as u32
 }
 
-fn original_level_valid(min: u8, max: u8, format: u8, level: u32) -> bool {
+pub(crate) fn original_level_valid(min: u8, max: u8, format: u8, level: u32) -> bool {
     if format == FORMAT && min > 1 {
         return level == min as u32;
     }
