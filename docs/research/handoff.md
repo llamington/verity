@@ -25,15 +25,22 @@ and gaps are in `docs/research/p5-plan.md`.
   closest-legal-IVs).
 - P5 (M2 scope): `legality/analysis4.rs` matches PKHeX on 1e5 fuzzed and 939 corpus D/P/Pt wild
   PK4 (`tests/p5_fuzz.rs`).
-- P6, started: `gen/build4.rs` builds the full PK4. 1e4 built mons are Legal per verity and
-  PKHeX (`p6_built_mons_legal_1e4`).
+- P6 (M2 scope, D/P/Pt wild): `gen/build4.rs` builds the PK4; `gen/api4.rs` is the request API
+  (`GenRequest` → `generate`/`generate_for` → legality gate → `insert` + `apply_capture_side_effects`).
+  Specific slot or "any encounter"; level/nature/gender/ability/shiny/lead/HP type; IVs random,
+  exact or nearest; ball from the D/P/Pt wild set; moves natural or chosen (gated). D/P use
+  `dp.bin` learnsets, Pt uses `pt.bin`. Unown: `rng/unown4.rs` ports `SolaceonRuins4`, wired into
+  the matcher (partial match) and the generator (`Request::form`). `tests/p6_api.rs`: 10,552
+  results from 16k random requests across D/P/Pt (1,239 Unown) all PKHeX-legal
+  (`p6_api_random_requests_1e4`, ignored by default); specific errors; insertion into the real
+  Pt and Diamond saves dumps as legal with valid checksums and party stats equal to PKHeX's.
+- Fixed: a met level between the slot max and the Pressure level was accepted by the generator
+  (PKHeX allows only the range or exactly the Pressure level, which needs a Pressure lead).
 
 ## Next steps
 
-1. P6 API: `GenRequest` → generate → build → `analyze4` must be valid → insert into a box or
-   party slot (party: `reset_party_stats`) → `Save::register_dex`. Return specific errors
-   (`GenError`). Cover D/P learnsets (pick `dp.bin` vs `pt.bin` by version) and Unown (port
-   `SolaceonRuins4`).
+1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
+   held items. `insert` should call the P7 validator once it exists.
 2. P7: game-safe validator (`safety/`) per PLAN P7; every write goes through it.
 3. M3: P9.0 UI spike, then the minimal DS UI (file picker, box view, editor, add-Pokémon wizard).
    Load blobs from NitroFS.

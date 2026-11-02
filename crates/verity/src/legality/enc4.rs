@@ -71,6 +71,12 @@ pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
     if e.species() == WURMPLE && species != WURMPLE && !wurmple_valid(species, pk.analyze.pid) {
         return Rating::PartialMatch;
     }
+    // D/P/Pt Unown only appear in the Solaceon Ruins (PKHeX `EncounterArea4.IsUnownFormValid`).
+    if e.species() == UNOWN
+        && !crate::rng::unown4::form_valid(pk.analyze.pid, pk.analyze.iv32, pk.form)
+    {
+        return Rating::PartialMatch;
+    }
     Rating::Match
 }
 
@@ -171,7 +177,7 @@ pub struct WildMatches<'a> {
 }
 
 /// Wild slots for a D/P/Pt PK4 in PKHeX's yield order. `group` is `SlotsD`, `SlotsP` or
-/// `SlotsPt`. Unown is not supported.
+/// `SlotsPt`.
 pub fn wild_slots<'a>(
     pk: &MatchPkm,
     chain: &[EvoCriteria],
@@ -197,7 +203,7 @@ pub fn wild_slots<'a>(
     let mut yielded: Vec<(Encounter<'a>, bool)> = Vec::new();
     let mut partial: Option<Encounter<'a>> = None;
     for e in ed.group(group) {
-        if e.location() != pk.met_location || e.species() == UNOWN {
+        if e.location() != pk.met_location {
             continue;
         }
         let Some(evo) = chain.iter().find(|c| c.species == e.species()) else {
