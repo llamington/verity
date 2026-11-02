@@ -46,13 +46,17 @@ and gaps are in `docs/research/p5-plan.md`.
 - Fixed: a met level between the slot max and the Pressure level was accepted by the generator
   (PKHeX allows only the range or exactly the Pressure level, which needs a Pressure lead).
 
+- Phase H (partial): `tools/emu-harness` runs melonDS 1.1 headless from JSON scripts,
+  deterministically (see `docs/research/emu-harness.md`). Use it for DS visual checks
+  (`scripts/spike.json`). Retail ROM boot and two-instance multiplayer wait on owner ROMs/BIOS.
+
 ## Next steps
 
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
-   NFLib/µLibrary/libdsf installed). Verified in melonDS via `tools/emu/melon.py` (screenshots +
-   XTest input; see ui-stack.md). Next P9.1: scene
+   NFLib/µLibrary/libdsf installed). Verified headless with `tools/emu-harness` and in the GUI with
+   `tools/emu/melon.py`. Next P9.1: scene
    stack, file picker, save overview, box view, editor, add-Pokémon wizard; FFI per P9.2; blobs
    from NitroFS.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word

@@ -34,3 +34,8 @@ pkds.local.toml
 # melonDS DLDI SD folder and image (copies of saves)
 /sd/
 /sd.img
+/sd-harness.img
+
+# emu-harness build and run outputs
+tools/emu-harness/build/
+*.json.out/
