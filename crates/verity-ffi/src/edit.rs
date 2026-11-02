@@ -357,6 +357,216 @@ pub unsafe extern "C" fn verity_save_check(
     VerityErr::Ok
 }
 
+// ---- editor --------------------------------------------------------------------------------
+
+/// Field edits (`verity_edit`); `mask` selects the fields that apply.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VerityEdit {
+    /// 1 held item, 2 moves (PP reset to max), 4 IVs, 8 EVs, 16 level (EXP set to the level's
+    /// minimum), 32 friendship.
+    pub mask: u32,
+    pub held_item: u16,
+    pub moves: [u16; 4],
+    pub ivs: [u8; 6],
+    pub evs: [u8; 6],
+    pub level: u8,
+    pub friendship: u8,
+}
+
+pub const EDIT_ITEM: u32 = 1;
+pub const EDIT_MOVES: u32 = 2;
+pub const EDIT_IVS: u32 = 4;
+pub const EDIT_EVS: u32 = 8;
+pub const EDIT_LEVEL: u32 = 16;
+pub const EDIT_FRIENDSHIP: u32 = 32;
+
+fn game_rules(kind: SaveKind) -> Option<safety::Rules<'static>> {
+    use crate::ui::{blob, BlobKind};
+    use verity::data::{GameData, MoveData};
+    let (g, m) = match kind {
+        SaveKind::DP => (BlobKind::Dp, BlobKind::Moves4),
+        SaveKind::Pt => (BlobKind::Pt, BlobKind::Moves4),
+        SaveKind::HGSS => (BlobKind::Hgss, BlobKind::Moves4),
+        SaveKind::BW => (BlobKind::Bw, BlobKind::Moves5),
+        SaveKind::B2W2 => (BlobKind::B2w2, BlobKind::Moves5),
+    };
+    Some(safety::Rules {
+        kind,
+        game: GameData::load(blob(g)?).ok()?,
+        moves: MoveData::load(blob(m)?).ok()?,
+    })
+}
+
+fn slot_of(loc: VerityLoc) -> Slot {
+    if loc.box_index == 0xFF {
+        Slot::Party(loc.slot)
+    } else {
+        Slot::Box(loc.box_index, loc.slot)
+    }
+}
+
+/// The edited Pokémon (party data recomputed), or None for an empty/out-of-range slot.
+fn edited(
+    save: &verity::save::Save,
+    rules: &safety::Rules,
+    loc: VerityLoc,
+    e: &VerityEdit,
+) -> Option<verity::pkm::Pkm> {
+    let slot = slot_of(loc);
+    if let Slot::Party(i) = slot {
+        if i as usize >= save.party_count() {
+            return None;
+        }
+    }
+    let mut pk = save.pkm(slot).ok()?;
+    if pk.species() == 0 {
+        return None;
+    }
+    let pi = rules.game.species_form(pk.species(), pk.form());
+    if e.mask & EDIT_ITEM != 0 {
+        pk.set_held_item(e.held_item);
+    }
+    if e.mask & EDIT_MOVES != 0 {
+        pk.set_moves_with_pp(e.moves, &rules.moves);
+        pk.set_pp_ups([0; 4]);
+    }
+    if e.mask & EDIT_IVS != 0 {
+        pk.set_ivs(e.ivs);
+    }
+    if e.mask & EDIT_EVS != 0 {
+        pk.set_evs(e.evs);
+    }
+    if e.mask & EDIT_LEVEL != 0 {
+        pk.set_exp(verity::pkm::derived::exp_for_level(
+            e.level.clamp(1, 100),
+            pi.growth(),
+        ));
+    }
+    if e.mask & EDIT_FRIENDSHIP != 0 {
+        pk.set_friendship(e.friendship);
+    }
+    if pk.is_party_format() {
+        pk.reset_party_stats(&pi.base_info());
+    }
+    pk.refresh_checksum();
+    Some(pk)
+}
+
+/// C ABI: applies `edit` to a copy of the Pokémon at `loc` and reports the game-safe verdict
+/// (`issue`: 0 safe, else 1 + `safety::PkmIssue` index) and legality, without writing.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes; `edit`, `legality`, `issue` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn verity_edit_preview(
+    buf: *mut u8,
+    len: usize,
+    loc: VerityLoc,
+    edit: *const VerityEdit,
+    legality: *mut crate::ui::VerityLegality,
+    issue: *mut u8,
+) -> VerityErr {
+    if edit.is_null() || legality.is_null() || issue.is_null() {
+        return VerityErr::NullPointer;
+    }
+    let Some(save) = open(buf, len) else {
+        return VerityErr::Unrecognized;
+    };
+    let Some(rules) = game_rules(save.kind()) else {
+        return VerityErr::BadData;
+    };
+    let Some(pk) = edited(&save, &rules, loc, &*edit) else {
+        return VerityErr::BadArgument;
+    };
+    *issue = match safety::check_pkm(&rules, &pk, pk.is_party_format()) {
+        Ok(()) => 0,
+        Err(i) => 1 + i as u8,
+    };
+    let mut r = crate::ui::empty_legality();
+    legal::check(&save, &pk, &mut r);
+    *legality = r;
+    VerityErr::Ok
+}
+
+/// C ABI: writes `edit` to the Pokémon at `loc` through the game-safe validator. `mode` 0 is
+/// legal mode (also refuses a result legality judges illegal), 1 game-safe mode. Returns 0 on
+/// success, 1 + `PkmIssue` index when the validator refuses, 100 when legal mode refuses,
+/// 200 for a bad slot or missing data.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes; `edit` must be readable.
+#[no_mangle]
+pub unsafe extern "C" fn verity_edit_apply(
+    buf: *mut u8,
+    len: usize,
+    loc: VerityLoc,
+    edit: *const VerityEdit,
+    mode: u8,
+) -> u8 {
+    if edit.is_null() {
+        return 200;
+    }
+    let Some(mut save) = open(buf, len) else {
+        return 200;
+    };
+    let Some(rules) = game_rules(save.kind()) else {
+        return 200;
+    };
+    let Some(pk) = edited(&save, &rules, loc, &*edit) else {
+        return 200;
+    };
+    if mode == 0 {
+        let mut r = crate::ui::empty_legality();
+        legal::check(&save, &pk, &mut r);
+        if r.status == 2 {
+            return 100;
+        }
+    }
+    match safety::checked_set_pkm(&rules, &mut save, slot_of(loc), &pk) {
+        Ok(()) => 0,
+        Err(safety::WriteError::Pkm(i)) => 1 + i as u8,
+        Err(_) => 200,
+    }
+}
+
+/// C ABI: text for a game-safe issue code from `verity_edit_preview`/`verity_edit_apply`.
+#[no_mangle]
+pub extern "C" fn verity_issue_text(code: u8) -> *const u8 {
+    const T: [&[u8]; 23] = [
+        b"OK\0",
+        b"wrong format\0",
+        b"checksum mismatch\0",
+        b"bad egg flags\0",
+        b"species\0",
+        b"form\0",
+        b"ability\0",
+        b"held item not in this game\0",
+        b"move not in this game\0",
+        b"no moves\0",
+        b"duplicate move\0",
+        b"PP out of range\0",
+        b"nature\0",
+        b"level\0",
+        b"EXP out of range\0",
+        b"nickname\0",
+        b"OT name\0",
+        b"language\0",
+        b"origin game\0",
+        b"ball\0",
+        b"met location\0",
+        b"egg location\0",
+        b"party stats\0",
+    ];
+    match code {
+        0..=22 => T[code as usize].as_ptr(),
+        100 => c"illegal (legal mode)".as_ptr().cast(),
+        _ => c"cannot edit this slot".as_ptr().cast(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -448,6 +658,41 @@ mod tests {
                 verity_gen_insert(b, len, &bad, loc),
                 GenStatus::NatureConflictsWithSynchronize as u8
             );
+            // Editor: a moves edit that stays legal (Bidoof level-up moves) applies in legal
+            // mode; an EV of 255 everywhere is legal in Gen 4 too (only the total matters
+            // to PKHeX: 510), so use a duplicate move to see a game-safe refusal.
+            let mut ed = VerityEdit {
+                mask: EDIT_ITEM,
+                held_item: 1,
+                ..Default::default()
+            };
+            let mut lg = crate::ui::empty_legality();
+            let mut issue = 0u8;
+            assert_eq!(
+                verity_edit_preview(b, len, loc, &ed, &mut lg, &mut issue),
+                VerityErr::Ok
+            );
+            assert_eq!(issue, 0);
+            ed = VerityEdit {
+                mask: EDIT_MOVES,
+                moves: [33, 33, 0, 0],
+                ..Default::default()
+            };
+            verity_edit_preview(b, len, loc, &ed, &mut lg, &mut issue);
+            assert_eq!(issue, 1 + safety::PkmIssue::DuplicateMove as u8);
+            assert_eq!(verity_edit_apply(b, len, loc, &ed, 1), issue);
+            // An illegal-but-safe edit (Psychic on Bidoof) is refused in legal mode only.
+            ed = VerityEdit {
+                mask: EDIT_MOVES,
+                moves: [94, 0, 0, 0],
+                ..Default::default()
+            };
+            verity_edit_preview(b, len, loc, &ed, &mut lg, &mut issue);
+            assert_eq!((issue, lg.status), (0, 2));
+            assert_eq!(verity_edit_apply(b, len, loc, &ed, 0), 100);
+            assert_eq!(verity_edit_apply(b, len, loc, &ed, 1), 0);
+            verity_slot_view(b, len, loc, &mut v);
+            assert_eq!(v.moves[0], 94);
             assert_eq!(verity_save_finalize(b, len), VerityErr::Ok);
             let mut c = VeritySaveCheck::default();
             assert_eq!(verity_save_check(b, len, &mut c), VerityErr::Ok);

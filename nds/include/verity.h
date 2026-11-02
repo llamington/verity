@@ -81,6 +81,7 @@ typedef struct verity_pkm_view {
     uint8_t ivs[6];
     uint8_t evs[6];
     uint8_t types[2]; /* 0xFF when unknown */
+    uint8_t friendship;
 } verity_pkm_view;
 
 /**
@@ -168,6 +169,25 @@ verity_err verity_save_check(uint8_t *buf, size_t len, verity_save_check_result 
 
 /** Met/egg location name (generation 4 or 5); returns its length (0 if unknown). */
 size_t verity_location_name(uint8_t generation, uint16_t id, uint16_t *out, size_t cap);
+
+/** Field edits; mask: 1 held item, 2 moves (PP reset), 4 IVs, 8 EVs, 16 level, 32 friendship. */
+typedef struct verity_edit {
+    uint32_t mask;
+    uint16_t held_item;
+    uint16_t moves[4];
+    uint8_t ivs[6];
+    uint8_t evs[6];
+    uint8_t level;
+    uint8_t friendship;
+} verity_edit;
+
+/** Previews an edit: game-safe issue (0 safe) and legality, without writing. */
+verity_err verity_edit_preview(uint8_t *buf, size_t len, verity_loc loc, const verity_edit *edit,
+                               verity_legality_report *legality, uint8_t *issue);
+/** Writes an edit through the validator. mode 0 legal (refuses illegal), 1 game-safe.
+    Returns 0 OK, else a code for verity_issue_text. */
+uint8_t verity_edit_apply(uint8_t *buf, size_t len, verity_loc loc, const verity_edit *edit, uint8_t mode);
+const char *verity_issue_text(uint8_t code);
 
 /** A name from the attached strings blob; returns its length (0 if unknown). */
 size_t verity_name(uint32_t category, uint32_t id, uint16_t *out, size_t cap);

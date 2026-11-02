@@ -149,6 +149,7 @@ pub struct VerityPkmView {
     pub evs: [u8; 6],
     /// Primary and secondary type (0xFF when the personal data is not attached).
     pub types: [u8; 2],
+    pub friendship: u8,
 }
 
 fn decode(gen4: bool, raw: &[u16], out: &mut [u16]) {
@@ -200,6 +201,7 @@ fn view(kind: SaveKind, pk: &Pkm) -> VerityPkmView {
         ivs: pk.ivs().map(|x| x as u8),
         evs: pk.evs().map(|x| x as u8),
         types: [0xFF; 2],
+        friendship: pk.friendship(),
     };
     decode(gen4, &pk.nickname_raw(), &mut v.nickname);
     decode(gen4, &pk.ot_name_raw(), &mut v.ot_name);
@@ -379,6 +381,18 @@ pub struct VerityLegality {
     pub unsupported: u8,
 }
 
+pub(crate) fn empty_legality() -> VerityLegality {
+    VerityLegality {
+        status: 0,
+        check_count: 0,
+        checks: [0; 12],
+        move_ok: [1; 4],
+        enc_location: 0xFFFF,
+        enc_slot: 0xFF,
+        unsupported: 0,
+    }
+}
+
 #[cfg(feature = "alloc")]
 pub(crate) mod legal {
     use super::*;
@@ -424,7 +438,7 @@ pub(crate) mod legal {
         Some(leaked)
     }
 
-    pub(super) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
+    pub(crate) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
         if save.generation() != 4 {
             out.unsupported = 4;
             return;
@@ -484,15 +498,7 @@ pub unsafe extern "C" fn verity_legality(
     let Some(save) = open(buf, len) else {
         return VerityErr::Unrecognized;
     };
-    let mut r = VerityLegality {
-        status: 0,
-        check_count: 0,
-        checks: [0; 12],
-        move_ok: [1; 4],
-        enc_location: 0xFFFF,
-        enc_slot: 0xFF,
-        unsupported: 0,
-    };
+    let mut r = empty_legality();
     if let Slot::Party(i) = loc.slot() {
         if i as usize >= save.party_count() {
             return VerityErr::BadArgument;
