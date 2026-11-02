@@ -80,6 +80,22 @@ and gaps are in `docs/research/p5-plan.md`.
      fateful flag must match the template, Giratina-O orb.
    - Egg statics (EGG flag: Togepi/Riolu/etc.) and Pokéwalker: later; report "not checked".
    - Parity: extend the corpus test filter to `EncounterStatic4` (451 in corpus).
+0b. **Next — M4 bred eggs (EncounterEgg4, 253 in corpus).** From PKHeX:
+   - Match (`EncounterEnumerator4` Bred state, before trades/statics): egg location bred
+     (`Locations.IsEggLocationBred4`: 2000 Day Care, 2002 Link trade, or 3002 Faraway on
+     Pt/HG/SS); egg species = base of the lowest evo (`GetBaseSpeciesForm`), or a split-breed
+     (`Breeding.IsSplitBreedNotBabySpecies4`: Marill, Wobbuffet, Chansey, Mr. Mime, Snorlax,
+     Sudowoodo, Mantine, Roselia, ...; `TryGetSplit`); `CanHatchAsEgg`; lowest evo must
+     include level 1. Not a ground-tile encounter (pk tile must be 0). PID type must be None
+     (`EncounterEgg4.IsCompatible`; `FramePatternSettings.EggRandomAnyType4` default false).
+   - Moves (`LearnGroup4.CheckEncounterMoves`): after level-up/TM/tutor, remaining moves may be
+     egg moves of the egg's version source (HG/SS, Pt, else DP), any level-up move of the egg
+     species (inherit), or Volt Tackle on Pichu.
+   - `EncounterVerifier.VerifyEncounterEgg4`: met level 0; met location via
+     `EggHatchLocation4.LocationPermitted4` (mask DP=1, Pt=2, HG/SS=4; extract the table from
+     the PKHeX source by script); Link-trade eggs may hatch anywhere valid in any Gen 4 game;
+     Korean language cannot hatch at 63/85.
+   - Ball: Poké (FixedBall). Unhatched eggs (`LearnVerifierEgg`, `VerifyUnhatchedEgg`) later.
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
