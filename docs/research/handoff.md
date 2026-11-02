@@ -74,7 +74,8 @@ and gaps are in `docs/research/p5-plan.md`.
    (finalise, validate, rotate `.bak1..3`, temp file + rename, re-read and compare). FFI
    `verity_wild_species`, `verity_wild_encounters`, `verity_gen_insert`, `verity_save_finalize`,
    `verity_save_check`. `make emu-ui` runs it on a fresh copy of `sd/` in `build/emu/sd`; PKHeX
-   confirms the written save (checksums valid, added Pokémon legal, `.bak1` = original).
+   confirms the written save (checksums valid, added Pokémon legal, `.bak1` = original), and
+   retail Platinum loads it to Continue and into the game (`scripts/pt-loads-written.json`).
    Next slices: location names in the wizard (needs location strings in the data pipeline),
    lead/ball/IV options, Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
    backups, proportional font.
