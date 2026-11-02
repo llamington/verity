@@ -247,6 +247,7 @@ fn context() -> verity::legality::analysis4::Context4<'static> {
         },
         evo: Evo4::new(dp, hgss),
         enc_dppt: EncounterData::load(load("enc_dppt.bin")).unwrap(),
+        enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: verity::data::Strings::load(load("names4.bin")).unwrap(),
     }
@@ -258,10 +259,40 @@ fn parity(
     seed: u64,
     mutations_per: u32,
 ) -> (usize, Vec<String>, BTreeMap<String, (u32, u32)>) {
+    parity_with(n, seed, mutations_per, build_legal)
+}
+
+/// PKHeX-generated legal HG/SS wild PK4s (half HeartGold, half SoulSilver slots).
+fn build_legal_hgss(n: usize, dir: &Path, seed: u64) {
+    for (group, part) in [("SlotsHG", 0), ("SlotsSS", 1)] {
+        let sub = dir.join(group);
+        oracle(&[
+            "gen-wild4".as_ref(),
+            "Encounters4HGSS".as_ref(),
+            group.as_ref(),
+            (n / 2).to_string().as_ref(),
+            (seed + part).to_string().as_ref(),
+            sub.as_os_str(),
+        ]);
+        for e in fs::read_dir(&sub).unwrap().flatten() {
+            let name = format!("{group}-{}", e.file_name().to_string_lossy());
+            fs::rename(e.path(), dir.join(name)).unwrap();
+        }
+        fs::remove_dir(&sub).unwrap();
+    }
+}
+
+fn parity_with(
+    n: usize,
+    seed: u64,
+    mutations_per: u32,
+    build: fn(usize, &Path, u64),
+) -> (usize, Vec<String>, BTreeMap<String, (u32, u32)>) {
     let ctx = Box::leak(Box::new(context()));
     let tmp = std::env::temp_dir().join(format!("verity-p5p-{}-{seed}", std::process::id()));
     let legal = tmp.join("legal");
-    build_legal(n, &legal, seed);
+    fs::create_dir_all(&legal).unwrap();
+    build(n, &legal, seed);
     let mutated = tmp.join("mutated");
     fs::create_dir_all(&mutated).unwrap();
     let mut r = Rand::new(seed ^ 0xABCD);
@@ -287,7 +318,7 @@ fn parity(
     let mut per_id: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     let mut checked = 0;
     for (f, pk) in &files {
-        if !(10..=12).contains(&pk.version()) {
+        if !matches!(pk.version(), 7 | 8 | 10..=12) {
             continue;
         }
         let v = &pkhex[f];
@@ -369,6 +400,40 @@ fn p5_parity_fuzz() {
     );
 }
 
+#[test]
+fn p5_parity_fuzz_hgss() {
+    if !root().join("data/blobs/enc_hgss.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with(600, 91, 3, build_legal_hgss);
+    eprintln!("hgss checked {checked}");
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    assert!(checked > 0);
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+#[test]
+#[ignore]
+fn p5_parity_hgss_1e4() {
+    let (checked, bad, per_id) = parity_with(10_000, 4242, 4, build_legal_hgss);
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    eprintln!("hgss checked {checked}");
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
 /// PLAN P5 acceptance scale: >= 10^5 fuzzed. `cargo test --release -- --ignored p5_parity_1e5`.
 #[test]
 #[ignore]
@@ -418,7 +483,7 @@ fn p5_parity_corpus() {
                 continue;
             }
             let pk = Pkm::from_decrypted(Format::Pk4, &fs::read(dir.join(f)).unwrap()).unwrap();
-            if !(10..=12).contains(&pk.version()) {
+            if !matches!(pk.version(), 7 | 8 | 10..=12) {
                 continue;
             }
             let r = verity::legality::analysis4::analyze4(ctx, &pk);

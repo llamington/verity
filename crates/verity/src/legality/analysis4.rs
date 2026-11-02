@@ -86,6 +86,7 @@ pub struct Context4<'a> {
     pub learn: Learn4<'a>,
     pub evo: Evo4<'a>,
     pub enc_dppt: EncounterData<'a>,
+    pub enc_hgss: EncounterData<'a>,
     /// Gender ratio for species > 493 (for PKHeX `EntityGender` lookups).
     pub gen5: GameData<'a>,
     /// Gen 4-formatted species names by language ID (`names4.bin`).
@@ -219,7 +220,8 @@ fn evolution_valid(
     r[0].valid()
 }
 
-/// Analyses a PK4 whose origin is D/P/Pt (version 10..=12) in the Gen 4 format.
+/// Analyses a PK4 whose origin is D/P/Pt or HG/SS (versions 7, 8, 10..=12) in the Gen 4
+/// format. Only wild-slot origins are modelled.
 pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
     let inp = inputs(ctx, pk);
     let ratio = |s: u16| ctx.ratio(s);
@@ -232,10 +234,12 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
     // EncounterFinder.FindVerifiedEncounter
     let chain = ctx.evo.encounter_origin_chain(&inp.evo);
     let pidiv = analyze(&inp.analyze, ratio);
-    let group: &[u8] = match pk.version() {
-        10 => b"SlotsD",
-        11 => b"SlotsP",
-        _ => b"SlotsPt",
+    let (group, enc_data): (&[u8], _) = match pk.version() {
+        7 => (b"SlotsHG", &ctx.enc_hgss),
+        8 => (b"SlotsSS", &ctx.enc_hgss),
+        10 => (b"SlotsD", &ctx.enc_dppt),
+        11 => (b"SlotsP", &ctx.enc_dppt),
+        _ => (b"SlotsPt", &ctx.enc_dppt),
     };
     let m = if chain.is_empty() {
         None
@@ -244,7 +248,7 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
             &inp.matcher,
             &chain,
             pidiv,
-            &ctx.enc_dppt,
+            enc_data,
             group,
             ratio,
         ))
@@ -479,7 +483,14 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
                 | (1 << 13)
                 | (1 << 14)
                 | (1 << 15);
-            ball < 64 && DPPT & (1u64 << ball) != 0
+            // BallUseLegality.WildPokeBalls4_HGSS adds Kurt's Apricorn Balls (Fast..Moon).
+            const KURT: u64 = 0x7F << 17;
+            let allowed = if matches!(pk.version(), 7 | 8) {
+                DPPT | KURT
+            } else {
+                DPPT
+            };
+            ball < 64 && allowed & (1u64 << ball) != 0
         };
         if !ok {
             report.flag(CheckId::Ball);

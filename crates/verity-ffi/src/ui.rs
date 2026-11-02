@@ -26,6 +26,7 @@ pub enum BlobKind {
     Names4 = 8,
     Bw = 9,
     Moves5 = 10,
+    EncHgss = 11,
 }
 
 const SLOTS: usize = 16;
@@ -66,6 +67,7 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         8 => Names4,
         9 => Bw,
         10 => Moves5,
+        11 => EncHgss,
         _ => return None,
     })
 }
@@ -86,7 +88,9 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
         let ok = match k {
             BlobKind::Strings => Strings::load(data).is_ok(),
             BlobKind::Moves4 | BlobKind::Moves5 => verity::data::MoveData::load(data).is_ok(),
-            BlobKind::EncDppt => verity::data::encounters::EncounterData::load(data).is_ok(),
+            BlobKind::EncDppt | BlobKind::EncHgss => {
+                verity::data::encounters::EncounterData::load(data).is_ok()
+            }
             BlobKind::Names4 => Strings::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),
         };
@@ -429,6 +433,7 @@ pub(crate) mod legal {
             },
             evo: Evo4::new(dp, hgss),
             enc_dppt: EncounterData::load(blob(BlobKind::EncDppt)?).ok()?,
+            enc_hgss: EncounterData::load(blob(BlobKind::EncHgss)?).ok()?,
             gen5,
             names4: Strings::load(blob(BlobKind::Names4)?).ok()?,
         };
@@ -447,7 +452,7 @@ pub(crate) mod legal {
             out.unsupported = 1;
             return;
         }
-        if !(10..=12).contains(&pk.version()) {
+        if !matches!(pk.version(), 7 | 8 | 10..=12) {
             out.unsupported = 2;
             return;
         }
@@ -607,6 +612,7 @@ mod tests {
                 "moves4.bin",
                 "enc_dppt.bin",
                 "names4.bin",
+                "enc_hgss.bin",
             ];
             let kinds = [
                 BlobKind::Hgss,
@@ -615,6 +621,7 @@ mod tests {
                 BlobKind::Moves4,
                 BlobKind::EncDppt,
                 BlobKind::Names4,
+                BlobKind::EncHgss,
             ];
             for (n, k) in names.iter().zip(kinds) {
                 let b: &'static [u8] = std::boxed::Box::leak(

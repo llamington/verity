@@ -66,6 +66,7 @@ fn context() -> &'static Context4<'static> {
         },
         evo: Evo4::new(dp, hgss),
         enc_dppt: EncounterData::load(load("enc_dppt.bin")).unwrap(),
+        enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: Strings::load(load("names4.bin")).unwrap(),
     }))

@@ -14,6 +14,7 @@ const BALL_SAFARI: u8 = 5;
 const BALL_SPORT: u8 = 24;
 const BALL_POKE: u8 = 4;
 const MARSH_DPPT: u16 = 52;
+const SAFARI_HGSS: u16 = 202;
 const SHEDINJA: u16 = 292;
 const WURMPLE: u16 = 265;
 const SILCOON: u16 = 266;
@@ -60,7 +61,8 @@ fn wurmple_valid(species: u16, pid: u32) -> bool {
 
 pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
     let species = pk.analyze.species;
-    if (pk.ball == BALL_SAFARI) != (e.location() == MARSH_DPPT) {
+    // PKHeX `Locations4.IsSafariBallRequired`.
+    if (pk.ball == BALL_SAFARI) != matches!(e.location(), MARSH_DPPT | SAFARI_HGSS) {
         return Rating::PartialMatch;
     }
     if (pk.ball == BALL_SPORT) != (e.slot_type() == SlotType4::BugContest as u8)
@@ -72,9 +74,15 @@ pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
         return Rating::PartialMatch;
     }
     // D/P/Pt Unown only appear in the Solaceon Ruins (PKHeX `EncounterArea4.IsUnownFormValid`).
-    if e.species() == UNOWN
-        && !crate::rng::unown4::form_valid(pk.analyze.pid, pk.analyze.iv32, pk.form)
-    {
+    if e.species() == UNOWN && {
+        use crate::rng::unown4 as u;
+        let (pid, iv) = (pk.analyze.pid, pk.analyze.iv32);
+        if e.location() == u::RUINS_OF_ALPH {
+            !u::alph_form_valid(pid, iv, pk.form)
+        } else {
+            !u::form_valid(pid, iv, pk.form)
+        }
+    } {
         return Rating::PartialMatch;
     }
     Rating::Match
@@ -177,7 +185,7 @@ pub struct WildMatches<'a> {
 }
 
 /// Wild slots for a D/P/Pt PK4 in PKHeX's yield order. `group` is `SlotsD`, `SlotsP` or
-/// `SlotsPt`.
+/// `SlotsPt` (Method J), or `SlotsHG`/`SlotsSS` (Method K, from the HG/SS encounter data).
 pub fn wild_slots<'a>(
     pk: &MatchPkm,
     chain: &[EvoCriteria],
@@ -241,7 +249,11 @@ pub fn wild_slots<'a>(
             continue;
         };
         let ml = pk.analyze.met_level;
-        let lead = method_j::lead_info4_dppt(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio);
+        let lead = if matches!(pk.analyze.version, 7 | 8) {
+            crate::rng::method_k::lead_info4_hgss(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio)
+        } else {
+            method_j::lead_info4_dppt(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio)
+        };
         if !lead.is_valid() {
             defer(Deferral::SlotNumber, e);
             continue;

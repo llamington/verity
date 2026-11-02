@@ -40,6 +40,7 @@ public static class Program
                 "export-data" => HandleExportData(args),
                 "export-encounters" => HandleExportEncounters(args),
                 "check-wild4" => HandleCheckWild4(args),
+                "gen-wild4" => HandleGenWild4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -925,6 +926,38 @@ public static class Program
                 failures.Add(new { index = total - 1, report = la.Report(), lead = (int)la.Info.PIDIV.Lead });
         }
         Console.WriteLine(JsonSerializer.Serialize(new { total, valid, failures }, JsonOpts));
+        return 0;
+    }
+
+    // gen-wild4 <EncountersClass> <group> <count> <seed> <out-dir>: PKHeX-generated, PKHeX-legal
+    // wild PK4s from random slots of a group (used to fuzz verity's checker on HG/SS).
+    private static int HandleGenWild4(string[] args)
+    {
+        var asm = typeof(EntityFormat).Assembly;
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var t = asm.GetType("PKHeX.Core." + args[1])!;
+        var areas = (EncounterArea4[])t.GetField(args[2], all)!.GetValue(null)!;
+        var slots = areas.SelectMany(a => a.Slots).ToArray();
+        int count = int.Parse(args[3]);
+        var rng = new Random(int.Parse(args[4]));
+        Directory.CreateDirectory(args[5]);
+        var hgss = args[2].Contains("HG") || args[2].Contains("SS");
+        var tr = Sav(hgss ? (args[2].Contains("HG") ? GameVersion.HG : GameVersion.SS) : GameVersion.Pt);
+        int made = 0, tried = 0;
+        while (made < count && tried < count * 20)
+        {
+            tried++;
+            var slot = slots[rng.Next(slots.Length)];
+            tr.TID16 = (ushort)rng.Next(65536);
+            tr.SID16 = (ushort)rng.Next(65536);
+            PK4 pk;
+            try { pk = slot.ConvertToPKM(tr); } catch { continue; }
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            File.WriteAllBytes(Path.Combine(args[5], $"{made:D6}.pk4"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
         return 0;
     }
 
