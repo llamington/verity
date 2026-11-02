@@ -327,6 +327,160 @@ pub unsafe extern "C" fn verity_name(category: u32, id: u32, out: *mut u16, cap:
     n
 }
 
+/// Legality verdict for one slot (`verity_legality_report`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct VerityLegality {
+    /// 0 not checked (unsupported origin or data missing), 1 legal, 2 illegal.
+    pub status: u8,
+    /// Number of entries in `checks` (failed PKHeX check identifiers, `CheckId` order).
+    pub check_count: u8,
+    pub checks: [u8; 12],
+    /// Per move: 1 valid, 0 invalid.
+    pub move_ok: [u8; 4],
+    /// Matched encounter: location and slot number (0xFFFF/0xFF when none).
+    pub enc_location: u16,
+    pub enc_slot: u8,
+    /// Why status is 0: 1 egg, 2 origin game not yet supported, 3 data missing, 4 not Gen 4,
+    /// 5 hatched, 6 no wild encounter matched (statics, gifts and trades are not checked yet).
+    pub unsupported: u8,
+}
+
+#[cfg(feature = "alloc")]
+mod legal {
+    use super::*;
+    use core::cell::Cell;
+    use verity::data::encounters::EncounterData;
+    use verity::data::MoveData;
+    use verity::legality::analysis4::{analyze4, Context4, Matched};
+    use verity::legality::{evo::Evo4, moves4::Learn4};
+
+    struct Holder(Cell<Option<&'static Context4<'static>>>);
+    // SAFETY: single-threaded FFI (see `Registry`).
+    unsafe impl Sync for Holder {}
+    static CTX: Holder = Holder(Cell::new(None));
+
+    /// The Gen 4 legality context, built once from attached blobs.
+    fn context() -> Option<&'static Context4<'static>> {
+        if let Some(c) = CTX.0.get() {
+            return Some(c);
+        }
+        let g = |k| blob(k).and_then(|b| GameData::load(b).ok());
+        let (hgss, pt, dp, gen5) = (
+            g(BlobKind::Hgss)?,
+            g(BlobKind::Pt)?,
+            g(BlobKind::Dp)?,
+            g(BlobKind::B2w2)?,
+        );
+        let ctx = Context4 {
+            hgss,
+            learn: Learn4 {
+                hgss,
+                pt,
+                dp,
+                moves: MoveData::load(blob(BlobKind::Moves4)?).ok()?,
+            },
+            evo: Evo4::new(dp, hgss),
+            enc_dppt: EncounterData::load(blob(BlobKind::EncDppt)?).ok()?,
+            gen5,
+            names4: Strings::load(blob(BlobKind::Names4)?).ok()?,
+        };
+        let leaked: &'static Context4<'static> =
+            alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
+        CTX.0.set(Some(leaked));
+        Some(leaked)
+    }
+
+    pub(super) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
+        if save.generation() != 4 {
+            out.unsupported = 4;
+            return;
+        }
+        if pk.is_egg() {
+            out.unsupported = 1;
+            return;
+        }
+        if !(10..=12).contains(&pk.version()) {
+            out.unsupported = 2;
+            return;
+        }
+        let Some(ctx) = context() else {
+            out.unsupported = 3;
+            return;
+        };
+        if pk.egg_location() != 0 {
+            out.unsupported = 5;
+            return;
+        }
+        let r = analyze4(ctx, pk);
+        // Only wild slots are modelled; without a slot match the origin is something verity
+        // cannot judge yet, so it says nothing rather than a false "illegal".
+        if matches!(r.matched, Matched::Invalid) {
+            out.unsupported = 6;
+            return;
+        }
+        out.status = if r.valid() { 1 } else { 2 };
+        for (i, c) in r.invalid.iter().take(out.checks.len()).enumerate() {
+            out.checks[i] = *c as u8;
+            out.check_count = i as u8 + 1;
+        }
+        out.move_ok = r.moves.map(|m| m.valid() as u8);
+        if let Matched::Slot { encounter, .. } = r.matched {
+            out.enc_location = encounter.location();
+            out.enc_slot = encounter.slot_number();
+        }
+    }
+}
+
+/// C ABI: legality of the Pokémon at `loc` (PKHeX-equivalent; D/P/Pt wild origins for now).
+/// Needs the Hgss, Pt, Dp, B2w2, Moves4, EncDppt and Names4 blobs attached.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes; `out` to a writable `VerityLegality`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_legality(
+    buf: *mut u8,
+    len: usize,
+    loc: VerityLoc,
+    out: *mut VerityLegality,
+) -> VerityErr {
+    if out.is_null() {
+        return VerityErr::NullPointer;
+    }
+    let Some(save) = open(buf, len) else {
+        return VerityErr::Unrecognized;
+    };
+    let mut r = VerityLegality {
+        status: 0,
+        check_count: 0,
+        checks: [0; 12],
+        move_ok: [1; 4],
+        enc_location: 0xFFFF,
+        enc_slot: 0xFF,
+        unsupported: 0,
+    };
+    if let Slot::Party(i) = loc.slot() {
+        if i as usize >= save.party_count() {
+            return VerityErr::BadArgument;
+        }
+    }
+    let Ok(pk) = save.pkm(loc.slot()) else {
+        return VerityErr::BadArgument;
+    };
+    if pk.species() == 0 {
+        return VerityErr::BadArgument;
+    }
+    #[cfg(feature = "alloc")]
+    legal::check(&save, &pk, &mut r);
+    #[cfg(not(feature = "alloc"))]
+    {
+        r.unsupported = 3;
+    }
+    *out = r;
+    VerityErr::Ok
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +550,80 @@ mod tests {
             {
                 assert_eq!(verity_slot_view(b, n, past, &mut v), VerityErr::Ok);
             }
+            // Legality: a Pt wild mon in the real save checks out like PKHeX says (see p5 corpus).
+            let names = [
+                "hgss.bin",
+                "dp.bin",
+                "b2w2.bin",
+                "moves4.bin",
+                "enc_dppt.bin",
+                "names4.bin",
+            ];
+            let kinds = [
+                BlobKind::Hgss,
+                BlobKind::Dp,
+                BlobKind::B2w2,
+                BlobKind::Moves4,
+                BlobKind::EncDppt,
+                BlobKind::Names4,
+            ];
+            for (n, k) in names.iter().zip(kinds) {
+                let b: &'static [u8] = std::boxed::Box::leak(
+                    file(&std::format!("data/blobs/{n}"))
+                        .unwrap()
+                        .into_boxed_slice(),
+                );
+                assert_eq!(
+                    verity_data_attach(k as u32, b.as_ptr(), b.len()),
+                    VerityErr::Ok,
+                    "{n}"
+                );
+            }
+            // PKHeX's verdict per slot, from the oracle dump of the same save.
+            let dump: serde_json::Value = serde_json::from_slice(
+                &file("corpus/reports/oracle-smoke/gen4_platinum.dump.json").unwrap_or_default(),
+            )
+            .unwrap_or(serde_json::Value::Null);
+            let pkhex = |name: &str| -> Option<bool> {
+                dump["slots"]
+                    .as_array()?
+                    .iter()
+                    .find(|s| s["name"] == name)?["legal"]
+                    .as_bool()
+            };
+            let mut r = core::mem::zeroed::<VerityLegality>();
+            let (mut legal, mut illegal, mut skipped) = (0, 0, 0);
+            let mut disagree = std::vec::Vec::new();
+            for bx in 0..18u8 {
+                for sl in 0..30u8 {
+                    let loc = VerityLoc {
+                        box_index: bx,
+                        slot: sl,
+                    };
+                    if verity_legality(b, n, loc, &mut r) != VerityErr::Ok {
+                        continue;
+                    }
+                    match r.status {
+                        1 => legal += 1,
+                        2 => illegal += 1,
+                        _ => skipped += 1,
+                    }
+                    let name = std::format!("box{bx:02}_{sl:02}");
+                    if r.status != 0 {
+                        if let Some(p) = pkhex(&name) {
+                            if p != (r.status == 1) {
+                                disagree.push(name);
+                            }
+                        }
+                    }
+                }
+            }
+            std::eprintln!("legal {legal} illegal {illegal} not checked {skipped}");
+            assert!(legal > 0);
+            assert!(
+                disagree.is_empty(),
+                "verdicts differ from PKHeX: {disagree:?}"
+            );
             verity_data_attach(BlobKind::Strings as u32, ptr::null(), 0);
             verity_data_attach(BlobKind::Pt as u32, ptr::null(), 0);
         }

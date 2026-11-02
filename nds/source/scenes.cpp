@@ -440,7 +440,37 @@ private:
         at(top(), 0, 17, "Met Lv %u  loc %u  ball %u", v.met_level, v.met_location, v.ball);
         at(top(), 0, 18, "PID %08lX", (unsigned long)v.pid);
         if (!v.checksum_ok)
-            at(top(), 0, 20, "! checksum mismatch");
+            at(top(), 0, 19, "! checksum mismatch");
+        legality_line();
+    }
+
+    void legality_line()
+    {
+        uint32_t ms = 0;
+        verity_legality_report r = party_ ? core::legality(0xFF, cur_, &ms)
+                                          : core::legality(box_, cur_, &ms);
+        static const char* why[] = {"",        "egg",       "origin game",
+                                    "data missing", "Gen 5 save", "hatched",
+                                    "gift/static/trade"};
+        if (r.status == 1)
+            at(top(), 0, 21, "LEGAL  (wild slot, %lu ms)", (unsigned long)ms);
+        else if (r.status == 2)
+        {
+            char list[40] = "";
+            for (int i = 0; i < r.check_count && strlen(list) < 24; i++)
+            {
+                strcat(list, i ? " " : "");
+                strcat(list, core::check_name(r.checks[i]));
+            }
+            bool moves = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
+            at(top(), 0, 21, "ILLEGAL (%lu ms)", (unsigned long)ms);
+            at(top(), 0, 22, " %s%s", list, moves ? " Moves" : "");
+        }
+        else
+        {
+            at(top(), 0, 21, "Not checked yet:");
+            at(top(), 0, 22, " %s", r.unsupported < 7 ? why[r.unsupported] : "?");
+        }
     }
 };
 

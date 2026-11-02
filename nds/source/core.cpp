@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include <filesystem.h>
+#include <nds.h>
 
 #include "ui.h"
 
@@ -123,6 +124,44 @@ verity_pkm_view slot(uint8_t box_index, uint8_t s)
         verity_slot_view(g_doc.buf, g_doc.len, verity_loc{box_index, s}, &v) != VERITY_OK)
         memset(&v, 0, sizeof(v));
     return v;
+}
+
+verity_legality_report legality(uint8_t box_index, uint8_t s, uint32_t* ms)
+{
+    verity_legality_report r;
+    memset(&r, 0, sizeof(r));
+    if (!g_doc.loaded())
+        return r;
+    if (g_doc.info.generation == 4)
+    {
+        // Everything the Gen 4 legality context reads.
+        attach(VERITY_BLOB_HGSS, "hgss.bin");
+        attach(VERITY_BLOB_PT, "pt.bin");
+        attach(VERITY_BLOB_DP, "dp.bin");
+        attach(VERITY_BLOB_B2W2, "b2w2.bin");
+        attach(VERITY_BLOB_MOVES4, "moves4.bin");
+        attach(VERITY_BLOB_ENC_DPPT, "enc_dppt.bin");
+        attach(VERITY_BLOB_NAMES4, "names4.bin");
+    }
+    cpuStartTiming(0);
+    if (verity_legality(g_doc.buf, g_doc.len, verity_loc{box_index, s}, &r) != VERITY_OK)
+        memset(&r, 0, sizeof(r));
+    uint32_t ticks = cpuEndTiming();
+    if (ms)
+        *ms = timerTicks2msec(ticks);
+    return r;
+}
+
+const char* check_name(uint8_t id)
+{
+    // legality::analysis4::CheckId order.
+    static const char* names[] = {
+        "CurrentMove", "Encounter", "Shiny",  "EC",        "PID",        "Gender",     "EVs",
+        "Language",    "Nickname",  "Trainer", "IVs",      "Level",      "Ball",       "Form",
+        "Egg",         "Misc",      "Fateful", "Ribbon",   "Ability",    "Evolution",  "Nature",
+        "GameOrigin",  "HeldItem",  "Marking", "TrashBytes", "SlotType", "Memory",
+    };
+    return id < sizeof(names) / sizeof(names[0]) ? names[id] : "?";
 }
 
 void box_name(uint32_t b, char* out, int cap)

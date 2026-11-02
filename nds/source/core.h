@@ -31,6 +31,9 @@ bool load_data_for(uint8_t kind);
 bool data_available();
 
 verity_pkm_view slot(uint8_t box_index, uint8_t slot);
+// Legality of a slot; `ms` gets the time taken. Loads the legality data on first use (Gen 4).
+verity_legality_report legality(uint8_t box_index, uint8_t slot, uint32_t* ms);
+const char* check_name(uint8_t id);
 void box_name(uint32_t box_index, char* out, int cap);
 
 // The last opened file, kept in /_nds/verity/last.txt on the SD card.
