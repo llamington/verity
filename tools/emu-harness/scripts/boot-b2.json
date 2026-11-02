@@ -1,0 +1,18 @@
+// Phase H acceptance: Black 2 to the title screen and the Continue menu, deterministically.
+// Needs owner-dumped roms/black2.nds and bios/{bios7,bios9,firmware}.bin.
+{
+  "rom": "../../../roms/black2.nds",
+  "bios_dir": "../../../bios",
+  "save": "../../../corpus/real/pkhex-avalonia/gen5_white2.sav",
+  "steps": [
+    {"wait": 1850},
+    {"press": ["Start"], "frames": 2},
+    {"wait": 120},
+    {"screenshot": "title.png"},
+    {"wait_until": {"screen_hash": "f4975b87d9f16887af89866328d685e1", "screen": "both"}, "timeout": 0},
+    {"press": ["A"], "frames": 2},
+    {"wait": 300},
+    {"screenshot": "continue.png"},
+    {"wait_until": {"screen_hash": "8a48b4a0bd0327a34f9b453dcc8368da", "screen": "both"}, "timeout": 0}
+  ]
+}

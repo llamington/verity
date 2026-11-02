@@ -12,6 +12,7 @@
 //                                         // (default: melonDS FreeBIOS + generated firmware)
 //     "sd_dir": "sd", "sd_image": "sd.img",  // optional DLDI SD card synced from a folder
 //     "rtc": [2026, 1, 1, 12, 0, 0],      // fixed date/time (default shown)
+//     "direct_boot": true,                // skip the DS menu (default; forced with FreeBIOS)
 //     "steps": [
 //       {"press": ["A"], "frames": 2},          // hold keys, then release for one frame
 //       {"hold": ["Down"], "frames": 30},       // hold without the release frame
@@ -31,6 +32,7 @@
 // object per step with the frame number and screen hashes). Exit status 0 when every step passes.
 
 #include <cstdio>
+#include <filesystem>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -288,6 +290,23 @@ void run_step(Ctx& c, size_t i, const json::Value& st)
         write_png(c, path);
         log_step(c, i, "screenshot", ",\"path\":\"" + esc(path) + "\"", true);
     }
+    else if (st.has("every"))
+    {
+        // {"every": 60, "frames": 1200, "prefix": "boot"}: screenshot every N frames (exploration).
+        long long n = st["every"].i(), total = st["frames"].i();
+        std::string prefix = st.has("prefix") ? st["prefix"].s : "f";
+        for (long long f = 1; f <= total; f++)
+        {
+            run_frame(c, 0, std::nullopt);
+            if (f % n == 0)
+            {
+                char name[96];
+                snprintf(name, sizeof(name), "%s-%06llu.png", prefix.c_str(), (unsigned long long)c.frame);
+                write_png(c, join(c.out, name));
+            }
+        }
+        log_step(c, i, "every", "", true);
+    }
     else if (st.has("hash"))
     {
         log_step(c, i, "hash", ",\"label\":\"" + esc(st["hash"].s) + "\"", true);
@@ -339,7 +358,7 @@ int main(int argc, char** argv)
         size_t slash = script.rfind('/');
         c.base = slash == std::string::npos ? "." : script.substr(0, slash);
         c.out = out.empty() ? script + ".out" : out;
-        mkdir(c.out.c_str(), 0755);
+        std::filesystem::create_directories(c.out);
 
         NDSArgs args;
         args.JIT = std::nullopt;
@@ -381,7 +400,8 @@ int main(int argc, char** argv)
 
         c.nds->Reset();
         c.nds->SetNDSCart(std::move(cart));
-        if (c.nds->NeedsDirectBoot())
+        bool direct = !cfg.has("direct_boot") || cfg["direct_boot"].b;
+        if (direct || c.nds->NeedsDirectBoot())
         {
             std::string name = rom_path.substr(rom_path.rfind('/') + 1);
             c.nds->SetupDirectBoot(name);

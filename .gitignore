@@ -38,3 +38,4 @@ pkds.local.toml
 # emu-harness build and run outputs
 tools/emu-harness/build/
 *.json.out/
+/build/

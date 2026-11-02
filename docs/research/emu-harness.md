@@ -6,6 +6,7 @@ outputs are documented at the top of `src/main.cpp`.
 
 ```sh
 make emu-harness                       # configure + build (tools/emu-harness/build)
+make emu-accept                        # Phase H boot acceptance (skips without roms/ and bios/)
 tools/emu-harness/build/emu-harness tools/emu-harness/scripts/spike.json [--out DIR]
 ```
 
@@ -18,12 +19,19 @@ tools/emu-harness/build/emu-harness tools/emu-harness/scripts/spike.json [--out 
 | Steps: press/hold, touch, drag, wait, wait_until (screen hash / RAM), assert_ram, screenshot, hash, dump_save | done |
 | Outputs: PNGs, save dumps, `run.jsonl` (frame number + screen hashes per step) | done |
 | Homebrew with a DLDI SD card synced from a folder | done (`sd_dir`/`sd_image`) |
-| Real BIOS7/BIOS9/firmware (`bios_dir`) | implemented, untested: no dumps on this machine |
-| Retail ROMs; boot Platinum/B2W2 to title and Continue deterministically | **blocked: needs owner-dumped ROMs and BIOS** (PLAN §9 `PKDS_ROM_DIR`, `PKDS_BIOS_DIR`) |
+| Real BIOS7/BIOS9/firmware (`bios_dir`) | done (owner dumps in `bios/`) |
+| Retail ROMs; boot Platinum/B2W2 to title and Continue deterministically | **done**: `scripts/boot-pt.json`, `scripts/boot-b2.json` (`make emu-accept`); real saves load (Pt: RoC 74:10, 8 badges; B2 with a W2 save: Castelia City, 8 badges); two runs identical, screen hashes locked in the scripts |
 | Two instances with local multiplayer (Download Play) | not started; `MP_*` hooks are stubs |
 | GDB stub passthrough | compiled in (`GDBSTUB_ENABLED`), not wired to script options yet |
 
 Speed: about 440 frames/s on this machine for the spike (7x real time).
+
+Owner files (gitignored): `roms/platinum.nds` (CPUE), `roms/black2.nds` (IREO),
+`roms/heartgold.nds` (IPKE), `roms/white.nds` (IRAO), `bios/bios7.bin`, `bios/bios9.bin`,
+`bios/firmware.bin`.
+
+Exploration step `{"every": N, "frames": M, "prefix": "p"}` screenshots every N frames, for
+finding menu paths before freezing a script. `direct_boot` (default true) skips the DS menu.
 
 ## Notes
 
