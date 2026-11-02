@@ -73,6 +73,14 @@ PKHeX). Perf note: Ruins of Alph Unown legality takes ~107 ms on DS (the form re
 optimise before P9 acceptance (budget 50 ms).
 Then M6 mystery gifts (PGT/PCD: 626 in corpus) and M5 Gen 5.
 
+**M6 starting point:** PKHeX's Gen 4 event DB is `Resources/legality/mgdb/wc4.pkl` (590 PCD
+records of 0x358 bytes, `EncounterEvent.MGDB_G4`); legality matching lives in
+`MysteryGifts/PGT.cs` (`IsMatchExact`, PID types/shiny locks, egg gifts) and `PCD.cs`, and the
+enumerator checks events first for fateful Pokémon (`EncounterEnumerator4` Event/EventLocal,
+plus `PGT.IsRangerManaphy`). Plan: export the DB through the oracle into a gift blob, port
+PGT/PCD parsing + matching, extend corpus parity to PGT/PCD, then P8 injection (R3 region
+research, R4 unlock flags, pending-gift slots, duplicate prevention, harness collection test).
+
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
