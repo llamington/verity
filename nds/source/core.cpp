@@ -219,6 +219,7 @@ bool ensure_gen4_data()
     ok &= attach(VERITY_BLOB_MOVES4, "moves4.bin");
     ok &= attach(VERITY_BLOB_ENC_DPPT, "enc_dppt.bin");
     ok &= attach(VERITY_BLOB_NAMES4, "names4.bin");
+    ok &= attach(VERITY_BLOB_ENC_HGSS, "enc_hgss.bin");
     return ok;
 }
 
