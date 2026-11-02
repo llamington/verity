@@ -580,23 +580,24 @@ public:
             }
             int before = opt_;
             if (in.rep & KEY_UP)
-                opt_ = (opt_ + 3) % 4;
+                opt_ = (opt_ + kOpts - 1) % kOpts;
             if (in.rep & KEY_DOWN)
-                opt_ = (opt_ + 1) % 4;
+                opt_ = (opt_ + 1) % kOpts;
             int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
             if (in.tapped)
             {
                 int row = in.tap_y / 8 - 2;
-                if (row >= 0 && row < 4)
+                if (row >= 0 && row < kOpts)
                 {
-                    if (row == opt_ && row < 3)
+                    if (row == opt_ && row < kOpts - 1)
                         dir = 1;
                     opt_ = row;
                 }
             }
             if (dir)
                 change(dir);
-            bool go = (opt_ == 3 && ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == 3))) ||
+            bool go = (opt_ == kOpts - 1 &&
+                       ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == kOpts - 1))) ||
                       (in.down & KEY_START);
             if (go && generate())
                 return false;
@@ -619,6 +620,11 @@ private:
     int nature_ = -1;  // -1 any
     bool shiny_ = false;
     int level_ = 0;  // 0 any, else the level
+    int gender_ = -1;  // -1 any, 0 male, 1 female
+    int lead_ = 0;     // 0 none, 1 Synchronize, 2 Cute Charm, 3 Poke Radar chain
+    int ball_ = 0;     // 0 default, else a ball ID from kBalls
+    static constexpr int kOpts = 7;
+    static constexpr uint8_t kBalls[] = {4, 3, 2, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     char status_[48] = "";
     ListView list_, enc_list_;
 
@@ -644,6 +650,21 @@ private:
             if (level_ > hi || level_ < lo)
                 level_ = 0;
         }
+        else if (opt_ == 3)
+            gender_ = (gender_ + 1 + dir + 3) % 3 - 1;
+        else if (opt_ == 4)
+            lead_ = (lead_ + dir + 4) % 4;
+        else if (opt_ == 5)
+        {
+            int n = (int)(sizeof(kBalls) / sizeof(kBalls[0])) + 1;
+            ball_ = (ball_ + dir + n) % n;
+        }
+    }
+
+    static const char* lead_name(int l)
+    {
+        static const char* names[] = {"None", "Synchronize", "Cute Charm", "Poke Radar"};
+        return names[l];
     }
 
     bool generate()
@@ -659,9 +680,30 @@ private:
         r.encounter_index = enc_ix_ >= 0 ? enc_[enc_ix_].index : 0xFFFF;
         r.level = level_ ? (uint8_t)level_ : 0xFF;
         r.nature = nature_ < 0 ? 0xFF : (uint8_t)nature_;
-        r.gender = 0xFF;
+        r.gender = gender_ < 0 ? 0xFF : (uint8_t)gender_;
         r.shiny = shiny_;
-        r.ball = 0xFF;
+        r.ball = ball_ ? kBalls[ball_ - 1] : 0xFF;
+        r.lead = (uint8_t)lead_;
+        if (lead_ == 1)
+        {
+            if (nature_ < 0)
+            {
+                snprintf(status_, sizeof(status_), "Synchronize: choose a nature");
+                draw_options();
+                return false;
+            }
+            r.lead_param = (uint8_t)nature_;
+        }
+        if (lead_ == 2)
+        {
+            if (gender_ < 0)
+            {
+                snprintf(status_, sizeof(status_), "Cute Charm: choose a gender");
+                draw_options();
+                return false;
+            }
+            r.lead_param = (uint8_t)gender_;
+        }
         r.met_date[0] = t ? (uint8_t)(t->tm_year - 100) : 26;
         r.met_date[1] = t ? (uint8_t)(t->tm_mon + 1) : 1;
         r.met_date[2] = t ? (uint8_t)t->tm_mday : 1;
@@ -760,8 +802,12 @@ private:
             at(bottom(), 0, 4, " Level   < %d >", level_);
         else
             at(bottom(), 0, 4, " Level   < Any >");
-        at(bottom(), 0, 5, " Generate and place");
-        at(bottom(), 0, 7, " %s", status_);
+        at(bottom(), 0, 5, " Gender  < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+        at(bottom(), 0, 6, " Lead    < %s >", lead_name(lead_));
+        at(bottom(), 0, 7, " Ball    < %s >",
+           ball_ ? ui::name(VERITY_NAME_ITEMS4, kBalls[ball_ - 1]) : "Default");
+        at(bottom(), 0, 8, " Generate and place");
+        at(bottom(), 0, 10, " %s", status_);
     }
 };
 
