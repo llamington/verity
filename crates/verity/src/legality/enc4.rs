@@ -187,8 +187,8 @@ pub struct WildMatches<'a> {
 /// PKHeX `EncounterEnumerator4` static groups per origin version (Pokéwalker not modelled yet).
 pub fn static_groups(version: u8) -> &'static [&'static [u8]] {
     match version {
-        7 => &[b"StaticHG", b"Encounter_HGSS"],
-        8 => &[b"StaticSS", b"Encounter_HGSS"],
+        7 => &[b"StaticHG", b"Encounter_HGSS", b"Encounter_PokeWalker"],
+        8 => &[b"StaticSS", b"Encounter_HGSS", b"Encounter_PokeWalker"],
         10 => &[b"StaticD", b"StaticDP", b"StaticDPPt"],
         11 => &[b"StaticP", b"StaticDP", b"StaticDPPt"],
         _ => &[b"StaticPt", b"StaticDPPt"],
@@ -260,8 +260,59 @@ fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     !(e.form() != evo.form && !form_changeable(e.species()))
 }
 
-/// PKHeX `EncounterStatic4.IsCompatible`.
-fn static_compatible(e: &Encounter, pk: &MatchPkm, kind: PidType) -> bool {
+fn is_walker(e: &Encounter) -> bool {
+    e.kind() == Some(crate::data::encounters::EncounterKind::Pokewalker4)
+}
+
+/// PKHeX `EncounterStatic4Pokewalker.IsMatchExact` (format 4; `IsMatchGender` always passes
+/// apart from an Azurill quirk that also returns true).
+fn walker_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
+    pk.egg_location == 0
+        && pk.met_location == e.location()
+        && pk.analyze.met_level == e.level_min()
+        && !(e.form() != evo.form && !form_changeable(e.species()))
+}
+
+/// PKHeX `PokewalkerRNG.GetLeastEffortSeed(...).Type != None`: the mic test reaches any seed,
+/// so this holds whenever the IV halves have an LCRNG seed at all.
+fn walker_seed_exists(iv32: u32) -> bool {
+    let ivs: [u8; 6] = core::array::from_fn(|i| ((iv32 >> (5 * i)) & 0x1F) as u8);
+    let mut buf = [0u32; crate::rng::reversal::MAX_SEEDS_IV];
+    crate::rng::reversal::seeds_from_ivs(&mut buf, ivs) != 0
+}
+
+/// PKHeX `EncounterMatchRating` for statics: 0 Match, 1 DeferredErrors, 2 PartialMatch.
+fn static_rating(e: &Encounter, pk: &MatchPkm) -> u8 {
+    if is_walker(e) {
+        if pk.ball != BALL_POKE || !walker_seed_exists(pk.analyze.iv32) {
+            return 2;
+        }
+        return if pk.is_shiny { 1 } else { 0 };
+    }
+    if e.ball() == BALL_POKE && pk.ball != e.ball() {
+        2
+    } else {
+        0
+    }
+}
+
+/// PKHeX `EncounterStatic4.IsCompatible` / `EncounterStatic4Pokewalker.IsCompatible`.
+fn static_compatible(
+    e: &Encounter,
+    pk: &MatchPkm,
+    kind: PidType,
+    ratio: &impl Fn(u16) -> u8,
+) -> bool {
+    if is_walker(e) {
+        return match kind {
+            PidType::Pokewalker => true,
+            PidType::CuteCharm => {
+                crate::rng::finder::is_cute_charm(&pk.analyze, ratio)
+                    && cute_charm_valid(e.species(), pk)
+            }
+            _ => false,
+        };
+    }
     const SHINY_ALWAYS: u8 = 2;
     if e.species() == 172 {
         return kind == PidType::Pokewalker;
@@ -308,29 +359,37 @@ pub fn wild_slots<'a>(
     // EncounterEnumerator4: (encounter, partial) in yield order; the first partial match is
     // deferred to the end (shared across statics and slots).
     let mut seq: Vec<(Encounter<'a>, bool)> = Vec::new();
-    let mut partial: Option<Encounter<'a>> = None;
+    // The enumerator's Deferred: the best (lowest) non-Match rating, first on ties.
+    let mut partial: Option<(Encounter<'a>, u8)> = None;
+    fn keep<'b>(partial: &mut Option<(Encounter<'b>, u8)>, e: Encounter<'b>, r: u8) {
+        if partial.is_none_or(|(_, cur)| r < cur) {
+            *partial = Some((e, r));
+        }
+    }
     let push_statics = |seq: &mut Vec<(Encounter<'a>, bool)>,
-                        partial: &mut Option<Encounter<'a>>| {
+                        partial: &mut Option<(Encounter<'a>, u8)>| {
         for g in static_groups(pk.analyze.version) {
             for e in ed.group(g) {
                 let Some(evo) = evo_of(e.species()) else {
                     continue;
                 };
-                if !static_match_exact(&e, pk, evo) {
+                let exact = if is_walker(&e) {
+                    walker_match_exact(&e, pk, evo)
+                } else {
+                    static_match_exact(&e, pk, evo)
+                };
+                if !exact {
                     continue;
                 }
-                let gift = e.ball() == BALL_POKE;
-                if gift && pk.ball != e.ball() {
-                    if partial.is_none() {
-                        *partial = Some(e);
-                    }
-                } else {
-                    seq.push((e, false));
+                match static_rating(&e, pk) {
+                    0 => seq.push((e, false)),
+                    r => keep(partial, e, r),
                 }
             }
         }
     };
-    let push_slots = |seq: &mut Vec<(Encounter<'a>, bool)>, partial: &mut Option<Encounter<'a>>| {
+    let push_slots = |seq: &mut Vec<(Encounter<'a>, bool)>,
+                      partial: &mut Option<(Encounter<'a>, u8)>| {
         for e in ed.group(group) {
             if e.location() != pk.met_location {
                 continue;
@@ -343,8 +402,8 @@ pub fn wild_slots<'a>(
             }
             if rating(&e, pk) == Rating::Match {
                 seq.push((e, false));
-            } else if partial.is_none() {
-                *partial = Some(e);
+            } else {
+                keep(partial, e, 2);
             }
         }
     };
@@ -355,7 +414,7 @@ pub fn wild_slots<'a>(
     } else {
         push_statics(&mut seq, &mut partial);
         push_slots(&mut seq, &mut partial);
-        if let Some(e) = partial {
+        if let Some((e, _)) = partial {
             seq.push((e, true));
         }
     }
@@ -371,7 +430,7 @@ pub fn wild_slots<'a>(
         let compatible = if e.is_slot() {
             type_compatible(&e, pk, pidiv.kind)
         } else {
-            static_compatible(&e, pk, pidiv.kind)
+            static_compatible(&e, pk, pidiv.kind, &ratio)
         };
         if !compatible {
             defer(Deferral::PidIv, e);
