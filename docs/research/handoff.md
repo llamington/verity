@@ -1,4 +1,4 @@
-# Handoff (2026-11-01)
+# Handoff (2026-11-02)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
@@ -14,6 +14,12 @@ and gaps are in `docs/research/p5-plan.md`.
   The real saves are in `corpus/real` (gitignored, see `docs/research/synthetic-corpus.md`).
 - DS: `make` builds `nds/verity.nds` (BlocksDS in `/opt/wonderful`); `cargo build-ds` builds the
   ARM9 core. melonDS: `flatpak run net.kuribo64.melonDS`.
+- Emulator: `make emu-harness` builds the headless melonDS 1.1 harness (`~/src/melonDS`);
+  `make emu-accept` boots retail Pt/B2 (owner ROMs in `roms/`, BIOS in `bios/`, gitignored);
+  `make emu-ui` runs the DS walk-throughs (`tools/emu-harness/scripts/ui-*.json`) on a fresh copy
+  of `sd/` in `build/emu/sd`. Screenshots land in `build/emu/<script>/`; look at them with Read.
+  `tools/emu/melon.py` drives the GUI melonDS (X11 mode) if needed.
+- Oracle extras: `gen-wild4` (PKHeX-generated legal wild PK4s), `legality-batch`, `sav-dump`.
 - Gate before committing: `cargo fmt --all`, `cargo test --workspace`,
   `cargo clippy --workspace --all-targets -- -D warnings`, `cargo build-ds`. Commit only once
   these pass. Don't chain commits after test commands.
@@ -81,34 +87,16 @@ plus `PGT.IsRangerManaphy`). Plan: export the DB through the oracle into a gift 
 PGT/PCD parsing + matching, extend corpus parity to PGT/PCD, then P8 injection (R3 region
 research, R4 unlock flags, pending-gift slots, duplicate prevention, harness collection test).
 
-1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
-   held items.
-2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
-   NFLib/µLibrary/libdsf installed). Verified headless with `tools/emu-harness` and in the GUI with
-   `tools/emu/melon.py`. P9.1 slice 1 done
-   (read-only): scene stack with fades (`ui.cpp`), file picker that remembers the last file
-   (`/_nds/verity/last.txt`), save overview, box view (6x5 grid, L/R boxes, party panel by
-   Select or tap, details on the top screen); blobs from NitroFS (`nds/Makefile` copies
-   `data/blobs`); FFI `verity_data_attach`, `verity_box_name`, `verity_slot_view`,
-   `verity_name`. Walk-through: `make emu-ui`. Placeholder icons are original type-tinted art;
-   text is the 8x8 console font for now. Slice 2: legality verdict on the top screen
-   (`verity_legality`, Gen 4 context built once from NitroFS blobs). It judges D/P/Pt wild
-   origins only and says "not checked yet" for eggs, hatched, gifts/statics/trades and other
-   games instead of guessing; on the real Pt save its 415 verdicts all match PKHeX. 37 ms per
-   Pokémon in the harness (release `opt-level = 2`; `"z"` gave 51 ms, over the P9 budget of 50).
-   Slice 3: add-Pokémon wizard (X in the box view: species with wild slots → encounter or
-   any → nature/shiny/level → generate legal + insert through the P7 validator) and Save to SD
-   (finalise, validate, rotate `.bak1..3`, temp file + rename, re-read and compare). FFI
-   `verity_wild_species`, `verity_wild_encounters`, `verity_gen_insert`, `verity_save_finalize`,
-   `verity_save_check`. `make emu-ui` runs it on a fresh copy of `sd/` in `build/emu/sd`; PKHeX
-   confirms the written save (checksums valid, added Pokémon legal, `.bak1` = original), and
-   retail Platinum loads it to Continue and into the game (`scripts/pt-loads-written.json`).
-   Slice 4: location names (PKHeX Gen 4/5 location banks in the strings blob,
-   `verity_location_name`), wizard gender/lead/ball options, and the Pokémon editor (A on a
-   slot: Main item/level/friendship, Stats IVs/EVs, Moves with pickers; live game-safe and
-   legality preview; Select toggles Legal/Game-safe mode; legal mode refuses illegal results;
-   FFI `verity_edit_preview`/`verity_edit_apply`). Walk-throughs: `ui-add.json`, `ui-edit.json`.
-   Next slices: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
-   backups, proportional font.
-3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
-   filter, the emulator harness (Phase H), mystery gifts, Memory Link.
+Front end (P9.1) so far: scene stack, file picker (remembers last file), save overview + Save
+to SD (validator, rotating `.bak1..3`, temp+rename, read-back), box view with legality verdicts,
+editor (Main/Stats/Moves, Legal/Game-safe mode), add-Pokémon wizard (D/P/Pt/HG wild, nature/
+shiny/level/gender/lead/ball). Details: `docs/research/ui-stack.md`, `emu-harness.md`.
+
+Order from here:
+1. **M6 mystery gifts** (see the M6 starting point above), then P8 injection.
+2. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
+   of Alph Unown legality perf (107 ms on DS, budget 50).
+3. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
+   proportional font, HG vs SS choice in the wizard.
+4. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
+   M8 P11 in-game suite.
