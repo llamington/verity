@@ -39,6 +39,31 @@ pub struct Request {
     pub location: u16,
     /// Requested form. Only Unown's form depends on the frame; other species ignore it.
     pub form: u8,
+    /// Origin game: 10 D, 11 P, 12 Pt (Method J) or 7 HG, 8 SS (Method K).
+    pub version: u8,
+}
+
+fn is_hgss(req: &Request) -> bool {
+    matches!(req.version, 7 | 8)
+}
+
+/// PKHeX `LeadFinder.GetLeadInfo4`, Method J or K by origin game.
+fn lead_info(
+    req: &Request,
+    input: &AnalyzeInput,
+    pidiv: PidIv,
+    level_min: u8,
+    level_max: u8,
+    format: u8,
+    ratio: &impl Fn(u16) -> u8,
+) -> LeadSeed {
+    if is_hgss(req) {
+        crate::rng::method_k::lead_info4_hgss(
+            input, &req.slot, pidiv, level_min, level_max, format, ratio,
+        )
+    } else {
+        method_j::lead_info4_dppt(input, &req.slot, pidiv, level_min, level_max, format, ratio)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -113,7 +138,13 @@ fn unown_form_possible(req: &Request) -> Result<(), GenError> {
 
 /// PKHeX `SolaceonRuins4.IsFormValid`: Unown's form comes from the frame after the IVs.
 fn form_ok(req: &Request, pid: u32, iv32: u32) -> bool {
-    req.species != UNOWN || crate::rng::unown4::form_valid(pid, iv32, req.form)
+    use crate::rng::unown4 as u;
+    req.species != UNOWN
+        || if req.location == u::RUINS_OF_ALPH {
+            u::alph_form_valid(pid, iv32, req.form)
+        } else {
+            u::form_valid(pid, iv32, req.form)
+        }
 }
 
 fn level_bounds(req: &Request) -> Result<(u8, u8), GenError> {
@@ -128,7 +159,23 @@ fn level_bounds(req: &Request) -> Result<(u8, u8), GenError> {
     }
 }
 
-/// Final level for a validated frame (PKHeX `GenerateMethodJ.SetFromIVsJ`).
+/// Final level for a validated frame (PKHeX `GenerateMethodJ.SetFromIVsJ` /
+/// `GenerateMethodK.SetFromIVsK`).
+fn level_for_req(req: &Request, lead: &LeadSeed, fallback: u8) -> u8 {
+    let slot = &req.slot;
+    if !is_hgss(req) {
+        return level_for(slot, lead, fallback);
+    }
+    if lead.lead == LeadRequired::PressureHustleSpirit {
+        return slot.pressure_level;
+    }
+    if !slot.slot_type.is_level_rand_hgss() {
+        return fallback;
+    }
+    let r = crate::rng::method_k::skip_to_level_rand(slot, lead.seed, lead.lead) >> 16;
+    crate::rng::method_k::level_for(slot, r, lead.lead) as u8
+}
+
 fn level_for(slot: &Slot4, lead: &LeadSeed, fallback: u8) -> u8 {
     if !slot.slot_type.is_level_rand_dppt() {
         return if lead.lead == LeadRequired::PressureHustleSpirit {
@@ -174,7 +221,7 @@ fn analyze_input(req: &Request, pid: u32, iv32: u32, level: u8, gender: u8) -> A
         sid: req.sid,
         species: req.species,
         gender,
-        version: 12,
+        version: req.version,
         met_level: level,
         ot_gender: 0,
     }
@@ -198,25 +245,17 @@ fn validate(
         return None;
     }
     // Range pass (format 0 checks min <= level <= max), then the exact format-4 check.
-    let lead = method_j::lead_info4_dppt(
-        &input,
-        &req.slot,
-        pidiv,
-        level_hint.0,
-        level_hint.1,
-        0,
-        ratio,
-    );
+    let lead = lead_info(req, &input, pidiv, level_hint.0, level_hint.1, 0, ratio);
     if !lead.is_valid() || !lead_matches(req, lead.lead) {
         return None;
     }
-    let level = level_for(&req.slot, &lead, level_hint.0);
+    let level = level_for_req(req, &lead, level_hint.0);
     if level < level_hint.0 || level > level_hint.1 {
         return None;
     }
     // Re-check with the exact met level, as legality will see it.
     let input = analyze_input(req, pid, iv32, level, gender);
-    let final_lead = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+    let final_lead = lead_info(req, &input, pidiv, level, level, 4, ratio);
     if !final_lead.is_valid() || !lead_matches(req, final_lead.lead) {
         return None;
     }
@@ -425,14 +464,13 @@ fn generate_cute_charm(
             kind: PidType::CuteCharm,
             seed: 0,
         };
-        let lead =
-            method_j::lead_info4_dppt(&input, &req.slot, pidiv, bounds.0, bounds.1, 0, ratio);
+        let lead = lead_info(req, &input, pidiv, bounds.0, bounds.1, 0, ratio);
         if lead.lead != LeadRequired::CuteCharm {
             continue;
         }
-        let level = level_for(&req.slot, &lead, bounds.0);
+        let level = level_for_req(req, &lead, bounds.0);
         let input = analyze_input(req, pid, iv32, level, gender);
-        let fin = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+        let fin = lead_info(req, &input, pidiv, level, level, 4, ratio);
         if fin.lead != LeadRequired::CuteCharm
             || crate::rng::finder::analyze(&input, ratio).kind != PidType::CuteCharm
         {
@@ -504,7 +542,7 @@ fn generate_radar_chain(
         if pidiv.kind != PidType::ChainShiny {
             continue;
         }
-        let lead = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+        let lead = lead_info(&req, &input, pidiv, level, level, 4, ratio);
         if lead.lead != LeadRequired::None {
             continue;
         }
@@ -540,6 +578,12 @@ pub fn generate_from_ivs(
     ratio: impl Fn(u16) -> u8,
 ) -> Result<Generated, GenError> {
     unown_form_possible(req)?;
+    if req.species == 446
+        && req.slot.slot_type == method_j::SlotType4::HoneyTree
+        && !munchlax_ok(req)
+    {
+        return Err(GenError::MunchlaxTreeUnavailable);
+    }
     let bounds = level_bounds(req)?;
     let nature = effective_nature(req)?;
     let iv32 = ivs
@@ -612,13 +656,13 @@ fn validate_cute_charm(
         kind: PidType::CuteCharm,
         seed: 0,
     };
-    let lead = method_j::lead_info4_dppt(&input, &req.slot, pidiv, bounds.0, bounds.1, 0, ratio);
+    let lead = lead_info(req, &input, pidiv, bounds.0, bounds.1, 0, ratio);
     if lead.lead != LeadRequired::CuteCharm {
         return None;
     }
-    let level = level_for(&req.slot, &lead, bounds.0);
+    let level = level_for_req(req, &lead, bounds.0);
     let input = analyze_input(req, pid, iv32, level, gender);
-    let fin = method_j::lead_info4_dppt(&input, &req.slot, pidiv, level, level, 4, ratio);
+    let fin = lead_info(req, &input, pidiv, level, level, 4, ratio);
     (fin.lead == LeadRequired::CuteCharm).then_some(Generated {
         pid,
         iv32,

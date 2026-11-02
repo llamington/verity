@@ -66,7 +66,11 @@ M4 status (2026-11-02): Gen 4 legality covers wild slots (D/P/Pt Method J, HG/SS
 statics, Pokéwalker, in-game trades, bred eggs and gift eggs (hatched). Corpus parity 2,318 PK4
 (`p5_parity_corpus`); real saves: Pt 519/525, HG 525/531 verdicts, all matching PKHeX (the rest
 are Mystery Gift PGT/PCD plus one PKHeX-invalid). Remaining M4: unhatched eggs, D Ranch gifts,
-Pal Park (Gen 3 origins), HG/SS generation in the wizard (Method K generator), egg generation.
+Pal Park (Gen 3 origins), egg generation. HG/SS generation is done: the generator dispatches
+Method J/K by `Request::version`; P6 acceptance 10,562 PKHeX-legal across D/P/Pt/HG/SS; the DS
+wizard offers HeartGold slots on HG/SS saves (verified end to end with `ui-add-hgss.json` +
+PKHeX). Perf note: Ruins of Alph Unown legality takes ~107 ms on DS (the form recursion);
+optimise before P9 acceptance (budget 50 ms).
 Then M6 mystery gifts (PGT/PCD: 626 in corpus) and M5 Gen 5.
 
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,

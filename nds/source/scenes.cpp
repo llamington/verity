@@ -738,7 +738,8 @@ private:
             at(bottom(), 0, 0, " B: back");
             return;
         }
-        at(top(), 0, 0, "Add Pokemon  (legal, %s)", version_ == 10 ? "Diamond" : "Platinum");
+        at(top(), 0, 0, "Add Pokemon  (legal, %s)",
+           version_ == 10 ? "Diamond" : version_ == 7 ? "HeartGold" : "Platinum");
         at(top(), 0, 1, "to %s %u", box_ == 0xFF ? "party slot" : "box slot",
            (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
         if (step_ == 0)

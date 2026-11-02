@@ -225,9 +225,14 @@ bool ensure_gen4_data()
 
 uint8_t wizard_version()
 {
-    // D/P saves get Diamond slots (Pearl's differ only in version exclusives); Pt and HG/SS
-    // saves get Platinum slots (HG/SS wild generation is not implemented yet).
-    return g_doc.info.kind == 1 ? 10 : 12;
+    // D/P saves get Diamond slots, Pt saves Platinum, HG/SS saves HeartGold (the save does not
+    // record which of each pair it is; version exclusives differ).
+    switch (g_doc.info.kind)
+    {
+        case 1: return 10;
+        case 3: return 7;
+        default: return 12;
+    }
 }
 
 static bool write_file(const char* path, const uint8_t* buf, size_t len)
