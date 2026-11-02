@@ -24,6 +24,89 @@ pub unsafe extern "C" fn verity_crc16_ccitt(data: *const u8, len: usize) -> u16 
     verity::crc16_ccitt(slice)
 }
 
+/// FFI error codes (`enum verity_err`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VerityErr {
+    Ok = 0,
+    NullPointer = 1,
+    Unrecognized = 2,
+}
+
+/// Save summary for the front end (`verity_save_info`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VeritySaveInfo {
+    /// 1 D/P, 2 Pt, 3 HG/SS, 4 B/W, 5 B2/W2.
+    pub kind: u8,
+    pub generation: u8,
+    pub party_count: u8,
+    pub checksums_valid: u8,
+    pub tid: u16,
+    pub sid: u16,
+    /// OT name as UTF-16, 0-terminated.
+    pub ot_name: [u16; 13],
+    pub played_hours: u16,
+    pub played_minutes: u8,
+    pub played_seconds: u8,
+}
+
+/// C ABI: detects a save in `buf` (raw or DeSmuME `.dsv`) and summarises it. The buffer is not
+/// modified.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes and `out` to a writable `VeritySaveInfo`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_save_probe(
+    buf: *mut u8,
+    len: usize,
+    out: *mut VeritySaveInfo,
+) -> VerityErr {
+    if buf.is_null() || out.is_null() {
+        return VerityErr::NullPointer;
+    }
+    let data = slice::from_raw_parts_mut(buf, len);
+    match probe(data) {
+        Some(info) => {
+            *out = info;
+            VerityErr::Ok
+        }
+        None => VerityErr::Unrecognized,
+    }
+}
+
+fn probe(data: &mut [u8]) -> Option<VeritySaveInfo> {
+    use verity::save::{Save, SaveKind};
+    let save = Save::open(data).ok()?;
+    let t = save.trainer();
+    let mut ot_name = [0u16; 13];
+    let n = if save.generation() == 4 {
+        verity::text::decode4(&t.name_raw, &mut ot_name[..12])
+    } else {
+        verity::text::decode5(&t.name_raw, &mut ot_name[..12])
+    };
+    ot_name[n] = 0;
+    Some(VeritySaveInfo {
+        kind: match save.kind() {
+            SaveKind::DP => 1,
+            SaveKind::Pt => 2,
+            SaveKind::HGSS => 3,
+            SaveKind::BW => 4,
+            SaveKind::B2W2 => 5,
+        },
+        generation: save.generation(),
+        party_count: save.party_count() as u8,
+        checksums_valid: save.checksums_valid() as u8,
+        tid: t.tid,
+        sid: t.sid,
+        ot_name,
+        played_hours: t.played_hours,
+        played_minutes: t.played_minutes,
+        played_seconds: t.played_seconds,
+    })
+}
+
 // Global allocator for ARM/picolibc target
 #[cfg(all(feature = "picolibc-allocator", not(feature = "std")))]
 mod allocator {
@@ -77,6 +160,27 @@ mod tests {
             assert_eq!(verity_crc16_ccitt(core::ptr::null(), 0), 0xFFFF);
             assert_eq!(verity_crc16_ccitt(core::ptr::null(), 10), 0);
         }
+    }
+
+    #[test]
+    fn test_ffi_probe() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../corpus/real/pkhex-avalonia/gen4_platinum.sav"
+        );
+        let Ok(mut data) = std::fs::read(path) else {
+            return;
+        };
+        let orig = data.clone();
+        let mut info = VeritySaveInfo::default();
+        let r = unsafe { verity_save_probe(data.as_mut_ptr(), data.len(), &mut info) };
+        assert_eq!(r, VerityErr::Ok);
+        assert_eq!((info.kind, info.generation), (2, 4));
+        assert!(info.ot_name[0] != 0);
+        assert_eq!(data, orig);
+        let mut junk = [0u8; 16];
+        let r = unsafe { verity_save_probe(junk.as_mut_ptr(), junk.len(), &mut info) };
+        assert_eq!(r, VerityErr::Unrecognized);
     }
 
     #[test]

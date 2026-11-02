@@ -50,7 +50,10 @@ and gaps are in `docs/research/p5-plan.md`.
 
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
-2. M3: P9.0 UI spike, then the minimal DS UI (file picker, box view, editor, add-Pokémon wizard).
-   Load blobs from NitroFS.
+2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
+   NFLib/µLibrary/libdsf installed). **Pending: visual check in melonDS** (both-screen sprites,
+   D-pad/touch list, opening saves from the DLDI SD folder `~/verity/sd`). Then P9.1: scene
+   stack, file picker, save overview, box view, editor, add-Pokémon wizard; FFI per P9.2; blobs
+   from NitroFS.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.
