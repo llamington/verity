@@ -109,11 +109,11 @@ typedef struct verity_legality_report {
     uint16_t enc_location;
     uint8_t enc_slot;
     /* 1 egg, 2 origin game not supported yet, 3 data missing, 4 not Gen 4, 5 hatched,
-       6 no wild encounter matched (statics/gifts/trades not checked yet) */
+       6 no encounter matched (events/trades/Pokewalker not checked yet) */
     uint8_t unsupported;
 } verity_legality_report;
 
-/** Legality of the Pokémon at loc (D/P/Pt wild origins for now). */
+/** Legality of the Pokémon at loc (Gen 4 wild slots and statics for now). */
 verity_err verity_legality(uint8_t *buf, size_t len, verity_loc loc, verity_legality_report *out);
 
 /** One wild slot. index identifies it for verity_gen_insert. */
