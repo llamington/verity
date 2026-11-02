@@ -41,7 +41,18 @@ Installed with `wf-pacman -S blocksds-nflib blocksds-ulibrary blocksds-libdsf`.
 | `fopen` of a `.sav` from SD | `fatInitDefault`, scan of `sd:/` and `fat:/` (depth 2) for `.sav`/`.dsv`, read, `verity_save_probe` (Rust) shows game, OT, IDs, play time, party count, checksums |
 | Scrolling list | 20 visible rows, D-pad and touch, highlight bar sprite |
 
-Builds with `make` (BlocksDS 1.24.0). Visual verification in melonDS: see below.
+Builds with `make` (BlocksDS 1.24.0). **Verified in melonDS 1.1** (2026-11-01) with
+`tools/emu/melon.py`: all five items work. Found 42 saves; Down ×3 + A opened the JP HG/SS save
+(game, IDs, play time, party, checksums OK; non-ASCII OT prints as `?` in the spike's console);
+a double tap opened `junk.sav` ("not a Gen 4/5 save"); a 100 px drag scrolled 12 rows with the
+selection clamped on screen.
+
+## Visual loop (tools/emu/melon.py)
+
+melonDS runs under X11 (`flatpak run --nosocket=wayland --env=QT_QPA_PLATFORM=xcb`) so `xwd`
+can capture its window and XTest can send keys and touch. `melon.py launch|shot|key|hold|tap|
+drag|quit`; keyboard mapping is melonDS's default (set in the melonDS config). Window at 1x,
+vertical layout. This is a stopgap for visual checks; the scripted headless harness is Phase H.
 
 ### melonDS setup for SD access
 
