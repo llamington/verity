@@ -67,6 +67,7 @@ pub fn build_legal(n: usize, dir: &Path, seed: u64) {
             shiny,
             lead,
             hidden_power_type: None,
+            location: e.location(),
         };
         let Ok(g) = generate(&req, &mut rand, 50_000, ratio) else {
             continue;
@@ -451,4 +452,130 @@ fn p5_parity_corpus() {
     eprintln!("corpus checked {checked}");
     assert!(checked > 0);
     assert!(bad.is_empty(), "{} of {checked} mismatched", bad.len());
+}
+
+/// P6: Pokémon built entirely by verity (generator + builder) are legal per verity and PKHeX.
+fn built_legal(n: usize, seed: u64) -> (usize, usize) {
+    use verity::gen::build4::{build_wild4, BuildData, Trainer4};
+    let ctx = Box::leak(Box::new(context()));
+    let ed = ctx.enc_dppt;
+    let pt = GameData::load(load("pt.bin")).unwrap();
+    let bd = BuildData {
+        hgss: ctx.hgss,
+        learn: pt,
+        moves: ctx.learn.moves,
+        names4: ctx.names4,
+    };
+    let ratio = |s: u16| ctx.ratio(s);
+    let slots: Vec<Encounter> = ed
+        .group(b"SlotsPt")
+        .filter(|e| e.species() != 201)
+        .collect();
+    let mut r = Rand::new(seed);
+    let tmp = std::env::temp_dir().join(format!("verity-built-{}-{seed}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let mut ours_valid = 0;
+    let mut made = 0;
+    let names: [&str; 3] = ["Verity", "Bob", "Lucas"];
+    while made < n {
+        let e = slots[r.next_u32() as usize % slots.len()];
+        let lang = [1u8, 2, 3, 4, 5, 7, 8][r.next_u32() as usize % 7];
+        let mut name_raw = [0u16; 8];
+        let units: Vec<u16> = names[r.next_u32() as usize % 3].encode_utf16().collect();
+        verity::text::encode4(&units, 7, lang, &mut name_raw, verity::text::Clear::Zero);
+        let tr = Trainer4 {
+            name_raw,
+            tid: r.next_u32() as u16,
+            sid: r.next_u32() as u16,
+            gender: (r.next_u32() & 1) as u8,
+            language: lang,
+        };
+        let lead = match r.next_u32() % 4 {
+            0 => Lead::Synchronize((r.next_u32() % 25) as u8),
+            1 => Lead::CuteCharm {
+                gender: (r.next_u32() & 1) as u8,
+            },
+            _ => Lead::None,
+        };
+        let req = Request {
+            slot: Slot4::from_encounter(&e).unwrap(),
+            tid: tr.tid,
+            sid: tr.sid,
+            species: e.species(),
+            gender_ratio: ratio(e.species()),
+            met_level: None,
+            nature: None,
+            gender: None,
+            ability_bit: None,
+            shiny: r.next_u32().is_multiple_of(4) && !matches!(lead, Lead::CuteCharm { .. }),
+            lead,
+            hidden_power_type: None,
+            location: e.location(),
+        };
+        let g = match generate(&req, &mut r, 50_000, ratio) {
+            Ok(g) => g,
+            Err(
+                verity::gen::wild4::GenError::MunchlaxTreeUnavailable
+                | verity::gen::wild4::GenError::CuteCharmNeedsGenderedSpecies,
+            ) => continue,
+            Err(err) => panic!("{err:?} for {req:?}"),
+        };
+        let pk = build_wild4(
+            &bd,
+            &e,
+            &g,
+            &tr,
+            [
+                9,
+                1 + (r.next_u32() % 12) as u8,
+                1 + (r.next_u32() % 28) as u8,
+            ],
+        );
+        let rep = verity::legality::analysis4::analyze4(ctx, &pk);
+        if rep.valid() {
+            ours_valid += 1;
+        } else {
+            eprintln!(
+                "ours invalid: {:?} {:?} sp {}",
+                rep.invalid,
+                rep.moves,
+                pk.species()
+            );
+        }
+        fs::write(tmp.join(format!("{made:06}.pk4")), &pk.decrypted()[..136]).unwrap();
+        made += 1;
+    }
+    let out = oracle(&["legality-batch".as_ref(), tmp.as_os_str()]);
+    let mut pkhex_valid = 0;
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        if v["valid"].as_bool().unwrap() {
+            pkhex_valid += 1;
+        } else {
+            eprintln!(
+                "pkhex invalid {}: {}",
+                v["file"],
+                v["report"].as_str().unwrap_or("").replace('\n', " | ")
+            );
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert_eq!(ours_valid, n, "verity flagged its own output");
+    (n, pkhex_valid)
+}
+
+#[test]
+fn p6_built_mons_legal() {
+    if !root().join("data/blobs/enc_dppt.bin").exists() {
+        return;
+    }
+    let (n, pkhex) = built_legal(500, 3);
+    assert_eq!(pkhex, n);
+}
+
+#[test]
+#[ignore]
+fn p6_built_mons_legal_1e4() {
+    let (n, pkhex) = built_legal(10_000, 4);
+    assert_eq!(pkhex, n);
 }
