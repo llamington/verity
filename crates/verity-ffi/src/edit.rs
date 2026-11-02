@@ -591,6 +591,7 @@ mod tests {
             ("moves4.bin", BlobKind::Moves4),
             ("enc_dppt.bin", BlobKind::EncDppt),
             ("names4.bin", BlobKind::Names4),
+            ("enc_hgss.bin", BlobKind::EncHgss),
         ];
         for (n, k) in blobs {
             let Some(b) = file(&std::format!("data/blobs/{n}")) else {

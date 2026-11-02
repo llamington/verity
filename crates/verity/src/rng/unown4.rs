@@ -56,3 +56,74 @@ pub fn form_valid(pid: u32, iv32: u32, form: u8) -> bool {
     }
     method1_origin(pid, iv32).is_none_or(|seed| form_valid_for_seed(seed, form))
 }
+
+// ---- HG/SS Ruins of Alph (PKHeX `RuinsOfAlph4.cs`) ------------------------------------------
+
+/// Met location of the Ruins of Alph.
+pub const RUINS_OF_ALPH: u16 = 209;
+
+/// PKHeX `RuinsOfAlph4.GetEntranceForm`.
+pub fn alph_entrance_form(seed: u32) -> u8 {
+    26 + ((seed >> 16) & 1) as u8
+}
+
+/// PKHeX `RuinsOfAlph4.IsFormValid(uint seed, byte form)` for a Method 1 origin seed.
+pub fn alph_form_valid_for_seed(seed: u32, form: u8) -> bool {
+    alph_form_valid_frame(advance_seed(seed, 6), form)
+}
+
+/// PKHeX `RuinsOfAlph4.IsFormValid(PKM, byte form)`.
+pub fn alph_form_valid(pid: u32, iv32: u32, form: u8) -> bool {
+    method1_origin(pid, iv32).is_none_or(|seed| alph_form_valid_for_seed(seed, form))
+}
+
+fn alph_form_valid_frame(mut seed: u32, form: u8) -> bool {
+    if form >= 26 {
+        return form == alph_entrance_form(seed);
+    }
+    let u16v = seed >> 16;
+    let radio = u16v % 100 < 50;
+    if radio {
+        // The radio gives any not-yet-seen form, which depends on save progress.
+        true
+    } else {
+        if alph_interior(form, u16v) {
+            return true;
+        }
+        let next = super::lcrng::next16(&mut seed) as u32;
+        alph_interior(form, next)
+    }
+}
+
+const ALPH_MAX_DEPTH: usize = 4;
+
+fn alph_interior(form: u8, rand: u32) -> bool {
+    let mut forms = [0u8; 26];
+    alph_recurse(&mut forms, form, rand, 0, 0)
+}
+
+/// Permutes which form sets (A-J, R-V, K-Q, W-Z) the player has unlocked. Mirrors PKHeX,
+/// including the in-place reuse of `forms` across branches.
+fn alph_recurse(forms: &mut [u8; 26], form: u8, rand: u32, count: usize, depth: usize) -> bool {
+    if depth == ALPH_MAX_DEPTH {
+        return false;
+    }
+    let (start, end) = match depth {
+        0 => (0u8, 9u8),
+        1 => (17, 21),
+        2 => (10, 16),
+        _ => (22, 25),
+    };
+    let mut new_count = count;
+    for f in start..=end {
+        forms[new_count] = f;
+        new_count += 1;
+    }
+    if alph_recurse(forms, form, rand, new_count, depth + 1) {
+        return true;
+    }
+    if forms[(rand % new_count as u32) as usize] == form {
+        return true;
+    }
+    alph_recurse(forms, form, rand, count, depth + 1)
+}
