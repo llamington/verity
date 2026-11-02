@@ -24,8 +24,11 @@ emu-accept: emu-harness
 	  else echo "skip boot-$$g: ROM or BIOS missing"; fi; \
 	done
 
-# Front-end walk-throughs (screenshots in build/emu/<script>). The harness SD image is reset
-# first: melonDS folder sync compares timestamps and the harness clock is fixed.
+# Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
+# build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
+# the harness clock is fixed, so a reused image would not sync rewritten files back).
 emu-ui: emu-harness nds
-	rm -rf sd/_nds sd-harness.img sd-harness.img.idx
+	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
+	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json --out build/emu/ui-boxes
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add.json --out build/emu/ui-add

@@ -69,7 +69,14 @@ and gaps are in `docs/research/p5-plan.md`.
    origins only and says "not checked yet" for eggs, hatched, gifts/statics/trades and other
    games instead of guessing; on the real Pt save its 415 verdicts all match PKHeX. 37 ms per
    Pokémon in the harness (release `opt-level = 2`; `"z"` gave 51 ms, over the P9 budget of 50).
-   Next slices: Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
+   Slice 3: add-Pokémon wizard (X in the box view: species with wild slots → encounter or
+   any → nature/shiny/level → generate legal + insert through the P7 validator) and Save to SD
+   (finalise, validate, rotate `.bak1..3`, temp file + rename, re-read and compare). FFI
+   `verity_wild_species`, `verity_wild_encounters`, `verity_gen_insert`, `verity_save_finalize`,
+   `verity_save_check`. `make emu-ui` runs it on a fresh copy of `sd/` in `build/emu/sd`; PKHeX
+   confirms the written save (checksums valid, added Pokémon legal, `.bak1` = original).
+   Next slices: location names in the wizard (needs location strings in the data pipeline),
+   lead/ball/IV options, Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
    backups, proportional font.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.
