@@ -49,11 +49,19 @@ unconditionally sets `result = default; return false;`, so a shiny Method 1 matc
 re-checked as a Poké Radar chain shiny. `method_j::lead_info4_dppt` mirrors this (the branch is
 omitted). Report upstream.
 
-## Nickname word filter (P5)
+## Nickname and OT word filter (P5)
 
 PKHeX (default settings) runs its Nintendo Switch word filter, and older console filters by
-lookback, over every nickname including Gen 4 origins, which had no in-game filter. verity does not
-apply word filters yet (regex lists are costly on the DS); it does apply the digit-count rule.
+lookback, over every nickname and player OT name including Gen 4 origins, which had no in-game
+filter. verity does not apply word filters yet (regex lists are costly on the DS); it does apply
+the digit-count rule (.NET `char.IsNumber` over the Gen 4 charset). The fuzz parity tests skip
+samples PKHeX flags only through a word-filter pattern.
+
+## Gen 4 trash bytes (M6)
+
+PKHeX has a Wonder Card trash-byte check (`TrashByteVerifier.VerifyTrashBytesPCD`: OT and
+nickname buffers must equal the card's), but `LegalityAnalysis` only runs the trash verifier for
+format 7+, so a PK4 is never checked. verity follows PKHeX and does not check them either.
 
 ## Game-safe validator bounds (P7)
 

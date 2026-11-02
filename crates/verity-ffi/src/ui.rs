@@ -27,6 +27,7 @@ pub enum BlobKind {
     Bw = 9,
     Moves5 = 10,
     EncHgss = 11,
+    Gifts4 = 12,
 }
 
 const SLOTS: usize = 16;
@@ -68,6 +69,7 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         9 => Bw,
         10 => Moves5,
         11 => EncHgss,
+        12 => Gifts4,
         _ => return None,
     })
 }
@@ -92,6 +94,7 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
                 verity::data::encounters::EncounterData::load(data).is_ok()
             }
             BlobKind::Names4 => Strings::load(data).is_ok(),
+            BlobKind::Gifts4 => verity::gift::pcd::Gifts4::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),
         };
         if !ok {
@@ -436,6 +439,10 @@ pub(crate) mod legal {
             enc_hgss: EncounterData::load(blob(BlobKind::EncHgss)?).ok()?,
             gen5,
             names4: Strings::load(blob(BlobKind::Names4)?).ok()?,
+            // Optional: without the event database gifts are not matched.
+            gifts: blob(BlobKind::Gifts4)
+                .and_then(|b| verity::gift::pcd::Gifts4::load(b).ok())
+                .unwrap_or(verity::gift::pcd::Gifts4::empty()),
         };
         let leaked: &'static Context4<'static> =
             alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
@@ -481,7 +488,8 @@ pub(crate) mod legal {
 }
 
 /// C ABI: legality of the Pokémon at `loc` (PKHeX-equivalent; D/P/Pt wild origins for now).
-/// Needs the Hgss, Pt, Dp, B2w2, Moves4, EncDppt and Names4 blobs attached.
+/// Needs the Hgss, Pt, Dp, B2w2, Moves4, EncDppt, EncHgss and Names4 blobs attached; Mystery
+/// Gifts are matched when Gifts4 is attached too (before the first call: the context is cached).
 ///
 /// # Safety
 ///
@@ -609,6 +617,7 @@ mod tests {
                 "enc_dppt.bin",
                 "names4.bin",
                 "enc_hgss.bin",
+                "gifts4.bin",
             ];
             let kinds = [
                 BlobKind::Hgss,
@@ -618,6 +627,7 @@ mod tests {
                 BlobKind::EncDppt,
                 BlobKind::Names4,
                 BlobKind::EncHgss,
+                BlobKind::Gifts4,
             ];
             for (n, k) in names.iter().zip(kinds) {
                 let b: &'static [u8] = std::boxed::Box::leak(

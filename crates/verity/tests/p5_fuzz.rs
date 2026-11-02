@@ -163,6 +163,21 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
         "form" => pk.set_fateful_gender_form(pk.fateful(), pk.gender(), (r.next_u32() % 4) as u8),
         "fateful" => pk.set_fateful_gender_form(!pk.fateful(), pk.gender(), pk.form()),
         "tid" => pk.set_ids(r.next_u32() as u16, pk.sid()),
+        "ribbon" => {
+            // Event ribbons only (Event3/Event4 sets); the other Gen 4 ribbon rules are not
+            // ported yet.
+            let mut d = pk.decrypted().to_vec();
+            let (ofs, mask) =
+                [(0x26, 0xE8u8), (0x27, 0x0F), (0x3F, 0xFE)][r.next_u32() as usize % 3];
+            let bits: Vec<u8> = (0..8).filter(|b| mask & (1 << b) != 0).collect();
+            d[ofs] ^= 1 << bits[r.next_u32() as usize % bits.len()];
+            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+        }
+        "version" => {
+            let mut d = pk.decrypted().to_vec();
+            d[0x5F] = [7, 8, 10, 11, 12][r.next_u32() as usize % 5];
+            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+        }
         _ => unreachable!(),
     }
     pk.refresh_checksum();
@@ -251,6 +266,7 @@ fn context() -> verity::legality::analysis4::Context4<'static> {
         enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: verity::data::Strings::load(load("names4.bin")).unwrap(),
+        gifts: verity::gift::pcd::Gifts4::load(load("gifts4.bin")).unwrap(),
     }
 }
 
@@ -289,6 +305,49 @@ fn parity_with(
     mutations_per: u32,
     build: fn(usize, &Path, u64),
 ) -> (usize, Vec<String>, BTreeMap<String, (u32, u32)>) {
+    parity_with_muts(n, seed, mutations_per, build, &MUTATIONS)
+}
+
+/// M6: PKHeX-generated legal Gen 4 gift PK4s (Wonder Cards and Ranger Manaphy eggs).
+fn build_legal_gifts(n: usize, dir: &Path, seed: u64) {
+    oracle(&[
+        "gen-gift4".as_ref(),
+        n.to_string().as_ref(),
+        seed.to_string().as_ref(),
+        dir.as_os_str(),
+    ]);
+}
+
+const GIFT_MUTATIONS: [&str; 20] = [
+    "ivs",
+    "evs",
+    "level_exp",
+    "met_level",
+    "ball",
+    "met_location",
+    "pid",
+    "gender",
+    "ability",
+    "nickname",
+    "ot_name",
+    "held_item",
+    "moves",
+    "language",
+    "friendship",
+    "form",
+    "fateful",
+    "tid",
+    "ribbon",
+    "version",
+];
+
+fn parity_with_muts(
+    n: usize,
+    seed: u64,
+    mutations_per: u32,
+    build: fn(usize, &Path, u64),
+    muts: &[&str],
+) -> (usize, Vec<String>, BTreeMap<String, (u32, u32)>) {
     let ctx = Box::leak(Box::new(context()));
     let tmp = std::env::temp_dir().join(format!("verity-p5p-{}-{seed}", std::process::id()));
     let legal = tmp.join("legal");
@@ -302,7 +361,7 @@ fn parity_with(
         let mut pk = Pkm::from_decrypted(Format::Pk4, &fs::read(e.path()).unwrap()).unwrap();
         let k = r.next_u32() % (mutations_per + 1);
         for _ in 0..k {
-            let kind = MUTATIONS[r.next_u32() as usize % MUTATIONS.len()];
+            let kind = muts[r.next_u32() as usize % muts.len()];
             mutate(&mut pk, kind, &mut r);
         }
         let f = format!("{i:05}.pk4");
@@ -323,6 +382,14 @@ fn parity_with(
             continue;
         }
         let v = &pkhex[f];
+        // PKHeX's word filter is not ported (docs/discrepancies.md).
+        if v["report"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Flagged pattern")
+        {
+            continue;
+        }
         let report = verity::legality::analysis4::analyze4(ctx, pk);
         let ours: std::collections::BTreeSet<String> = report
             .invalid
@@ -367,7 +434,11 @@ fn parity_with(
         }
         checked += 1;
     }
-    let _ = fs::remove_dir_all(&tmp);
+    if std::env::var_os("VERITY_KEEP_FUZZ").is_some() {
+        eprintln!("kept {}", tmp.display());
+    } else {
+        let _ = fs::remove_dir_all(&tmp);
+    }
     (checked, bad, per_id)
 }
 
@@ -413,6 +484,42 @@ fn p5_parity_fuzz_hgss() {
         eprintln!("{b}");
     }
     assert!(checked > 0);
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+#[test]
+fn p5_parity_fuzz_gifts() {
+    if !root().join("data/blobs/gifts4.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with_muts(600, 61, 3, build_legal_gifts, &GIFT_MUTATIONS);
+    eprintln!("gifts checked {checked}");
+    for b in bad.iter().take(15) {
+        eprintln!("{b}");
+    }
+    assert!(checked > 0);
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+/// M6 scale run: `cargo test --release -- --ignored p5_parity_gifts_1e4`.
+#[test]
+#[ignore]
+fn p5_parity_gifts_1e4() {
+    let (checked, bad, per_id) =
+        parity_with_muts(10_000, 6161, 4, build_legal_gifts, &GIFT_MUTATIONS);
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    eprintln!("gifts checked {checked}");
     assert!(
         bad.is_empty(),
         "{} of {checked} mismatched: {per_id:?}",
@@ -484,6 +591,8 @@ fn p5_parity_corpus() {
                         | "EncounterEgg4"
                         | "EncounterStatic4Pokewalker"
                         | "EncounterTrade4PID"
+                        | "PCD"
+                        | "PGT"
                 )
             {
                 continue;
@@ -508,6 +617,26 @@ fn p5_parity_corpus() {
                 .iter()
                 .map(|x| x.as_bool().unwrap())
                 .collect();
+            // Gifts: the same Wonder Card (PKHeX MGDB index) or the Ranger Manaphy.
+            let kind_ok = match v["enc_kind"].as_str().unwrap() {
+                "PCD" => matches!(r.matched, verity::legality::analysis4::Matched::Gift { gift }
+                    if gift.mgdb_index() as i64 == v["enc_index"].as_i64().unwrap()),
+                "PGT" => matches!(
+                    r.matched,
+                    verity::legality::analysis4::Matched::RangerManaphy
+                ),
+                _ => !matches!(
+                    r.matched,
+                    verity::legality::analysis4::Matched::Gift { .. }
+                        | verity::legality::analysis4::Matched::RangerManaphy
+                ),
+            };
+            if !kind_ok {
+                bad.push(format!(
+                    "{}/{f}: encounter kind/index differs",
+                    dir.display()
+                ));
+            }
             if ours != theirs || mv != tmv || r.valid() != v["valid"].as_bool().unwrap() {
                 bad.push(format!(
                     "{}/{f}: ours {ours:?} pkhex {theirs:?} {}",

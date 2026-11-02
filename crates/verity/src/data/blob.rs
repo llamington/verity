@@ -19,6 +19,7 @@ pub enum BlobKind {
     Moves = 2,
     Strings = 3,
     Encounters = 4,
+    Gifts = 5,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
