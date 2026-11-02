@@ -169,6 +169,7 @@ fn inputs(ctx: &Context4, pk: &Pkm) -> Inputs {
             ball: pk.ball(),
             ground_tile: pk.ground_tile(),
             is_shiny: pk.is_shiny(),
+            contest: pk.contest(),
         },
     }
 }
@@ -772,17 +773,24 @@ fn verify_common_inner(
         report.flag(CheckId::Language);
     }
 
-    // TrainerNameVerifier (player OT; Gen 4 limits never exceed the 7-character field)
+    let trade = enc.filter(|e| super::enc4::is_trade(e));
+    // TrainerNameVerifier (player OT; skipped for fixed-trainer trades, checked below)
     let mut ot = [0u16; 8];
     let on = crate::text::decode4(&pk.ot_name_raw(), &mut ot);
     let ot = &ot[..on];
-    let too_many_digits = on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
-    if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
-        report.flag(CheckId::Trainer);
+    if trade.is_none() {
+        let too_many_digits = on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
+        if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
+            report.flag(CheckId::Trainer);
+        }
     }
 
-    // NicknameVerifier (wild slot, Gen 4 format)
-    verify_nickname(ctx, pk, enc_species, report);
+    // NicknameVerifier (Gen 4 format)
+    if let Some(t) = trade {
+        verify_trade4(ctx, pk, t, ot, report);
+    } else {
+        verify_nickname(ctx, pk, enc_species, report);
+    }
 
     // GenderVerifier
     let ratio = pi.gender_ratio();
@@ -836,6 +844,90 @@ fn is_number(c: u16) -> bool {
 fn name_matches(ctx: &Context4, lang: u8, species: u16, nick: &[u16]) -> bool {
     let name = ctx.names4.get(lang as u16, species as usize);
     !name.is_empty() && name.iter().eq(nick.iter().copied())
+}
+
+/// PKHeX `NicknameVerifier.VerifyTrade4`: fixed OT name and nickname in the trade's original
+/// language (`EncounterTrade4PID.DetectOriginalLanguage`, `IsIncorrectEnglish`).
+fn verify_trade4(ctx: &Context4, pk: &Pkm, e: &Encounter, ot: &[u16], report: &mut Report) {
+    let ed = if matches!(pk.version(), 7 | 8) {
+        &ctx.enc_hgss
+    } else {
+        &ctx.enc_dppt
+    };
+    let mut nbuf = [0u16; 11];
+    let nn = crate::text::decode4(&pk.nickname_raw(), &mut nbuf);
+    let nick = &nbuf[..nn];
+    let names = |lang: u8| ed.trade_names(e, lang);
+    let eq = |a: &[u16], b: crate::data::blob::U16s| {
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| *x == y)
+    };
+    let dp = matches!(pk.version(), 10 | 11);
+    let lang = pk.language();
+    if lang == 2 && dp {
+        report.flag(CheckId::Language);
+    }
+    // DetectTradeLanguage: the first language whose OT name matches, else the current one.
+    let detect = |cur: u8| -> u8 {
+        (1u8..=8)
+            .find(|&l| names(l).is_some_and(|(_, o)| !o.is_empty() && eq(ot, o)))
+            .unwrap_or(cur)
+    };
+    let orig = match e.species() {
+        25 => {
+            if lang == 3 {
+                2
+            } else {
+                let l = detect(lang);
+                if l == 2 {
+                    if names(4).is_some_and(|(n, _)| eq(nick, n)) {
+                        4
+                    } else {
+                        7
+                    }
+                } else {
+                    l
+                }
+            }
+        }
+        129 => {
+            if lang == 2 {
+                5
+            } else {
+                let l = detect(lang);
+                if l == 2 {
+                    if names(3).is_some_and(|(n, _)| eq(nick, n)) {
+                        3
+                    } else {
+                        7
+                    }
+                } else {
+                    l
+                }
+            }
+        }
+        _ if lang == 1 && dp => {
+            if names(1).is_some_and(|(_, o)| eq(ot, o)) {
+                1
+            } else {
+                2
+            }
+        }
+        _ => lang,
+    };
+    match names(orig) {
+        Some((n, o)) => {
+            if !eq(ot, o) {
+                report.flag(CheckId::Trainer);
+            }
+            if !eq(nick, n) {
+                report.flag(CheckId::Nickname);
+            }
+        }
+        None => {
+            report.flag(CheckId::Trainer);
+            report.flag(CheckId::Nickname);
+        }
+    }
 }
 
 fn verify_nickname(ctx: &Context4, pk: &Pkm, enc_species: u16, report: &mut Report) {

@@ -817,6 +817,13 @@ public static class Program
             var sv = Simple(f.GetValue(o));
             if (sv != null) d[f.Name] = sv;
         }
+        // In-game trade OT names and nicknames by language (private ReadOnlyMemory<string>).
+        foreach (var name in new[] { "TrainerNames", "Nicknames" })
+        {
+            var f = o.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (f?.GetValue(o) is ReadOnlyMemory<string> m)
+                d[name] = m.ToArray();
+        }
         return d;
     }
 
