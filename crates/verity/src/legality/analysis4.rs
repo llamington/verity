@@ -334,8 +334,28 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
         _ => {}
     }
     let _ = history;
+    // EncounterVerifier: a gift egg (static with an egg location) hatched in this game.
+    if enc.template().is_some_and(|t| t.egg_location() != 0) {
+        verify_hatched4(pk, &mut report);
+    }
     verify_common(ctx, &inp, Some(&enc), &mut report);
     report
+}
+
+/// PKHeX `EncounterVerifier.VerifyEncounterEgg4` (native format 4, hatched).
+fn verify_hatched4(pk: &Pkm, report: &mut Report) {
+    if pk.met_level() != 0 {
+        report.flag(CheckId::Encounter);
+        return;
+    }
+    let met = pk.met_location();
+    let korean_shaymin = pk.language() == 8 && matches!(met, 63 | 85);
+    let ok = !korean_shaymin
+        && (super::hatch4::valid_met4(met, pk.version())
+            || (pk.egg_location() == LINK_TRADE4 && super::hatch4::valid_met4_any(met)));
+    if !ok {
+        report.flag(CheckId::Encounter);
+    }
 }
 
 const WURMPLE: u16 = 265;
@@ -494,19 +514,7 @@ fn analyze_bred_egg(ctx: &Context4, inp: &Inputs, chain: &[EvoCriteria], report:
         return;
     };
     report.matched = Matched::Egg { species };
-    // EncounterVerifier.VerifyEncounterEgg4 (native format 4, hatched).
-    if pk.met_level() != 0 {
-        report.flag(CheckId::Encounter);
-    } else {
-        let met = pk.met_location();
-        let korean_shaymin = pk.language() == 8 && matches!(met, 63 | 85);
-        let ok = !korean_shaymin
-            && (super::hatch4::valid_met4(met, pk.version())
-                || (pk.egg_location() == LINK_TRADE4 && super::hatch4::valid_met4_any(met)));
-        if !ok {
-            report.flag(CheckId::Encounter);
-        }
-    }
+    verify_hatched4(pk, report);
     verify_common_egg(ctx, inp, species, report);
 }
 
