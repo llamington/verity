@@ -326,6 +326,11 @@ public:
         }
         if (in.tapped)
             tap(in.tap_x, in.tap_y, boxes);
+        if ((in.down & KEY_A) && at_cell(cur_).species != 0)
+        {
+            ui::push(editor(party_ ? 0xFF : box_, cur_));
+            return true;
+        }
         if ((in.down & KEY_X) || ((in.down & KEY_A) && at_cell(cur_).species == 0))
         {
             int target = at_cell(cur_).species == 0 ? cur_ : -1;
@@ -413,8 +418,8 @@ private:
                pad > 0 ? pad : 0, "");
             at(bottom(), 26, 1, "%2d/%-2d", box_ + 1, (int)core::doc().boxes);
         }
-        at(bottom(), 0, 23, party_ ? " Select/tap: boxes  X add  B back"
-                                   : " L/R box Select party X add B");
+        at(bottom(), 0, 23, party_ ? " Select/tap: boxes A edit X add"
+                                   : " L/R box Sel party A edit X add");
         ui::sprites_hide_all();
         int n = party_ ? 6 : 30;
         for (int i = 0; i < n; i++)
@@ -811,11 +816,347 @@ private:
     }
 };
 
+
+// ---- editor --------------------------------------------------------------------------------
+
+class Editor : public ui::Scene
+{
+public:
+    Editor(uint8_t box_index, uint8_t slot) : box_(box_index), slot_(slot) {}
+
+    void enter() override
+    {
+        if (!loaded_)
+        {
+            loaded_ = true;
+            core::ensure_gen4_data();
+            orig_ = core::slot(box_, slot_);
+            memset(&e_, 0, sizeof(e_));
+            e_.held_item = orig_.held_item;
+            memcpy(e_.moves, orig_.moves, sizeof(e_.moves));
+            memcpy(e_.ivs, orig_.ivs, 6);
+            memcpy(e_.evs, orig_.evs, 6);
+            e_.level = orig_.level ? orig_.level : 1;
+            e_.friendship = orig_.friendship;
+            gen4_ = core::doc().info.generation == 4;
+            items_ = count(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5);
+            moves_ = count(VERITY_NAME_MOVES);
+            moves_ = gen4_ ? (moves_ > 468 ? 468 : moves_) : moves_;
+        }
+        ui::clear(top());
+        ui::clear(bottom());
+        draw();
+        preview();
+    }
+
+    bool update(const ui::Input& in) override
+    {
+        if (picking_)
+            return update_picker(in);
+        if (in.down & KEY_B)
+            return false;
+        int rows = tab_rows();
+        int before_row = row_, before_tab = tab_;
+        bool changed = false;
+        if (in.down & KEY_L)
+            tab_ = (tab_ + 2) % 3;
+        if (in.down & KEY_R)
+            tab_ = (tab_ + 1) % 3;
+        if (in.down & KEY_SELECT)
+        {
+            legal_mode_ = !legal_mode_;
+            changed = true;
+        }
+        if (tab_ != before_tab)
+            row_ = 0;
+        if (in.rep & KEY_UP)
+            row_ = (row_ + rows - 1) % rows;
+        if (in.rep & KEY_DOWN)
+            row_ = (row_ + 1) % rows;
+        int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
+        if (in.held & KEY_Y)
+            dir *= 10;  // fast adjust
+        if (in.tapped)
+        {
+            if (in.tap_y < 16)
+            {
+                tab_ = in.tap_x * 3 / 256;
+                row_ = 0;
+            }
+            else if (in.tap_y / 8 - 3 >= 0 && in.tap_y / 8 - 3 < rows)
+            {
+                int r = in.tap_y / 8 - 3;
+                if (r == row_)
+                    dir = in.tap_x < 128 ? -1 : 1;
+                row_ = r;
+            }
+            else if (in.tap_y >= 176)
+                apply();
+        }
+        if (dir)
+            changed |= adjust(dir);
+        if ((in.down & KEY_A) && open_picker())
+            return true;
+        if (in.down & KEY_START)
+            apply();
+        if (changed)
+            preview();
+        if (changed || row_ != before_row || tab_ != before_tab)
+            draw();
+        ui::bar(0, (3 + row_) * 8, true);
+        return true;
+    }
+
+private:
+    uint8_t box_, slot_;
+    bool loaded_ = false, gen4_ = true, legal_mode_ = true;
+    verity_pkm_view orig_;
+    verity_edit e_;
+    int tab_ = 0, row_ = 0;
+    int items_ = 0, moves_ = 0;
+    int picking_ = 0;  // 0 none, 1 item, 2..5 move slot
+    ListView pick_;
+    char status_[48] = "";
+
+    static int count(uint32_t cat)
+    {
+        uint16_t w[4];
+        int lo = 0, hi = 4096;
+        while (lo < hi)  // first id without a name
+        {
+            int mid = (lo + hi) / 2;
+            if (verity_name(cat, mid, w, 4) || mid == 0)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+        return lo;
+    }
+
+    int tab_rows() const { return tab_ == 0 ? 3 : tab_ == 1 ? 12 : 4; }
+
+    static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+    bool adjust(int dir)
+    {
+        if (tab_ == 0)
+        {
+            if (row_ == 0)
+            {
+                e_.held_item = (uint16_t)((e_.held_item + dir + items_) % items_);
+                e_.mask |= 1;
+            }
+            else if (row_ == 1)
+            {
+                e_.level = (uint8_t)clampi(e_.level + dir, 1, 100);
+                e_.mask |= 16;
+            }
+            else
+            {
+                e_.friendship = (uint8_t)clampi(e_.friendship + dir, 0, 255);
+                e_.mask |= 32;
+            }
+        }
+        else if (tab_ == 1)
+        {
+            if (row_ < 6)
+            {
+                e_.ivs[row_] = (uint8_t)clampi(e_.ivs[row_] + dir, 0, 31);
+                e_.mask |= 4;
+            }
+            else
+            {
+                e_.evs[row_ - 6] = (uint8_t)clampi(e_.evs[row_ - 6] + dir * 4, 0, 255);
+                e_.mask |= 8;
+            }
+        }
+        else
+        {
+            e_.moves[row_] = (uint16_t)((e_.moves[row_] + dir + moves_) % moves_);
+            e_.mask |= 2;
+        }
+        return true;
+    }
+
+    bool open_picker()
+    {
+        if (tab_ == 0 && row_ == 0)
+        {
+            picking_ = 1;
+            pick_ = ListView();
+            pick_.count = items_;
+            pick_.selected = e_.held_item;
+        }
+        else if (tab_ == 2)
+        {
+            picking_ = 2 + row_;
+            pick_ = ListView();
+            pick_.count = moves_;
+            pick_.selected = e_.moves[row_];
+        }
+        else
+            return false;
+        pick_.clamp();
+        draw_picker();
+        return true;
+    }
+
+    bool update_picker(const ui::Input& in)
+    {
+        bool changed;
+        int a = pick_.update(in, &changed);
+        ui::bar(0, pick_.bar_y(), true);
+        if (in.down & KEY_B)
+        {
+            picking_ = 0;
+            ui::clear(bottom());
+            draw();
+            return true;
+        }
+        if (a >= 0)
+        {
+            if (picking_ == 1)
+            {
+                e_.held_item = (uint16_t)a;
+                e_.mask |= 1;
+            }
+            else
+            {
+                e_.moves[picking_ - 2] = (uint16_t)a;
+                e_.mask |= 2;
+            }
+            picking_ = 0;
+            ui::clear(bottom());
+            preview();
+            draw();
+            return true;
+        }
+        if (changed)
+            draw_picker();
+        return true;
+    }
+
+    void draw_picker()
+    {
+        uint32_t cat = picking_ == 1 ? (gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5)
+                                     : VERITY_NAME_MOVES;
+        at(bottom(), 0, 0, picking_ == 1 ? " Held item" : " Move %d", picking_ - 1);
+        for (int r = 0; r < pick_.rows; r++)
+        {
+            int i = pick_.scroll + r;
+            if (i < pick_.count)
+                at(bottom(), 0, 2 + r, " %3d %s", i, i ? ui::name(cat, i) : "(none)");
+            else
+                at(bottom(), 0, 2 + r, "%s", "");
+        }
+    }
+
+    void apply()
+    {
+        uint8_t code = verity_edit_apply(core::doc().buf, core::doc().len, verity_loc{box_, slot_},
+                                         &e_, legal_mode_ ? 0 : 1);
+        if (code == 0)
+        {
+            core::doc().dirty = true;
+            orig_ = core::slot(box_, slot_);
+            e_.mask = 0;
+            snprintf(status_, sizeof(status_), "applied (save from the menu)");
+        }
+        else
+            snprintf(status_, sizeof(status_), "refused: %s", verity_issue_text(code));
+        draw();
+        preview();
+    }
+
+    void preview()
+    {
+        verity_legality_report r;
+        uint8_t issue = 0;
+        memset(&r, 0, sizeof(r));
+        if (verity_edit_preview(core::doc().buf, core::doc().len, verity_loc{box_, slot_}, &e_, &r,
+                                &issue) != VERITY_OK)
+        {
+            at(top(), 0, 19, "preview unavailable");
+            return;
+        }
+        at(top(), 0, 19, "Game-safe: %s", issue ? verity_issue_text(issue) : "OK");
+        if (r.status == 1)
+            at(top(), 0, 20, "Legality:  LEGAL");
+        else if (r.status == 2)
+        {
+            char list[40] = "";
+            for (int i = 0; i < r.check_count && strlen(list) < 20; i++)
+            {
+                strcat(list, i ? " " : "");
+                strcat(list, core::check_name(r.checks[i]));
+            }
+            bool mv = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
+            at(top(), 0, 20, "Legality:  ILLEGAL %s%s", list, mv ? " Moves" : "");
+        }
+        else
+            at(top(), 0, 20, "Legality:  not checked yet");
+    }
+
+    void draw()
+    {
+        char nick[16];
+        ui::utf16_to_ascii(orig_.nickname, nick, sizeof(nick));
+        at(top(), 0, 0, "Edit: %s (%s)", nick, ui::name(VERITY_NAME_SPECIES, orig_.species));
+        at(top(), 0, 1, "Mode: %s  (Select)", legal_mode_ ? "Legal" : "Game-safe");
+        at(top(), 0, 3, "L/R tab  Left/Right change");
+        at(top(), 0, 4, "Y+Left/Right x10  A pick list");
+        at(top(), 0, 5, "Start/tap bottom: apply  B: back");
+        at(top(), 0, 7, "%s%s", e_.mask ? "* edited, not applied" : "", "");
+        at(top(), 0, 22, "%s", status_);
+
+        static const char* tabs[3] = {"Main", "Stats", "Moves"};
+        char head[40] = "";
+        for (int t = 0; t < 3; t++)
+        {
+            char one[14];
+            snprintf(one, sizeof(one), t == tab_ ? "[%s]" : " %s ", tabs[t]);
+            strcat(head, one);
+            strcat(head, "  ");
+        }
+        at(bottom(), 0, 0, " %s", head);
+        for (int r = 0; r < 12; r++)
+            at(bottom(), 0, 3 + r, "%s", "");
+        uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
+        if (tab_ == 0)
+        {
+            at(bottom(), 0, 3, " Item       < %s >", e_.held_item ? ui::name(items, e_.held_item) : "-");
+            at(bottom(), 0, 4, " Level      < %u >", e_.level);
+            at(bottom(), 0, 5, " Friendship < %u >", e_.friendship);
+        }
+        else if (tab_ == 1)
+        {
+            static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
+            for (int i = 0; i < 6; i++)
+                at(bottom(), 0, 3 + i, " IV %-3s     < %2u >", st[i], e_.ivs[i]);
+            int total = 0;
+            for (int i = 0; i < 6; i++)
+            {
+                at(bottom(), 0, 9 + i, " EV %-3s     < %3u >", st[i], e_.evs[i]);
+                total += e_.evs[i];
+            }
+            at(bottom(), 0, 16, " EV total %d / 510", total);
+        }
+        else
+        {
+            for (int m = 0; m < 4; m++)
+                at(bottom(), 0, 3 + m, " Move %d  < %s >", m + 1,
+                   e_.moves[m] ? ui::name(VERITY_NAME_MOVES, e_.moves[m]) : "-");
+        }
+        at(bottom(), 0, 23, " %s", "[ Apply ]");
+    }
+};
+
 }  // namespace
 
 ui::Scene* file_picker() { return new FilePicker(); }
 ui::Scene* overview() { return new Overview(); }
 ui::Scene* box_view() { return new BoxView(); }
 ui::Scene* add_wizard(uint8_t b, uint8_t s) { return new AddWizard(b, s); }
+ui::Scene* editor(uint8_t b, uint8_t s) { return new Editor(b, s); }
 
 }  // namespace scenes

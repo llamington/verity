@@ -76,8 +76,12 @@ and gaps are in `docs/research/p5-plan.md`.
    `verity_save_check`. `make emu-ui` runs it on a fresh copy of `sd/` in `build/emu/sd`; PKHeX
    confirms the written save (checksums valid, added Pokémon legal, `.bak1` = original), and
    retail Platinum loads it to Continue and into the game (`scripts/pt-loads-written.json`).
-   Next slices: location names in the wizard (needs location strings in the data pipeline),
-   lead/ball/IV options, Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
+   Slice 4: location names (PKHeX Gen 4/5 location banks in the strings blob,
+   `verity_location_name`), wizard gender/lead/ball options, and the Pokémon editor (A on a
+   slot: Main item/level/friendship, Stats IVs/EVs, Moves with pickers; live game-safe and
+   legality preview; Select toggles Legal/Game-safe mode; legal mode refuses illegal results;
+   FFI `verity_edit_preview`/`verity_edit_apply`). Walk-throughs: `ui-add.json`, `ui-edit.json`.
+   Next slices: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
    backups, proportional font.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.
