@@ -244,7 +244,7 @@ pub fn build_moves(j: &Value, tables: &Value) -> Vec<u8> {
     w.finish()
 }
 
-pub const STRING_CATEGORIES: [(u16, &str); 7] = [
+pub const STRING_CATEGORIES: [(u16, &str); 14] = [
     (st::SPECIES, "species"),
     (st::MOVES, "moves"),
     (st::ABILITIES, "abilities"),
@@ -252,6 +252,13 @@ pub const STRING_CATEGORIES: [(u16, &str); 7] = [
     (st::TYPES, "types"),
     (st::ITEMS4, "items4"),
     (st::ITEMS5, "items5"),
+    (st::LOC4_0, "loc4_0"),
+    (st::LOC4_2000, "loc4_2000"),
+    (st::LOC4_3000, "loc4_3000"),
+    (st::LOC5_0, "loc5_0"),
+    (st::LOC5_30000, "loc5_30000"),
+    (st::LOC5_40000, "loc5_40000"),
+    (st::LOC5_60000, "loc5_60000"),
 ];
 
 pub fn build_strings(j: &Value) -> Vec<u8> {
