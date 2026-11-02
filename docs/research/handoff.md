@@ -62,56 +62,13 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Next steps
 
-0. **Done (except egg statics and Pokéwalker) — M4 statics (EncounterStatic4).** Corpus
-   parity 1,940 Gen 4 PK4 (slots + statics), real-save FFI verdicts Pt 499/525 and HG 494/531,
-   all matching PKHeX. Implementation followed this plan, from PKHeX `EncounterEnumerator4`,
-   `EncounterGenerator4.GetEncounters` and `EncounterStatic4`:
-   - Order: events (fateful) → bred eggs → trades → statics (D: StaticD, StaticDP, StaticDPPt;
-     P: StaticP, StaticDP, StaticDPPt; Pt: StaticPt, StaticDPPt; HG: StaticHG, Encounter_HGSS,
-     Encounter_PokeWalker; SS likewise) → slots → fallback (first partial). Safari/Sport Ball
-     (`mustBeSlot`) puts slots first and never yields statics.
-   - Static `IsMatchExact`: egg location (non-egg statics need egg location 0), met location ==
-     Location (roamers: permit masks `PermitGrassS/J/H`, `PermitWaterS/J/H`), met level ==
-     Level, fixed gender, form (or `FormInfo.IsFormChangeable`). Partial: gift (FixedBall ==
-     Poké) with a different ball.
-   - Generator filters for non-slots: ground tile, `IsCompatible` (Pichu → Pokéwalker PID;
-     Shiny.Always → ChainShiny; Method 1; Cute Charm valid), ball; Safari/Sport → defer Ball.
-   - Checks: fixed ball, fixed nature/gender, AbilityPermission, fixed moves (HAS_MOVES),
-     fateful flag must match the template, Giratina-O orb.
-   - Egg statics (EGG flag: Togepi/Riolu/etc.) and Pokéwalker: later; report "not checked".
-   - Parity: extend the corpus test filter to `EncounterStatic4` (451 in corpus).
-0b. **Done (hatched; unhatched later) — M4 bred eggs.** Corpus parity 2,191 Gen 4 PK4 (slots,
-   statics, bred eggs); real-save verdicts Pt 510/525, HG 509/531, all matching PKHeX. Also
-   added `CheckNincadaMoves` (Shedinja keeping a Ninjask move). Implementation followed:
-   - Match (`EncounterEnumerator4` Bred state, before trades/statics): egg location bred
-     (`Locations.IsEggLocationBred4`: 2000 Day Care, 2002 Link trade, or 3002 Faraway on
-     Pt/HG/SS); egg species = base of the lowest evo (`GetBaseSpeciesForm`), or a split-breed
-     (`Breeding.IsSplitBreedNotBabySpecies4`: Marill, Wobbuffet, Chansey, Mr. Mime, Snorlax,
-     Sudowoodo, Mantine, Roselia, ...; `TryGetSplit`); `CanHatchAsEgg`; lowest evo must
-     include level 1. Not a ground-tile encounter (pk tile must be 0). PID type must be None
-     (`EncounterEgg4.IsCompatible`; `FramePatternSettings.EggRandomAnyType4` default false).
-   - Moves (`LearnGroup4.CheckEncounterMoves`): after level-up/TM/tutor, remaining moves may be
-     egg moves of the egg's version source (HG/SS, Pt, else DP), any level-up move of the egg
-     species (inherit), or Volt Tackle on Pichu.
-   - `EncounterVerifier.VerifyEncounterEgg4`: met level 0; met location via
-     `EggHatchLocation4.LocationPermitted4` (mask DP=1, Pt=2, HG/SS=4; extract the table from
-     the PKHeX source by script); Link-trade eggs may hatch anywhere valid in any Gen 4 game;
-     Korean language cannot hatch at 63/85.
-   - Ball: Poké (FixedBall). Unhatched eggs (`LearnVerifierEgg`, `VerifyUnhatchedEgg`) later.
-0c. **Done (except D Ranch gifts) — M4 in-game trades.** Corpus parity 2,300 PK4. Names are in
-   the encounter blob (`table::TRADE_NAMES`, `EncounterData::trade_names`). Original plan (EncounterTrade4PID: 17 of the 52 unchecked in the real Pt/HG
-   saves; Ranch gifts on D).** Pokéwalker done (corpus 2,273). Plan:
-   - Data: the trade OT/nickname tables are private `ReadOnlyMemory<string>` fields
-     (`TrainerNames`, `Nicknames`) on `EncounterTrade4PID`; export them in the oracle's
-     `Describe` via NonPublic reflection, then add an indexed table to the encounter blob
-     (per template: nicknames and OT names by language).
-   - Match (`IsMatchExact`): met level == Level (or >= LevelMin when met is unset), ID32,
-     met location == Location, fixed IVs (`GetIsFixedIVSequenceValidNoRand`), PID == fixed PID,
-     nature, form, OT gender, egg location, contest stats not below the template. Rating Match.
-     Order: trades come after bred eggs and before statics (D: RanchGifts first).
-   - Verify: OT name and nickname against the language tables, with
-     `DetectOriginalLanguage` quirks (Meister Magikarp, Surge's Pikachu, D/P English-as-Japanese).
-   - After trades: gift-egg statics (8 left), unhatched eggs, then Pal Park, then M6 gifts.
+M4 status (2026-11-02): Gen 4 legality covers wild slots (D/P/Pt Method J, HG/SS Method K),
+statics, Pokéwalker, in-game trades, bred eggs and gift eggs (hatched). Corpus parity 2,318 PK4
+(`p5_parity_corpus`); real saves: Pt 519/525, HG 525/531 verdicts, all matching PKHeX (the rest
+are Mystery Gift PGT/PCD plus one PKHeX-invalid). Remaining M4: unhatched eggs, D Ranch gifts,
+Pal Park (Gen 3 origins), HG/SS generation in the wizard (Method K generator), egg generation.
+Then M6 mystery gifts (PGT/PCD: 626 in corpus) and M5 Gen 5.
+
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
    held items.
 2. M3: P9.0 spike is built (`docs/research/ui-stack.md`: C++ over the FFI; libnds direct,
