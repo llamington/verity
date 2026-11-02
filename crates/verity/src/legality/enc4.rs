@@ -393,11 +393,12 @@ pub fn wild_slots<'a>(
         candidates: Vec::new(),
         fallback: None,
     };
-    // Bred eggs, events and trades are not modelled: they come before statics in PKHeX, so a
-    // Pokémon with an egg location is left unmatched (callers report "not checked").
-    if pk.is_egg || pk.egg_location != 0 {
+    // Unhatched eggs are not modelled (callers report "not checked"). Bred eggs are handled
+    // by the caller; any other egg location can only be a gift-egg static.
+    if pk.is_egg {
         return none;
     }
+    let gift_egg_only = pk.egg_location != 0;
     let evo_of = |sp: u16| chain.iter().find(|c| c.species == sp);
     let must_be_slot = pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT;
 
@@ -453,7 +454,10 @@ pub fn wild_slots<'a>(
         }
     };
     // Trades come before captures (TradeStart state), with no partial ratings.
-    for g in trade_groups(pk.analyze.version) {
+    for g in trade_groups(pk.analyze.version)
+        .iter()
+        .filter(|_| !gift_egg_only)
+    {
         for e in ed.group(g) {
             if let Some(evo) = evo_of(e.species()) {
                 if trade_match_exact(&e, pk, evo) {
@@ -462,7 +466,12 @@ pub fn wild_slots<'a>(
             }
         }
     }
-    if must_be_slot {
+    if gift_egg_only {
+        push_statics(&mut seq, &mut partial);
+        if let Some((e, _)) = partial {
+            seq.push((e, true));
+        }
+    } else if must_be_slot {
         // Slots, then statics; the enumerator ends without reaching its Fallback state.
         push_slots(&mut seq, &mut partial);
         push_statics(&mut seq, &mut partial);

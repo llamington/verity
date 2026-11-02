@@ -491,10 +491,6 @@ fn p5_parity_corpus() {
             if !matches!(pk.version(), 7 | 8 | 10..=12) {
                 continue;
             }
-            // Gift eggs (static encounters with an egg location) are not modelled yet.
-            if v["enc_kind"] == "EncounterStatic4" && pk.egg_location() != 0 {
-                continue;
-            }
             let r = verity::legality::analysis4::analyze4(ctx, &pk);
             let ours: std::collections::BTreeSet<String> =
                 r.invalid.iter().map(|c| c.name().to_string()).collect();
