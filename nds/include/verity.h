@@ -98,6 +98,22 @@ verity_err verity_box_name(uint8_t *buf, size_t len, uint32_t box_index, uint16_
 /** The Pokémon at loc (species 0 when empty). */
 verity_err verity_slot_view(uint8_t *buf, size_t len, verity_loc loc, verity_pkm_view *out);
 
+/** Legality verdict. status: 0 not checked (see unsupported), 1 legal, 2 illegal. */
+typedef struct verity_legality_report {
+    uint8_t status;
+    uint8_t check_count;
+    uint8_t checks[12]; /* failed PKHeX CheckIdentifier values, verity order */
+    uint8_t move_ok[4];
+    uint16_t enc_location;
+    uint8_t enc_slot;
+    /* 1 egg, 2 origin game not supported yet, 3 data missing, 4 not Gen 4, 5 hatched,
+       6 no wild encounter matched (statics/gifts/trades not checked yet) */
+    uint8_t unsupported;
+} verity_legality_report;
+
+/** Legality of the Pokémon at loc (D/P/Pt wild origins for now). */
+verity_err verity_legality(uint8_t *buf, size_t len, verity_loc loc, verity_legality_report *out);
+
 /** A name from the attached strings blob; returns its length (0 if unknown). */
 size_t verity_name(uint32_t category, uint32_t id, uint16_t *out, size_t cap);
 

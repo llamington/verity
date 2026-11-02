@@ -64,8 +64,12 @@ and gaps are in `docs/research/p5-plan.md`.
    Select or tap, details on the top screen); blobs from NitroFS (`nds/Makefile` copies
    `data/blobs`); FFI `verity_data_attach`, `verity_box_name`, `verity_slot_view`,
    `verity_name`. Walk-through: `make emu-ui`. Placeholder icons are original type-tinted art;
-   text is the 8x8 console font for now. Next slices: legality summary (Gen 4 context over the
-   FFI), Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
+   text is the 8x8 console font for now. Slice 2: legality verdict on the top screen
+   (`verity_legality`, Gen 4 context built once from NitroFS blobs). It judges D/P/Pt wild
+   origins only and says "not checked yet" for eggs, hatched, gifts/statics/trades and other
+   games instead of guessing; on the real Pt save its 415 verdicts all match PKHeX. 37 ms per
+   Pokémon in the harness (release `opt-level = 2`; `"z"` gave 51 ms, over the P9 budget of 50).
+   Next slices: Pokémon editor tabs, add-Pokémon wizard (P6 API over the FFI), save/export with
    backups, proportional font.
 3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.
