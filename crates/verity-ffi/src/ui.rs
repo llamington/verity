@@ -635,51 +635,61 @@ mod tests {
                     "{n}"
                 );
             }
-            // PKHeX's verdict per slot, from the oracle dump of the same save.
-            let dump: serde_json::Value = serde_json::from_slice(
-                &file("corpus/reports/oracle-smoke/gen4_platinum.dump.json").unwrap_or_default(),
-            )
-            .unwrap_or(serde_json::Value::Null);
-            let pkhex = |name: &str| -> Option<bool> {
-                dump["slots"]
-                    .as_array()?
-                    .iter()
-                    .find(|s| s["name"] == name)?["legal"]
-                    .as_bool()
-            };
-            let mut r = core::mem::zeroed::<VerityLegality>();
-            let (mut legal, mut illegal, mut skipped) = (0, 0, 0);
-            let mut disagree = std::vec::Vec::new();
-            for bx in 0..18u8 {
-                for sl in 0..30u8 {
-                    let loc = VerityLoc {
-                        box_index: bx,
-                        slot: sl,
-                    };
-                    if verity_legality(b, n, loc, &mut r) != VerityErr::Ok {
-                        continue;
-                    }
-                    match r.status {
-                        1 => legal += 1,
-                        2 => illegal += 1,
-                        _ => skipped += 1,
-                    }
-                    let name = std::format!("box{bx:02}_{sl:02}");
-                    if r.status != 0 {
-                        if let Some(p) = pkhex(&name) {
-                            if p != (r.status == 1) {
-                                disagree.push(name);
+            // PKHeX's verdict per slot, from the oracle dump of the same save (Pt and HG).
+            for stem in ["gen4_platinum", "gen4_heartgold"] {
+                let Some(mut sv) = file(&std::format!("corpus/real/pkhex-avalonia/{stem}.sav"))
+                else {
+                    continue;
+                };
+                let (b, n) = (sv.as_mut_ptr(), sv.len());
+                let dump: serde_json::Value = serde_json::from_slice(
+                    &file(&std::format!(
+                        "corpus/reports/oracle-smoke/{stem}.dump.json"
+                    ))
+                    .unwrap_or_default(),
+                )
+                .unwrap_or(serde_json::Value::Null);
+                let pkhex = |name: &str| -> Option<bool> {
+                    dump["slots"]
+                        .as_array()?
+                        .iter()
+                        .find(|s| s["name"] == name)?["legal"]
+                        .as_bool()
+                };
+                let mut r = core::mem::zeroed::<VerityLegality>();
+                let (mut legal, mut illegal, mut skipped) = (0, 0, 0);
+                let mut disagree = std::vec::Vec::new();
+                for bx in 0..18u8 {
+                    for sl in 0..30u8 {
+                        let loc = VerityLoc {
+                            box_index: bx,
+                            slot: sl,
+                        };
+                        if verity_legality(b, n, loc, &mut r) != VerityErr::Ok {
+                            continue;
+                        }
+                        match r.status {
+                            1 => legal += 1,
+                            2 => illegal += 1,
+                            _ => skipped += 1,
+                        }
+                        let name = std::format!("box{bx:02}_{sl:02}");
+                        if r.status != 0 {
+                            if let Some(p) = pkhex(&name) {
+                                if p != (r.status == 1) {
+                                    disagree.push(name);
+                                }
                             }
                         }
                     }
                 }
+                std::eprintln!("{stem}: legal {legal} illegal {illegal} not checked {skipped}");
+                assert!(legal > 0, "{stem}");
+                assert!(
+                    disagree.is_empty(),
+                    "{stem}: verdicts differ from PKHeX: {disagree:?}"
+                );
             }
-            std::eprintln!("legal {legal} illegal {illegal} not checked {skipped}");
-            assert!(legal > 0);
-            assert!(
-                disagree.is_empty(),
-                "verdicts differ from PKHeX: {disagree:?}"
-            );
             verity_data_attach(BlobKind::Strings as u32, ptr::null(), 0);
             verity_data_attach(BlobKind::Pt as u32, ptr::null(), 0);
         }
