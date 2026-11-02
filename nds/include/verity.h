@@ -114,6 +114,58 @@ typedef struct verity_legality_report {
 /** Legality of the Pokémon at loc (D/P/Pt wild origins for now). */
 verity_err verity_legality(uint8_t *buf, size_t len, verity_loc loc, verity_legality_report *out);
 
+/** One wild slot. index identifies it for verity_gen_insert. */
+typedef struct verity_encounter {
+    uint16_t index;
+    uint16_t location;
+    uint16_t species;
+    uint8_t form;
+    uint8_t level_min;
+    uint8_t level_max;
+    uint8_t slot_type; /* PKHeX SlotType4: 0 grass, 1 surf, 2-4 rods, ... */
+    uint8_t slot_number;
+    uint8_t can_radar;
+} verity_encounter;
+
+/** Species with wild slots in version (10 D, 11 P, 12 Pt); returns the count written. */
+size_t verity_wild_species(uint8_t version, uint16_t *out, size_t cap);
+/** Wild slots of species in version; returns the count written. */
+size_t verity_wild_encounters(uint8_t version, uint16_t species, verity_encounter *out, size_t cap);
+
+/** Legal generation request. 0xFF / 0xFFFF mean "any". */
+typedef struct verity_gen_request {
+    uint8_t version;
+    uint8_t form;
+    uint16_t species;
+    uint16_t encounter_index;
+    uint8_t level;
+    uint8_t nature;
+    uint8_t gender;
+    uint8_t shiny;
+    uint8_t lead; /* 0 none, 1 Synchronize (lead_param nature), 2 Cute Charm (lead_param gender), 3 radar */
+    uint8_t lead_param;
+    uint8_t ball;
+    uint8_t met_date[3]; /* years since 2000, month, day */
+    uint32_t seed;
+} verity_gen_request;
+
+/** Generates a legal Pokémon and writes it to loc. Returns a status (0 OK); see
+    verity_gen_status_text. The save is not finalised. */
+uint8_t verity_gen_insert(uint8_t *buf, size_t len, const verity_gen_request *req, verity_loc loc);
+const char *verity_gen_status_text(uint8_t code);
+
+/** Fixes block checksums before writing the save out. */
+verity_err verity_save_finalize(uint8_t *buf, size_t len);
+
+/** Game-safe validator verdict. issue: 0 safe, 1 party count, 2 no usable party member,
+    3 a Pokémon at (box_index, slot), 4 checksums, 5 validator data missing. */
+typedef struct verity_save_check_result {
+    uint8_t issue;
+    uint8_t box_index;
+    uint8_t slot;
+} verity_save_check_result;
+verity_err verity_save_check(uint8_t *buf, size_t len, verity_save_check_result *out);
+
 /** A name from the attached strings blob; returns its length (0 if unknown). */
 size_t verity_name(uint32_t category, uint32_t id, uint16_t *out, size_t cap);
 

@@ -8,7 +8,13 @@ extern crate alloc;
 
 use core::slice;
 
+#[cfg(feature = "alloc")]
+pub mod edit;
 pub mod ui;
+
+/// The blob registry is global and single-threaded by contract; tests that touch it take this.
+#[cfg(test)]
+pub(crate) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// C ABI: Calculates the CRC16-CCITT checksum over a buffer.
 ///

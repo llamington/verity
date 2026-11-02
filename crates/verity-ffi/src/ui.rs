@@ -213,7 +213,7 @@ fn view(kind: SaveKind, pk: &Pkm) -> VerityPkmView {
     v
 }
 
-fn open(buf: *mut u8, len: usize) -> Option<Save<'static>> {
+pub(crate) fn open(buf: *mut u8, len: usize) -> Option<Save<'static>> {
     if buf.is_null() {
         return None;
     }
@@ -347,7 +347,7 @@ pub struct VerityLegality {
 }
 
 #[cfg(feature = "alloc")]
-mod legal {
+pub(crate) mod legal {
     use super::*;
     use core::cell::Cell;
     use verity::data::encounters::EncounterData;
@@ -361,7 +361,7 @@ mod legal {
     static CTX: Holder = Holder(Cell::new(None));
 
     /// The Gen 4 legality context, built once from attached blobs.
-    fn context() -> Option<&'static Context4<'static>> {
+    pub(crate) fn context() -> Option<&'static Context4<'static>> {
         if let Some(c) = CTX.0.get() {
             return Some(c);
         }
@@ -493,6 +493,7 @@ mod tests {
 
     #[test]
     fn views_of_a_real_save() {
+        let _guard = crate::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (Some(strings), Some(pt), Some(mut save)) = (
             file("data/blobs/strings_en.bin"),
             file("data/blobs/pt.bin"),

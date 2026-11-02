@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 
 #include <initializer_list>
 
@@ -243,8 +244,12 @@ public:
         at(top(), 0, 8, "Checksum %s", i.checksums_valid ? "OK" : "BAD");
         if (!core::data_available())
             at(top(), 0, 10, "(data missing: showing IDs)");
+        if (!message_[0] && d.dirty)
+            snprintf(message_, sizeof(message_), "unsaved changes");
+        if (message_[0])
+            at(top(), 0, 12, "%s %s", d.dirty ? "*" : "-", message_);
         ui::clear(bottom());
-        at(bottom(), 0, 0, " Save");
+        at(bottom(), 0, 0, " Save%s", d.dirty ? " *" : "");
         for (int r = 0; r < 3; r++)
             at(bottom(), 0, list_.first_row + r, " %s", kItems[r]);
         list_.count = 3;
@@ -259,15 +264,26 @@ public:
         if (in.down & KEY_B)
             return false;
         if (a == 0)
+        {
+            message_[0] = 0;
             ui::push(box_view());
+        }
+        if (a == 1)
+        {
+            const char* m = "";
+            core::save_to_disk(&m);
+            snprintf(message_, sizeof(message_), "%s", m);
+            enter();
+        }
         if (a == 2)
             return false;
         return true;
     }
 
 private:
-    static constexpr const char* kItems[3] = {"Boxes and party", "Legality (soon)", "Close"};
+    static constexpr const char* kItems[3] = {"Boxes and party", "Save to SD card", "Close"};
     ListView list_;
+    char message_[48] = "";
 };
 
 // ---- box view ------------------------------------------------------------------------------
@@ -310,6 +326,19 @@ public:
         }
         if (in.tapped)
             tap(in.tap_x, in.tap_y, boxes);
+        if ((in.down & KEY_X) || ((in.down & KEY_A) && at_cell(cur_).species == 0))
+        {
+            int target = at_cell(cur_).species == 0 ? cur_ : -1;
+            for (int i = 0; i < n && target < 0; i++)
+                if (at_cell(i).species == 0)
+                    target = i;
+            if (target >= 0 && !(party_ && target > (int)core::doc().info.party_count))
+            {
+                ui::push(add_wizard(party_ ? 0xFF : box_, party_ ? core::doc().info.party_count
+                                                                  : target));
+                return true;
+            }
+        }
 
         if (box_ != before_box || cur_ != before_cur || party_ != before_party || dirty_)
         {
@@ -384,8 +413,8 @@ private:
                pad > 0 ? pad : 0, "");
             at(bottom(), 26, 1, "%2d/%-2d", box_ + 1, (int)core::doc().boxes);
         }
-        at(bottom(), 0, 23, party_ ? " Select/tap here: boxes   B back"
-                                   : " L/R box  Select: party  B back");
+        at(bottom(), 0, 23, party_ ? " Select/tap: boxes  X add  B back"
+                                   : " L/R box Select party X add B");
         ui::sprites_hide_all();
         int n = party_ ? 6 : 30;
         for (int i = 0; i < n; i++)
@@ -474,10 +503,272 @@ private:
     }
 };
 
+
+// ---- add-Pokémon wizard --------------------------------------------------------------------
+
+class AddWizard : public ui::Scene
+{
+public:
+    AddWizard(uint8_t box_index, uint8_t slot) : box_(box_index), slot_(slot) {}
+
+    void enter() override
+    {
+        if (!loaded_)
+        {
+            loaded_ = true;
+            version_ = core::wizard_version();
+            supported_ = core::doc().info.generation == 4 && core::ensure_gen4_data();
+            if (supported_)
+                species_count_ = (int)verity_wild_species(version_, species_, 494);
+        }
+        draw();
+    }
+
+    bool update(const ui::Input& in) override
+    {
+        if (!supported_)
+            return !(in.down & (KEY_B | KEY_A));
+        bool changed = false;
+        if (step_ == 0)
+        {
+            list_.count = species_count_;
+            int a = list_.update(in, &changed);
+            ui::bar(0, list_.bar_y(), true);
+            if (in.down & KEY_B)
+                return false;
+            if (a >= 0)
+            {
+                species_ix_ = a;
+                enc_count_ = (int)verity_wild_encounters(version_, species_[a], enc_, 64);
+                step_ = 1;
+                enc_list_ = ListView();
+                enc_list_.count = enc_count_ + 1;  // row 0 is "any slot"
+                draw();
+            }
+            else if (changed)
+                draw_list();
+        }
+        else if (step_ == 1)
+        {
+            int a = enc_list_.update(in, &changed);
+            ui::bar(0, enc_list_.bar_y(), true);
+            if (in.down & KEY_B)
+            {
+                step_ = 0;
+                draw();
+                return true;
+            }
+            if (a >= 0)
+            {
+                enc_ix_ = a - 1;
+                step_ = 2;
+                opt_ = 0;
+                level_ = 0;
+                draw();
+            }
+            else if (changed)
+                draw_list();
+        }
+        else
+        {
+            if (in.down & KEY_B)
+            {
+                step_ = 1;
+                draw();
+                return true;
+            }
+            int before = opt_;
+            if (in.rep & KEY_UP)
+                opt_ = (opt_ + 3) % 4;
+            if (in.rep & KEY_DOWN)
+                opt_ = (opt_ + 1) % 4;
+            int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
+            if (in.tapped)
+            {
+                int row = in.tap_y / 8 - 2;
+                if (row >= 0 && row < 4)
+                {
+                    if (row == opt_ && row < 3)
+                        dir = 1;
+                    opt_ = row;
+                }
+            }
+            if (dir)
+                change(dir);
+            bool go = (opt_ == 3 && ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == 3))) ||
+                      (in.down & KEY_START);
+            if (go && generate())
+                return false;
+            if (dir || opt_ != before)
+                draw_options();
+            ui::bar(0, (2 + opt_) * 8, true);
+        }
+        return true;
+    }
+
+private:
+    uint8_t box_, slot_;
+    bool loaded_ = false, supported_ = false;
+    uint8_t version_ = 12;
+    uint16_t species_[494];
+    int species_count_ = 0, species_ix_ = 0;
+    verity_encounter enc_[64];
+    int enc_count_ = 0, enc_ix_ = -1;
+    int step_ = 0, opt_ = 0;
+    int nature_ = -1;  // -1 any
+    bool shiny_ = false;
+    int level_ = 0;  // 0 any, else the level
+    char status_[48] = "";
+    ListView list_, enc_list_;
+
+    static const char* slot_type(uint8_t t)
+    {
+        static const char* names[] = {"Grass",   "Surf",     "Old Rod", "Good Rod", "Super Rod",
+                                      "Rock",    "Headbutt", "Headbutt", "Contest", "Honey",
+                                      "Safari",  "Safari",   "Saf rod", "Saf rod", "Saf rod"};
+        return t < 15 ? names[t] : "?";
+    }
+
+    void change(int dir)
+    {
+        if (opt_ == 0)
+            nature_ = (nature_ + 1 + dir + 26) % 26 - 1;
+        else if (opt_ == 1)
+            shiny_ = !shiny_;
+        else if (opt_ == 2 && enc_ix_ >= 0)
+        {
+            const auto& e = enc_[enc_ix_];
+            int lo = e.level_min, hi = e.level_max;
+            level_ = level_ == 0 ? (dir > 0 ? lo : hi) : level_ + dir;
+            if (level_ > hi || level_ < lo)
+                level_ = 0;
+        }
+    }
+
+    bool generate()
+    {
+        time_t now = time(nullptr);
+        struct tm* t = localtime(&now);
+        static uint32_t counter = 0;
+        verity_gen_request r;
+        memset(&r, 0, sizeof(r));
+        r.version = version_;
+        r.species = species_[species_ix_];
+        r.form = enc_ix_ >= 0 ? enc_[enc_ix_].form : 0;
+        r.encounter_index = enc_ix_ >= 0 ? enc_[enc_ix_].index : 0xFFFF;
+        r.level = level_ ? (uint8_t)level_ : 0xFF;
+        r.nature = nature_ < 0 ? 0xFF : (uint8_t)nature_;
+        r.gender = 0xFF;
+        r.shiny = shiny_;
+        r.ball = 0xFF;
+        r.met_date[0] = t ? (uint8_t)(t->tm_year - 100) : 26;
+        r.met_date[1] = t ? (uint8_t)(t->tm_mon + 1) : 1;
+        r.met_date[2] = t ? (uint8_t)t->tm_mday : 1;
+        r.seed = (uint32_t)now * 2654435761u + ++counter;
+        uint8_t code = verity_gen_insert(core::doc().buf, core::doc().len, &r,
+                                         verity_loc{box_, slot_});
+        if (code == 0)
+        {
+            core::doc().dirty = true;
+            verity_save_probe(core::doc().buf, core::doc().len, &core::doc().info);
+            return true;
+        }
+        snprintf(status_, sizeof(status_), "%s", verity_gen_status_text(code));
+        draw_options();
+        return false;
+    }
+
+    void draw()
+    {
+        ui::clear(top());
+        ui::clear(bottom());
+        if (!supported_)
+        {
+            at(top(), 0, 0, "Add Pokemon");
+            at(top(), 0, 2, "Only Gen 4 saves for now");
+            at(top(), 0, 3, "(D/P/Pt wild encounters).");
+            at(bottom(), 0, 0, " B: back");
+            return;
+        }
+        at(top(), 0, 0, "Add Pokemon  (legal, %s)", version_ == 10 ? "Diamond" : "Platinum");
+        at(top(), 0, 1, "to %s %u", box_ == 0xFF ? "party slot" : "box slot",
+           (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
+        if (step_ == 0)
+        {
+            at(top(), 0, 3, "1. Species (%d with wild slots)", species_count_);
+            draw_list();
+        }
+        else if (step_ == 1)
+        {
+            at(top(), 0, 3, "2. Encounter: %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            at(top(), 0, 5, "Locations are IDs for now.");
+            draw_list();
+        }
+        else
+        {
+            at(top(), 0, 3, "3. Options: %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            draw_options();
+        }
+        at(top(), 0, 22, "A next  B back  Start generate");
+    }
+
+    void draw_list()
+    {
+        if (step_ == 0)
+        {
+            at(bottom(), 0, 0, " Species");
+            for (int r = 0; r < list_.rows; r++)
+            {
+                int i = list_.scroll + r;
+                if (i < species_count_)
+                    at(bottom(), 0, 2 + r, " #%03u %s", species_[i], ui::name(VERITY_NAME_SPECIES, species_[i]));
+                else
+                    at(bottom(), 0, 2 + r, "%s", "");
+            }
+        }
+        else
+        {
+            at(bottom(), 0, 0, " Encounter");
+            for (int r = 0; r < enc_list_.rows; r++)
+            {
+                int i = enc_list_.scroll + r - 1;
+                if (i == -1)
+                    at(bottom(), 0, 2 + r, " Any wild slot");
+                else if (i < enc_count_)
+                {
+                    const auto& e = enc_[i];
+                    if (e.level_min == e.level_max)
+                        at(bottom(), 0, 2 + r, " Loc %3u %-9s Lv %u", e.location, slot_type(e.slot_type),
+                           e.level_min);
+                    else
+                        at(bottom(), 0, 2 + r, " Loc %3u %-9s Lv %u-%u", e.location,
+                           slot_type(e.slot_type), e.level_min, e.level_max);
+                }
+                else
+                    at(bottom(), 0, 2 + r, "%s", "");
+            }
+        }
+    }
+
+    void draw_options()
+    {
+        at(bottom(), 0, 0, " Options");
+        at(bottom(), 0, 2, " Nature  < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        at(bottom(), 0, 3, " Shiny   < %s >", shiny_ ? "Yes" : "No");
+        if (level_)
+            at(bottom(), 0, 4, " Level   < %d >", level_);
+        else
+            at(bottom(), 0, 4, " Level   < Any >");
+        at(bottom(), 0, 5, " Generate and place");
+        at(bottom(), 0, 7, " %s", status_);
+    }
+};
+
 }  // namespace
 
 ui::Scene* file_picker() { return new FilePicker(); }
 ui::Scene* overview() { return new Overview(); }
 ui::Scene* box_view() { return new BoxView(); }
+ui::Scene* add_wizard(uint8_t b, uint8_t s) { return new AddWizard(b, s); }
 
 }  // namespace scenes

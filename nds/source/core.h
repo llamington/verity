@@ -16,6 +16,7 @@ struct Doc
     size_t len = 0;
     verity_save_info info{};
     uint32_t boxes = 0;
+    bool dirty = false;  // unsaved changes
 
     bool loaded() const { return buf != nullptr; }
 };
@@ -41,5 +42,14 @@ void remember(const char* path);
 bool last(char* out, int cap);
 
 const char* game_name(uint8_t kind);
+
+// The version whose wild slots the add-Pokémon wizard offers for this save (10/11/12).
+uint8_t wizard_version();
+// Makes sure the Gen 4 legality/generation data is attached.
+bool ensure_gen4_data();
+
+// Writes the open save back to its file: finalise, validate (never writes if the validator
+// fails), rotate backups (<name>.bak1..3), write a temp file, swap it in, re-read and compare.
+bool save_to_disk(const char** message);
 
 }  // namespace core
