@@ -13,10 +13,10 @@ use super::method_j::{
 // Static/Magnet Pull: rand & 1 == 0; Pressure/Hustle/Vital Spirit: rand & 1 == 1;
 // Intimidate/Keen Eye: rand & 1 == 1 (0 rejects the encounter).
 fn is_cute_charm_fail(r: u32) -> bool {
-    r % 3 == 0
+    r.is_multiple_of(3)
 }
 fn is_cute_charm_pass(r: u32) -> bool {
-    r % 3 != 0
+    !r.is_multiple_of(3)
 }
 fn is_sync_pass(r: u32) -> bool {
     r & 1 == 0
