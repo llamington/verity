@@ -48,7 +48,9 @@ and gaps are in `docs/research/p5-plan.md`.
 
 - Phase H (partial): `tools/emu-harness` runs melonDS 1.1 headless from JSON scripts,
   deterministically (see `docs/research/emu-harness.md`). Use it for DS visual checks
-  (`scripts/spike.json`). Retail ROM boot and two-instance multiplayer wait on owner ROMs/BIOS.
+  (`scripts/spike.json`). Retail acceptance passes: Platinum and Black 2 boot to
+  title and Continue with real saves, deterministically (`make emu-accept`). Two-instance
+  multiplayer is still open. Owner ROMs (Pt, HG, W, B2) and BIOS are in `roms/`, `bios/`.
 
 ## Next steps
 

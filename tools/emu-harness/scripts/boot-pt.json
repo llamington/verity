@@ -1,0 +1,18 @@
+// Phase H acceptance: Platinum to the title screen and the Continue menu, deterministically.
+// Needs owner-dumped roms/platinum.nds and bios/{bios7,bios9,firmware}.bin.
+{
+  "rom": "../../../roms/platinum.nds",
+  "bios_dir": "../../../bios",
+  "save": "../../../corpus/real/pkhex-avalonia/gen4_platinum.sav",
+  "steps": [
+    {"wait": 1500},
+    {"press": ["Start"], "frames": 2},
+    {"wait": 120},
+    {"screenshot": "title.png"},
+    {"wait_until": {"screen_hash": "568ff73d9e2f54e68b85556bf629be77", "screen": "both"}, "timeout": 0},
+    {"press": ["A"], "frames": 2},
+    {"wait": 150},
+    {"screenshot": "continue.png"},
+    {"wait_until": {"screen_hash": "63fbd8d43ecc05ba01a2728bcfaf2325", "screen": "both"}, "timeout": 0}
+  ]
+}
