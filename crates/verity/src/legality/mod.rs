@@ -6,4 +6,5 @@ pub mod analysis4;
 pub mod enc4;
 #[cfg(feature = "alloc")]
 pub mod evo;
+pub mod hatch4;
 pub mod moves4;

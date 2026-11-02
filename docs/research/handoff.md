@@ -80,7 +80,9 @@ and gaps are in `docs/research/p5-plan.md`.
      fateful flag must match the template, Giratina-O orb.
    - Egg statics (EGG flag: Togepi/Riolu/etc.) and Pokéwalker: later; report "not checked".
    - Parity: extend the corpus test filter to `EncounterStatic4` (451 in corpus).
-0b. **Next — M4 bred eggs (EncounterEgg4, 253 in corpus).** From PKHeX:
+0b. **Done (hatched; unhatched later) — M4 bred eggs.** Corpus parity 2,191 Gen 4 PK4 (slots,
+   statics, bred eggs); real-save verdicts Pt 510/525, HG 509/531, all matching PKHeX. Also
+   added `CheckNincadaMoves` (Shedinja keeping a Ninjask move). Implementation followed:
    - Match (`EncounterEnumerator4` Bred state, before trades/statics): egg location bred
      (`Locations.IsEggLocationBred4`: 2000 Day Care, 2002 Link trade, or 3002 Faraway on
      Pt/HG/SS); egg species = base of the lowest evo (`GetBaseSpeciesForm`), or a split-breed

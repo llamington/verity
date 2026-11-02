@@ -460,10 +460,6 @@ pub(crate) mod legal {
             out.unsupported = 3;
             return;
         };
-        if pk.egg_location() != 0 {
-            out.unsupported = 5;
-            return;
-        }
         let r = analyze4(ctx, pk);
         // Only wild slots are modelled; without a slot match the origin is something verity
         // cannot judge yet, so it says nothing rather than a false "illegal".
