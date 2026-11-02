@@ -111,6 +111,15 @@ impl<'a> Save<'a> {
         self.data[ofs] as usize
     }
 
+    /// Writes the party count byte (no other change; used to roll back a rejected write).
+    pub fn set_party_count(&mut self, n: usize) {
+        let ofs = match &self.layout {
+            Layout::Gen4(l) => l.party_count_offset(),
+            Layout::Gen5(l) => l.party_count_offset(),
+        };
+        self.data[ofs] = n.min(6) as u8;
+    }
+
     pub fn trainer_ids(&self) -> TrainerIds {
         let ofs = match &self.layout {
             Layout::Gen4(l) => l.tid_offset(),

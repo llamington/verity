@@ -34,15 +34,23 @@ and gaps are in `docs/research/p5-plan.md`.
   results from 16k random requests across D/P/Pt (1,239 Unown) all PKHeX-legal
   (`p6_api_random_requests_1e4`, ignored by default); specific errors; insertion into the real
   Pt and Diamond saves dumps as legal with valid checksums and party stats equal to PKHeX's.
+- P7 (first pass): `safety/` — `check_pkm` (format, checksum, sanity word, species/form/ability/
+  held item/move IDs, duplicates, PP/PP Ups, nature, EXP/level, nickname/OT termination and
+  charset, language, origin game, ball, met/egg locations, party level/HP), `check_party`,
+  `check_save`, and `checked_set_pkm` (the write path: validates, keeps the party contiguous,
+  requires exactly computed party stats, rolls back a write that leaves no usable party member).
+  `api4::insert` writes through it. `tests/p7_safety.rs`: all 4,884 Pokémon in the real saves pass
+  except 7 documented PKMDS editor artifacts (still rejected); curated crash classes are rejected;
+  rejected writes leave the save byte-identical. Bounds and the stale-party-stats rule are in
+  `docs/discrepancies.md`. P7's harness acceptance (fuzzer vs the game) waits on Phase H.
 - Fixed: a met level between the slot max and the Pressure level was accepted by the generator
   (PKHeX allows only the range or exactly the Pressure level, which needs a Pressure lead).
 
 ## Next steps
 
 1. P6 remainder (later milestones): eggs, statics/gifts/trades, HG/SS, Gen 5, nickname choice,
-   held items. `insert` should call the P7 validator once it exists.
-2. P7: game-safe validator (`safety/`) per PLAN P7; every write goes through it.
-3. M3: P9.0 UI spike, then the minimal DS UI (file picker, box view, editor, add-Pokémon wizard).
+   held items.
+2. M3: P9.0 UI spike, then the minimal DS UI (file picker, box view, editor, add-Pokémon wizard).
    Load blobs from NitroFS.
-4. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
+3. Later: widen legality (statics/gifts/trades/eggs, HG/SS Method K, Pal Park, Gen 5), the word
    filter, the emulator harness (Phase H), mystery gifts, Memory Link.

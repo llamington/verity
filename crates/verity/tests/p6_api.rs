@@ -14,7 +14,7 @@ use verity::gen::build4::Trainer4;
 use verity::gen::wild4::{GenError, Lead, Rand};
 use verity::legality::analysis4::Context4;
 use verity::legality::{evo::Evo4, moves4::Learn4};
-use verity::save::{Save, Slot};
+use verity::save::{Save, SaveKind, Slot};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -183,6 +183,10 @@ fn random_requests(n: usize, seed: u64) -> (usize, usize, Vec<(Error, u32)>) {
                     assert_eq!(pk.ivs(), ivs.map(u16::from));
                 }
                 assert_eq!(pk.is_shiny(), req.shiny);
+                for kind in [SaveKind::DP, SaveKind::Pt, SaveKind::HGSS] {
+                    let rules = api4::rules4(ctx, kind).unwrap();
+                    assert_eq!(verity::safety::check_pkm(&rules, pk, false), Ok(()), "{kind:?}");
+                }
                 fs::write(tmp.join(format!("{i:06}.pk4")), &pk.decrypted()[..136]).unwrap();
                 made += 1;
             }

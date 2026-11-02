@@ -89,6 +89,8 @@ pub enum Error {
     PartyGap,
     /// Inserting into a party needs a party-format Pokémon (an internal error).
     WrongFormat,
+    /// The game-safe validator (P7) rejected the write.
+    Unsafe(crate::safety::WriteError),
 }
 
 impl From<GenError> for Error {
@@ -315,17 +317,27 @@ pub fn generate_for(ctx: &Context4, tr: &Trainer4, req: &GenRequest) -> Result<G
     }
 }
 
-fn is_gen4(kind: SaveKind) -> bool {
-    matches!(kind, SaveKind::DP | SaveKind::Pt | SaveKind::HGSS)
+/// The safety rules for a Gen 4 save, from the legality context's tables.
+pub fn rules4<'a>(ctx: &Context4<'a>, kind: SaveKind) -> Option<crate::safety::Rules<'a>> {
+    let game = match kind {
+        SaveKind::DP => ctx.learn.dp,
+        SaveKind::Pt => ctx.learn.pt,
+        SaveKind::HGSS => ctx.hgss,
+        _ => return None,
+    };
+    Some(crate::safety::Rules {
+        kind,
+        game,
+        moves: ctx.learn.moves,
+    })
 }
 
 /// Writes a Pokémon into `slot` as the game would on capture: party slots get computed stats
-/// (PKHeX `ResetPartyStats`) and must stay contiguous, and the Pokédex records it
-/// (`apply_capture_side_effects`). Call [`Save::finalize`] before writing the save out.
+/// (PKHeX `ResetPartyStats`) and must stay contiguous, the write goes through the P7 validator,
+/// and the Pokédex records it (`apply_capture_side_effects`). Call [`Save::finalize`] before
+/// writing the save out.
 pub fn insert(ctx: &Context4, save: &mut Save, slot: Slot, pk: &Pkm) -> Result<(), Error> {
-    if !is_gen4(save.kind()) {
-        return Err(Error::Save(SaveError::BadLength));
-    }
+    let rules = rules4(ctx, save.kind()).ok_or(Error::Save(SaveError::BadLength))?;
     let pk = match slot {
         Slot::Party(i) => {
             if i as usize > save.party_count() || i >= 6 {
@@ -340,9 +352,13 @@ pub fn insert(ctx: &Context4, save: &mut Save, slot: Slot, pk: &Pkm) -> Result<(
             }
             p
         }
-        Slot::Box(..) => pk.to_stored(),
+        Slot::Box(..) => {
+            let mut p = pk.to_stored();
+            p.refresh_checksum();
+            p
+        }
     };
-    save.set_pkm(slot, &pk)?;
+    crate::safety::checked_set_pkm(&rules, save, slot, &pk).map_err(Error::Unsafe)?;
     apply_capture_side_effects(save, &pk);
     Ok(())
 }
