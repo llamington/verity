@@ -62,7 +62,9 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Next steps
 
-0. **In progress — M4 statics (EncounterStatic4).** Plan, from PKHeX `EncounterEnumerator4`,
+0. **Done (except egg statics and Pokéwalker) — M4 statics (EncounterStatic4).** Corpus
+   parity 1,940 Gen 4 PK4 (slots + statics), real-save FFI verdicts Pt 499/525 and HG 494/531,
+   all matching PKHeX. Implementation followed this plan, from PKHeX `EncounterEnumerator4`,
    `EncounterGenerator4.GetEncounters` and `EncounterStatic4`:
    - Order: events (fateful) → bred eggs → trades → statics (D: StaticD, StaticDP, StaticDPPt;
      P: StaticP, StaticDP, StaticDPPt; Pt: StaticPt, StaticDPPt; HG: StaticHG, Encounter_HGSS,

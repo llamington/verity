@@ -271,9 +271,13 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
             let history = ctx
                 .evo
                 .chain_for_encounter(&inp.evo, e.species(), e.level_min());
-            let moves = ctx
-                .learn
-                .verify(pk.moves(), pk.form(), e.species(), &history, None);
+            let moves = ctx.learn.verify(
+                pk.moves(),
+                pk.form(),
+                e.species(),
+                &history,
+                static_moves(&e),
+            );
             if !moves.iter().all(|r| r.valid()) && !last {
                 continue;
             }
@@ -326,6 +330,14 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
 }
 
 const WURMPLE: u16 = 265;
+
+/// A static encounter's fixed moveset (PKHeX `IMoveset`), if it has one.
+fn static_moves(e: &Encounter) -> Option<[u16; 4]> {
+    if e.is_slot() || !e.has(crate::data::encounters::flag::HAS_MOVES) {
+        return None;
+    }
+    e.template().map(|t| t.moves())
+}
 
 fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: &mut Report) {
     let pk = &inp.pk;
@@ -398,8 +410,28 @@ fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Encounter>, report: 
     if (leaf > 0b1_1111 && leaf != 0b11_1111) || (leaf != 0 && pk.is_egg()) {
         report.flag(CheckId::Misc);
     }
-    if pk.fateful() {
+    // Fateful flag must match the template (event statics set it; nothing else does).
+    let fateful_expected = enc.is_some_and(|e| e.has(crate::data::encounters::flag::FATEFUL));
+    if pk.fateful() != fateful_expected {
         report.flag(CheckId::Fateful);
+    }
+    if let Some(e) = enc.filter(|e| !e.is_slot()) {
+        if let Some(t) = e.template() {
+            // Fixed nature.
+            if t.nature() != 25 && pk.nature() != t.nature() {
+                report.flag(CheckId::Nature);
+            }
+        }
+        // AbilityPermission: 1 OnlyFirst, 2 OnlySecond (Gen 4: PID bit 0).
+        match e.ability() {
+            1 if pk.pid() & 1 != 0 => report.flag(CheckId::Ability),
+            2 if pk.pid() & 1 != 1 => report.flag(CheckId::Ability),
+            _ => {}
+        }
+        // Shiny.Never.
+        if e.shiny() == 1 && pk.is_shiny() {
+            report.flag(CheckId::Shiny);
+        }
     }
     let pkrs = pk.pokerus();
     if (pkrs & 0xF) as u32 > ((pkrs >> 4) & 3) as u32 + 1 {

@@ -486,9 +486,9 @@ private:
                                           : core::legality(box_, cur_, &ms);
         static const char* why[] = {"",        "egg",       "origin game",
                                     "data missing", "Gen 5 save", "hatched",
-                                    "gift/static/trade"};
+                                    "event/trade/walker"};
         if (r.status == 1)
-            at(top(), 0, 21, "LEGAL  (wild slot, %lu ms)", (unsigned long)ms);
+            at(top(), 0, 21, "LEGAL  (%lu ms)", (unsigned long)ms);
         else if (r.status == 2)
         {
             char list[40] = "";

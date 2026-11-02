@@ -477,13 +477,17 @@ fn p5_parity_corpus() {
             if !f.ends_with(".pk4")
                 || !matches!(
                     v["enc_kind"].as_str().unwrap(),
-                    "EncounterSlot4" | "EncounterInvalid"
+                    "EncounterSlot4" | "EncounterInvalid" | "EncounterStatic4"
                 )
             {
                 continue;
             }
             let pk = Pkm::from_decrypted(Format::Pk4, &fs::read(dir.join(f)).unwrap()).unwrap();
             if !matches!(pk.version(), 7 | 8 | 10..=12) {
+                continue;
+            }
+            // Gift eggs (static encounters with an egg location) are not modelled yet.
+            if v["enc_kind"] == "EncounterStatic4" && pk.egg_location() != 0 {
                 continue;
             }
             let r = verity::legality::analysis4::analyze4(ctx, &pk);

@@ -184,8 +184,101 @@ pub struct WildMatches<'a> {
     pub fallback: Option<(Encounter<'a>, Deferral)>,
 }
 
-/// Wild slots for a D/P/Pt PK4 in PKHeX's yield order. `group` is `SlotsD`, `SlotsP` or
-/// `SlotsPt` (Method J), or `SlotsHG`/`SlotsSS` (Method K, from the HG/SS encounter data).
+/// PKHeX `EncounterEnumerator4` static groups per origin version (Pokéwalker not modelled yet).
+pub fn static_groups(version: u8) -> &'static [&'static [u8]] {
+    match version {
+        7 => &[b"StaticHG", b"Encounter_HGSS"],
+        8 => &[b"StaticSS", b"Encounter_HGSS"],
+        10 => &[b"StaticD", b"StaticDP", b"StaticDPPt"],
+        11 => &[b"StaticP", b"StaticDP", b"StaticDPPt"],
+        _ => &[b"StaticPt", b"StaticDPPt"],
+    }
+}
+
+const GENDER_RANDOM: u8 = 255;
+const TILE_GRASS: u8 = 2;
+const TILE_WATER: u8 = 7;
+
+/// PKHeX `EncounterStatic4.IsMatchRoamerLocation` permit masks (grass/water per region).
+fn roamer_location_ok(location: u16, met: u16, tile: u8) -> bool {
+    let (first, permit): (u16, u64) = match (location, tile) {
+        (16, TILE_GRASS) => (16, 0x2_8033_FFFF),
+        (16, TILE_WATER) => (16, 0x2_803E_3B9E),
+        (177, TILE_GRASS) => (177, 0x0003_E7FF),
+        (177, TILE_WATER) => (177, 0x0001_E06E),
+        (149, TILE_GRASS) => (149, 0x0AB3_FFFF),
+        (149, TILE_WATER) => (149, 0x0ABC_1B28),
+        _ => return false,
+    };
+    let v = met.wrapping_sub(first);
+    v < 64 && permit & (1u64 << v) != 0
+}
+
+/// PKHeX `FormInfo.IsFormChangeable` (Gen 4 species).
+fn form_changeable(species: u16) -> bool {
+    matches!(species, 412 | 479 | 386 | 483 | 484 | 487 | 492 | 493)
+}
+
+/// PKHeX `EncounterStatic4.IsMatchExact` (format 4).
+fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
+    let Some(t) = e.template() else {
+        return false;
+    };
+    let is_egg_enc = t.egg_location() != 0;
+    // IsMatchEggLocation
+    if !is_egg_enc {
+        if pk.egg_location != 0 {
+            return false;
+        }
+    } else if !pk.is_egg {
+        if pk.egg_location != t.egg_location() && pk.egg_location != 2002 {
+            return false;
+        }
+    } else if pk.egg_location != t.egg_location() || !matches!(pk.met_location, 0 | 2002) {
+        return false;
+    }
+    // IsMatchLocation
+    if !is_egg_enc {
+        let met = pk.met_location;
+        let ok = if e.has(crate::data::encounters::flag::ROAMING) {
+            roamer_location_ok(e.location(), met, pk.ground_tile)
+        } else {
+            met == e.location()
+        };
+        if !ok {
+            return false;
+        }
+    }
+    // IsMatchLevel
+    let want = if is_egg_enc { 0 } else { e.level_min() };
+    if pk.analyze.met_level != want {
+        return false;
+    }
+    if t.gender() != GENDER_RANDOM && pk.analyze.gender != t.gender() {
+        return false;
+    }
+    !(e.form() != evo.form && !form_changeable(e.species()))
+}
+
+/// PKHeX `EncounterStatic4.IsCompatible`.
+fn static_compatible(e: &Encounter, pk: &MatchPkm, kind: PidType) -> bool {
+    const SHINY_ALWAYS: u8 = 2;
+    if e.species() == 172 {
+        return kind == PidType::Pokewalker;
+    }
+    if e.shiny() == SHINY_ALWAYS {
+        return kind == PidType::ChainShiny;
+    }
+    match kind {
+        PidType::Method1 => true,
+        PidType::CuteCharm => cute_charm_valid(e.species(), pk),
+        _ => false,
+    }
+}
+
+/// Wild slots and statics for a Gen 4 PK4 (D/P/Pt or HG/SS origin) in PKHeX's yield order
+/// (`EncounterEnumerator4` + `EncounterGenerator4.GetEncounters`). `group` names the slot
+/// group (`SlotsD`/`SlotsP`/`SlotsPt`/`SlotsHG`/`SlotsSS`); statics come from the same data.
 pub fn wild_slots<'a>(
     pk: &MatchPkm,
     chain: &[EvoCriteria],
@@ -194,55 +287,113 @@ pub fn wild_slots<'a>(
     group: &[u8],
     ratio: impl Fn(u16) -> u8,
 ) -> WildMatches<'a> {
-    let mut queue: Vec<SlotMatch<'a>> = Vec::new();
     let mut fallback: Option<(Encounter<'a>, Deferral)> = None;
     let mut defer = |d: Deferral, e: Encounter<'a>| {
         if fallback.is_none_or(|(_, cur)| d < cur) {
             fallback = Some((e, d));
         }
     };
+    let none = WildMatches {
+        candidates: Vec::new(),
+        fallback: None,
+    };
+    // Bred eggs, events and trades are not modelled: they come before statics in PKHeX, so a
+    // Pokémon with an egg location is left unmatched (callers report "not checked").
     if pk.is_egg || pk.egg_location != 0 {
-        return WildMatches {
-            candidates: queue,
-            fallback: None,
-        };
+        return none;
     }
-    // EncounterEnumerator4: Match slots in data order, then the first partial match last.
-    let mut yielded: Vec<(Encounter<'a>, bool)> = Vec::new();
+    let evo_of = |sp: u16| chain.iter().find(|c| c.species == sp);
+    let must_be_slot = pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT;
+
+    // EncounterEnumerator4: (encounter, partial) in yield order; the first partial match is
+    // deferred to the end (shared across statics and slots).
+    let mut seq: Vec<(Encounter<'a>, bool)> = Vec::new();
     let mut partial: Option<Encounter<'a>> = None;
-    for e in ed.group(group) {
-        if e.location() != pk.met_location {
-            continue;
+    let push_statics = |seq: &mut Vec<(Encounter<'a>, bool)>,
+                        partial: &mut Option<Encounter<'a>>| {
+        for g in static_groups(pk.analyze.version) {
+            for e in ed.group(g) {
+                let Some(evo) = evo_of(e.species()) else {
+                    continue;
+                };
+                if !static_match_exact(&e, pk, evo) {
+                    continue;
+                }
+                let gift = e.ball() == BALL_POKE;
+                if gift && pk.ball != e.ball() {
+                    if partial.is_none() {
+                        *partial = Some(e);
+                    }
+                } else {
+                    seq.push((e, false));
+                }
+            }
         }
-        let Some(evo) = chain.iter().find(|c| c.species == e.species()) else {
-            continue;
-        };
-        if !is_match_exact(&e, pk, evo) {
-            continue;
+    };
+    let push_slots = |seq: &mut Vec<(Encounter<'a>, bool)>, partial: &mut Option<Encounter<'a>>| {
+        for e in ed.group(group) {
+            if e.location() != pk.met_location {
+                continue;
+            }
+            let Some(evo) = evo_of(e.species()) else {
+                continue;
+            };
+            if !is_match_exact(&e, pk, evo) {
+                continue;
+            }
+            if rating(&e, pk) == Rating::Match {
+                seq.push((e, false));
+            } else if partial.is_none() {
+                *partial = Some(e);
+            }
         }
-        if rating(&e, pk) == Rating::Match {
-            yielded.push((e, false));
-        } else if partial.is_none() {
-            partial = Some(e);
+    };
+    if must_be_slot {
+        // Slots, then statics; the enumerator ends without reaching its Fallback state.
+        push_slots(&mut seq, &mut partial);
+        push_statics(&mut seq, &mut partial);
+    } else {
+        push_statics(&mut seq, &mut partial);
+        push_slots(&mut seq, &mut partial);
+        if let Some(e) = partial {
+            seq.push((e, true));
         }
     }
-    // `mustBeSlot` (Safari/Sport Ball) iterates statics after slots and ends without reaching the
-    // enumerator's Fallback state, so the deferred partial match is never yielded.
-    let must_be_slot = pk.egg_location == 0 && (pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT);
-    if let Some(e) = partial.filter(|_| !must_be_slot) {
-        yielded.push((e, true));
-    }
-    for (e, is_partial) in yielded {
+
+    // EncounterGenerator4.GetEncounters: non-slots yield as they pass; slots queue by lead.
+    let mut direct: Vec<SlotMatch<'a>> = Vec::new();
+    let mut queue: Vec<SlotMatch<'a>> = Vec::new();
+    for (e, is_partial) in seq {
         if e.ground_tile() & (1u32 << pk.ground_tile) == 0 {
             defer(Deferral::Tile, e);
             continue;
         }
-        if !type_compatible(&e, pk, pidiv.kind) {
+        let compatible = if e.is_slot() {
+            type_compatible(&e, pk, pidiv.kind)
+        } else {
+            static_compatible(&e, pk, pidiv.kind)
+        };
+        if !compatible {
             defer(Deferral::PidIv, e);
             continue;
         }
         if !ball_compatible(&e, pk) {
             defer(Deferral::Ball, e);
+            continue;
+        }
+        if !e.is_slot() {
+            if pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT {
+                defer(Deferral::Ball, e);
+            } else {
+                direct.push(SlotMatch {
+                    encounter: e,
+                    lead: LeadSeed {
+                        seed: pidiv.seed,
+                        lead: method_j::LeadRequired::None,
+                    },
+                    partial: is_partial,
+                });
+            }
             continue;
         }
         let Some(slot) = Slot4::from_encounter(&e) else {
@@ -269,8 +420,9 @@ pub fn wild_slots<'a>(
             .unwrap_or(queue.len());
         queue.insert(at, item);
     }
+    direct.extend(queue);
     WildMatches {
-        fallback: if queue.is_empty() { fallback } else { None },
-        candidates: queue,
+        fallback: if direct.is_empty() { fallback } else { None },
+        candidates: direct,
     }
 }

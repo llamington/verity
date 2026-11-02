@@ -381,7 +381,7 @@ pub struct VerityLegality {
     pub enc_location: u16,
     pub enc_slot: u8,
     /// Why status is 0: 1 egg, 2 origin game not yet supported, 3 data missing, 4 not Gen 4,
-    /// 5 hatched, 6 no wild encounter matched (statics, gifts and trades are not checked yet).
+    /// 5 hatched, 6 no encounter matched (events, trades and Pokéwalker are not checked yet).
     pub unsupported: u8,
 }
 
