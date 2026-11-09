@@ -502,6 +502,30 @@ impl<'a> EncounterData<'a> {
         })
     }
 
+    /// The slots of a slot group met at `location`, in table order. Scans only each record's
+    /// area index, since a group has thousands of slots and the legality check needs a few.
+    pub fn slots_at(&self, name: &[u8], location: u16) -> impl Iterator<Item = Encounter<'a>> + 'a {
+        let this = *self;
+        let g = (0..self.group_count()).find(|&g| self.group_name(g) == name);
+        let range = g.map_or(0..0, |g| self.group_range(g).0);
+        let bytes = self.blob.bytes(table::SLOTS);
+        let mut last = None;
+        let mut here = false;
+        range.filter_map(move |i| {
+            let o = i * SLOT_LEN + 12;
+            let area = u16::from_le_bytes([*bytes.get(o)?, *bytes.get(o + 1)?]);
+            if last != Some(area) {
+                last = Some(area);
+                here = this.area(area).is_some_and(|a| a.location() == location);
+            }
+            if here {
+                this.slot(i)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn group(&self, name: &[u8]) -> impl Iterator<Item = Encounter<'a>> + 'a {
         let this = *self;
         let g = (0..self.group_count()).find(|&g| self.group_name(g) == name);

@@ -96,8 +96,7 @@ Park, ~99 in the JP HG save) and D Ranch trades (6). Remaining M4: unhatched egg
 Pal Park (Gen 3 origins), egg generation. HG/SS generation is done: the generator dispatches
 Method J/K by `Request::version`; P6 acceptance 10,562 PKHeX-legal across D/P/Pt/HG/SS; the DS
 wizard offers HeartGold slots on HG/SS saves (verified end to end with `ui-add-hgss.json` +
-PKHeX). Perf note: Ruins of Alph Unown legality takes ~107 ms on DS (the form recursion);
-optimise before P9 acceptance (budget 50 ms).
+PKHeX).
 
 **M6 starting point (legality done, see Done):** PKHeX's Gen 4 event DB is `Resources/legality/mgdb/wc4.pkl` (590 PCD
 records of 0x358 bytes, `EncounterEvent.MGDB_G4`); legality matching lives in
@@ -129,8 +128,10 @@ D Ranch gifts are done: `legality/ranch4.rs` (table generated from PKHeX), oracl
 `p5_parity_ranch_1e4` 10,000/10,000. Fixed along the way: a deferred encounter now follows yielded
 statics and trades (only a queued slot ends the search), and `VerifyFixedAbility` for statics.
 
-1. Remaining M4: Pal Park (Gen 3 origins), egg generation; Ruins of Alph Unown legality perf
-   (107 ms on DS, budget 50).
+Legality perf: the slot scan was the cost, not Unown. `EncounterData::slots_at` reads only area
+indexes; Ruins of Alph Unown went from 107 ms to 15 ms on the DS.
+
+1. Remaining M4: Pal Park (Gen 3 origins), egg generation.
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,

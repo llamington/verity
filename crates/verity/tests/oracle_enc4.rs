@@ -88,6 +88,7 @@ fn dppt_wild_slot_match_equals_pkhex() {
                 ground_tile: pk.ground_tile(),
                 is_shiny: pk.is_shiny(),
                 contest: pk.contest(),
+                unown_form_ok: true,
             };
             let group: &[u8] = match pk.version() {
                 10 => b"SlotsD",
