@@ -517,7 +517,7 @@ fn can_hatch(species: u16) -> bool {
     !matches!(
         species,
         132 | 144..=146 | 150 | 151 | 201 | 243..=245 | 249..=251 | 377..=386 | 480..=493
-    ) || matches!(species, 489 | 490)
+    ) || species == 489
 }
 
 /// PKHeX `EncounterGenerator4.TryGetEgg` / `TryGetSplit`: candidate egg species, in order.
@@ -553,6 +553,16 @@ fn egg_species(ctx: &Context4, chain: &[EvoCriteria]) -> Vec<u16> {
         out.push(d.species);
     }
     out
+}
+
+/// Whether a Gen 4 egg of this species can exist: it is a baby species or a split-breed one
+/// (`EncounterGenerator4.TryGetEgg`).
+pub fn can_be_egg(ctx: &Context4, species: u16) -> bool {
+    let (base, form) = ctx.evo.base_species_form(species, 0);
+    (base == species || split_breed4(species))
+        && can_hatch(base)
+        && !(form != 0 && matches!(base, 25 | 133 | 172))
+        && ctx.evo.is_present(base, form)
 }
 
 /// LearnGroup4.CheckEncounterMoves for a bred egg: egg moves, inherited level-up moves, and
