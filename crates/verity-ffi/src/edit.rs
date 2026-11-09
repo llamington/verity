@@ -18,6 +18,10 @@ fn group(version: u8) -> Option<&'static [u8]> {
         12 => Some(b"SlotsPt"),
         7 => Some(b"SlotsHG"),
         8 => Some(b"SlotsSS"),
+        20 => Some(b"SlotsW"),
+        21 => Some(b"SlotsB"),
+        22 => Some(b"SlotsW2"),
+        23 => Some(b"SlotsB2"),
         _ => None,
     }
 }
@@ -30,6 +34,20 @@ fn enc_data(
         &ctx.enc_hgss
     } else {
         &ctx.enc_dppt
+    }
+}
+
+/// The encounter tables holding `version`'s wild slots.
+fn wild_data(version: u8) -> Option<&'static verity::data::encounters::EncounterData<'static>> {
+    if matches!(version, 20..=23) {
+        let ctx = legal::context5()?;
+        Some(if matches!(version, 20 | 21) {
+            &ctx.enc_bw
+        } else {
+            &ctx.enc_b2w2
+        })
+    } else {
+        Some(enc_data(legal::context()?, version))
     }
 }
 
@@ -58,21 +76,25 @@ pub struct VerityEncounter {
 /// `out` must point to `cap` writable `u16`s.
 #[no_mangle]
 pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: usize) -> usize {
-    let (Some(g), Some(ctx)) = (group(version), legal::context()) else {
+    let Some(g) = group(version) else {
         return 0;
     };
     if out.is_null() {
         return 0;
     }
     let out = slice::from_raw_parts_mut(out, cap);
-    let mut seen = [false; 494];
-    for e in enc_data(ctx, version).group(g) {
+    let mut seen = [false; 650];
+    let ed = match wild_data(version) {
+        Some(d) => d,
+        None => return 0,
+    };
+    for e in ed.group(g) {
         if let Some(s) = seen.get_mut(e.species() as usize) {
             *s = true;
         }
     }
     let mut n = 0;
-    for (sp, &s) in seen.iter().enumerate() {
+    for (sp, &s) in seen.iter().enumerate().skip(1) {
         if s && n < cap {
             out[n] = sp as u16;
             n += 1;
@@ -93,7 +115,7 @@ pub unsafe extern "C" fn verity_wild_encounters(
     out: *mut VerityEncounter,
     cap: usize,
 ) -> usize {
-    let (Some(g), Some(ctx)) = (group(version), legal::context()) else {
+    let (Some(g), Some(ed)) = (group(version), wild_data(version)) else {
         return 0;
     };
     if out.is_null() {
@@ -101,7 +123,7 @@ pub unsafe extern "C" fn verity_wild_encounters(
     }
     let out = slice::from_raw_parts_mut(out, cap);
     let mut n = 0;
-    for (i, e) in enc_data(ctx, version).group(g).enumerate() {
+    for (i, e) in ed.group(g).enumerate() {
         if e.species() != species || n >= cap {
             continue;
         }
@@ -168,6 +190,7 @@ pub enum GenStatus {
     Unsafe = 17,
     Internal = 18,
     NotWild = 19,
+    ShinyInGrotto = 20,
 }
 
 fn status(e: Error) -> GenStatus {
@@ -220,9 +243,66 @@ pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
         16 => b"Slot not available\0",
         17 => b"Rejected by the game-safe check\0",
         19 => b"Only for Gen 4 wild catches\0",
+        20 => b"Hidden Grotto Pokemon are never shiny\0",
         _ => b"Internal error\0",
     };
     s.as_ptr()
+}
+
+/// The Gen 5 half of `verity_gen_insert`.
+fn insert5(save: &mut verity::save::Save, r: &VerityGenRequest, loc: VerityLoc) -> u8 {
+    use verity::gen::wild5::{self, Error5, Request5};
+    let (Some(g), Some(ctx)) = (group(r.version), legal::context5()) else {
+        return GenStatus::Unsupported as u8;
+    };
+    if !matches!(r.version, 20..=23) {
+        return GenStatus::Unsupported as u8;
+    }
+    let ed = if matches!(r.version, 20 | 21) {
+        &ctx.enc_bw
+    } else {
+        &ctx.enc_b2w2
+    };
+    let picked = if r.encounter_index == 0xFFFF {
+        let count = ed.group(g).filter(|e| e.species() == r.species).count();
+        if count == 0 {
+            return GenStatus::NoEncounter as u8;
+        }
+        ed.group(g)
+            .filter(|e| e.species() == r.species)
+            .nth(r.seed as usize % count)
+    } else {
+        ed.group(g).nth(r.encounter_index as usize)
+    };
+    let Some(encounter) = picked else {
+        return GenStatus::NotInEncounter as u8;
+    };
+    if encounter.species() != r.species {
+        return GenStatus::NotInEncounter as u8;
+    }
+    let opt = |v: u8| (v != 0xFF).then_some(v);
+    let q = Request5 {
+        encounter,
+        level: opt(r.level),
+        nature: opt(r.nature),
+        gender: opt(r.gender),
+        shiny: r.shiny != 0,
+        ball: opt(r.ball),
+        date: r.met_date,
+        seed: r.seed as u64 | 1,
+    };
+    let built = match wild5::generate(ctx, &api4::trainer_of(save), &q) {
+        Ok(p) => p,
+        Err(Error5::LevelOutsideSlot) => return GenStatus::LevelOutsideSlot as u8,
+        Err(Error5::GenderImpossible) => return GenStatus::GenderImpossible as u8,
+        Err(Error5::ShinyImpossible) => return GenStatus::ShinyInGrotto as u8,
+        Err(Error5::BallNotAllowed) => return GenStatus::BallNotAllowed as u8,
+        Err(Error5::Illegal) => return GenStatus::Internal as u8,
+    };
+    match wild5::insert(ctx, save, slot_of(loc), &built) {
+        Ok(()) => GenStatus::Ok as u8,
+        Err(_) => GenStatus::Unsafe as u8,
+    }
 }
 
 /// C ABI: generates a legal Pokémon for the save's trainer and writes it to `loc` (through the
@@ -246,6 +326,9 @@ pub unsafe extern "C" fn verity_gen_insert(
     let Some(mut save) = open(buf, len) else {
         return GenStatus::Internal as u8;
     };
+    if matches!(save.kind(), SaveKind::BW | SaveKind::B2W2) {
+        return insert5(&mut save, &r, loc);
+    }
     if !matches!(save.kind(), SaveKind::DP | SaveKind::Pt | SaveKind::HGSS)
         || group(r.version).is_none()
     {
@@ -353,7 +436,7 @@ pub unsafe extern "C" fn verity_save_check(
         return VerityErr::Unrecognized;
     };
     let mut c = VeritySaveCheck::default();
-    match legal::context().and_then(|ctx| api4::rules4(ctx, save.kind())) {
+    match game_rules(save.kind()) {
         None => c.issue = 5,
         Some(rules) => match safety::check_save(&rules, &save) {
             Ok(()) => {}
@@ -800,6 +883,38 @@ mod tests {
 
     fn file(rel: &str) -> Option<std::vec::Vec<u8>> {
         std::fs::read(std::format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"))).ok()
+    }
+
+    /// The whole-save validator has to work for Gen 5 too, or a Gen 5 save can never be written.
+    #[test]
+    fn gen5_save_passes_validator() {
+        let _guard = crate::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(mut save) = file("corpus/real/pkhex-avalonia/gen5_white2.sav") else {
+            return;
+        };
+        for (n, k) in [
+            ("b2w2.bin", BlobKind::B2w2),
+            ("moves5.bin", BlobKind::Moves5),
+        ] {
+            let Some(b) = file(&std::format!("data/blobs/{n}")) else {
+                return;
+            };
+            let b: &'static [u8] = std::boxed::Box::leak(b.into_boxed_slice());
+            unsafe {
+                assert_eq!(
+                    verity_data_attach(k as u32, b.as_ptr(), b.len()),
+                    VerityErr::Ok
+                )
+            };
+        }
+        let mut c = VeritySaveCheck::default();
+        unsafe {
+            assert_eq!(
+                verity_save_check(save.as_mut_ptr(), save.len(), &mut c),
+                VerityErr::Ok
+            );
+        }
+        assert_eq!(c.issue, 0);
     }
 
     #[test]

@@ -809,6 +809,87 @@ fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
     assert!(bad.is_empty());
 }
 
+/// Random Gen 5 wild requests: every Pokémon built must be PKHeX-legal.
+fn gen5_wild_legal(n: usize, seed: u64) -> usize {
+    use verity::gen::build4::Trainer4;
+    use verity::gen::wild5::{generate, Request5};
+    let ctx = Box::leak(Box::new(context5()));
+    let tmp = std::env::temp_dir().join(format!("verity-g5w-{}-{seed}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let mut r = Rand::new(seed);
+    let groups: [(&[u8], &EncounterData); 4] = [
+        (b"SlotsW", &ctx.enc_bw),
+        (b"SlotsB", &ctx.enc_bw),
+        (b"SlotsW2", &ctx.enc_b2w2),
+        (b"SlotsB2", &ctx.enc_b2w2),
+    ];
+    let lists: Vec<Vec<Encounter>> = groups
+        .iter()
+        .map(|(g, d)| d.group(g).filter(|e| e.species() != 0).collect())
+        .collect();
+    let mut made = 0;
+    let mut name = [0xFFFFu16; 8];
+    for (i, c) in "Verity".encode_utf16().enumerate() {
+        name[i] = c;
+    }
+    for i in 0..n {
+        let list = &lists[r.next_u32() as usize % 4];
+        let encounter = list[r.next_u32() as usize % list.len()];
+        let tr = Trainer4 {
+            name_raw: name,
+            tid: r.next_u32() as u16,
+            sid: r.next_u32() as u16,
+            gender: (r.next_u32() & 1) as u8,
+            language: [1u8, 2, 3, 4, 5, 7, 8][r.next_u32() as usize % 7],
+        };
+        let q = Request5 {
+            encounter,
+            level: None,
+            nature: (r.next_u32() & 1 == 0).then_some((r.next_u32() % 25) as u8),
+            gender: None,
+            shiny: !encounter.is_hidden_grotto() && r.next_u32().is_multiple_of(4),
+            ball: (r.next_u32() & 1 == 0)
+                .then_some([1u8, 2, 3, 4, 6, 12, 15][r.next_u32() as usize % 7]),
+            date: [12, 3, 4],
+            seed: r.next_u32() as u64 | (i as u64) << 32,
+        };
+        let pk =
+            generate(ctx, &tr, &q).unwrap_or_else(|e| panic!("{e:?} sp {}", encounter.species()));
+        if q.shiny {
+            assert!(pk.is_shiny());
+        }
+        fs::write(tmp.join(format!("{made:05}.pk5")), &pk.decrypted()[..136]).unwrap();
+        made += 1;
+    }
+    let out = oracle(&["legality-batch".as_ref(), tmp.as_os_str()]);
+    let (mut bad, mut seen) = (0, 0);
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        seen += 1;
+        if !v["valid"].as_bool().unwrap() {
+            eprintln!("{v}");
+            bad += 1;
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert_eq!(seen, made, "PKHeX should judge every file");
+    assert_eq!(bad, 0);
+    made
+}
+
+#[test]
+fn p6_gen5_wild_legal() {
+    if root().join("data/blobs/names5.bin").exists() {
+        eprintln!("built {}", gen5_wild_legal(400, 77));
+    }
+}
+
+#[test]
+#[ignore]
+fn p6_gen5_wild_legal_1e4() {
+    eprintln!("built {}", gen5_wild_legal(10_000, 78));
+}
+
 #[test]
 fn p5_parity_fuzz_gen5() {
     for (i, mode) in [

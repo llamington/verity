@@ -40,6 +40,7 @@ emu-ui: emu-harness nds
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-closest-ivs.json --out build/emu/ui-closest-ivs
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-misc-tabs.json --out build/emu/ui-misc-tabs
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-gen5.json --out build/emu/ui-gen5
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add-w2.json --out build/emu/ui-add-w2
 	@if [ -f roms/platinum.nds ] && [ -f bios/bios7.bin ]; then \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/pt-loads-written.json --out build/emu/pt-loads-written; \
 	else echo "skip pt-loads-written: ROM or BIOS missing"; fi

@@ -261,6 +261,8 @@ uint8_t wizard_version()
     {
         case 1: return 10;
         case 3: return 7;
+        case 4: return 20;
+        case 5: return 22;
         default: return 12;
     }
 }
