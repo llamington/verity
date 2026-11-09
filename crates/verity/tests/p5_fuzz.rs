@@ -1,4 +1,8 @@
 //! P5 fuzz driver: legal generated PK4s built by PKHeX, mutated, re-checked by PKHeX.
+fn root_for_g3() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -266,6 +270,12 @@ fn context() -> verity::legality::analysis4::Context4<'static> {
         enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: verity::data::Strings::load(load("names4.bin")).unwrap(),
+        g3: std::fs::read(root_for_g3().join("data/blobs/g3_origin.bin"))
+            .ok()
+            .map(|b| {
+                verity::legality::analysis3::Context3::load(Box::leak(b.into_boxed_slice()))
+                    .unwrap()
+            }),
         gifts: verity::gift::pcd::Gifts4::load(load("gifts4.bin")).unwrap(),
     }
 }
@@ -378,10 +388,18 @@ fn parity_with_muts(
     let mut per_id: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     let mut checked = 0;
     for (f, pk) in &files {
-        if !matches!(pk.version(), 7 | 8 | 10..=12) {
+        if !matches!(pk.version(), 1..=5 | 7 | 8 | 10..=12) {
             continue;
         }
         let v = &pkhex[f];
+        // Gen 3 event gifts aren't modelled yet.
+        if v["enc_kind"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("EncounterGift3")
+        {
+            continue;
+        }
         // PKHeX's word filter is not ported (docs/discrepancies.md).
         if v["report"]
             .as_str()
@@ -423,12 +441,20 @@ fn parity_with_muts(
             || report.valid() != v["valid"].as_bool().unwrap()
         {
             bad.push(format!(
-                "{f} sp {} ball {} loc {} ml {} tile {}: ours {ours:?} {our_moves:?} pkhex {theirs:?} {their_moves:?} {}",
+                "{f} v{} lang {} sp {} ball {} loc {} ml {} tile {} enc {} ({}): ours {ours:?} {our_moves:?} pkhex {theirs:?} {their_moves:?} {}",
+                pk.version(), pk.language(),
                 pk.species(),
                 pk.ball(),
                 pk.met_location(),
                 pk.met_level(),
                 pk.ground_tile(),
+                match report.matched {
+                    verity::legality::analysis4::Matched::Slot { encounter, .. } => format!("{}/{:?}", encounter.species(), encounter.kind()),
+                    verity::legality::analysis4::Matched::Egg { species } => format!("egg {species}"),
+                    verity::legality::analysis4::Matched::Invalid => "invalid".into(),
+                    _ => "other".into(),
+                },
+                v["enc_kind"].as_str().unwrap_or(""),
                 v["report"].as_str().unwrap_or("").replace('\n', " | ")
             ));
         }
@@ -440,6 +466,93 @@ fn parity_with_muts(
         let _ = fs::remove_dir_all(&tmp);
     }
     (checked, bad, per_id)
+}
+
+fn build_origin3(mode: &str, n: usize, dir: &Path, seed: u64) {
+    oracle(&[
+        "gen-slot3".as_ref(),
+        n.to_string().as_ref(),
+        seed.to_string().as_ref(),
+        dir.as_os_str(),
+        mode.as_ref(),
+    ]);
+}
+
+fn build_legal_slot3(n: usize, dir: &Path, seed: u64) {
+    build_origin3("slot", n, dir, seed);
+}
+
+fn build_legal_static3(n: usize, dir: &Path, seed: u64) {
+    build_origin3("static", n, dir, seed);
+}
+
+fn build_legal_trade3(n: usize, dir: &Path, seed: u64) {
+    build_origin3("trade", n, dir, seed);
+}
+
+fn build_legal_egg3(n: usize, dir: &Path, seed: u64) {
+    build_origin3("egg", n, dir, seed);
+}
+
+fn check_origin3(build: fn(usize, &Path, u64), n: usize, seed: u64, muts: u32) {
+    if !root().join("data/blobs/g3_origin.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with_muts(n, seed, muts, build, &MUTATIONS);
+    for b in bad.iter().take(20) {
+        eprintln!("{b}");
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+    eprintln!("checked {checked}");
+}
+
+#[test]
+fn p5_parity_fuzz_static3() {
+    check_origin3(build_legal_static3, 300, 311, 3);
+}
+
+#[test]
+fn p5_parity_fuzz_trade3() {
+    check_origin3(build_legal_trade3, 300, 321, 3);
+}
+
+#[test]
+fn p5_parity_fuzz_egg3() {
+    check_origin3(build_legal_egg3, 300, 331, 3);
+}
+
+#[test]
+#[ignore]
+fn p5_parity_origin3_1e4() {
+    for (b, seed) in [
+        (build_legal_slot3 as fn(usize, &Path, u64), 3001),
+        (build_legal_static3, 3002),
+        (build_legal_egg3, 3004),
+    ] {
+        check_origin3(b, 10_000, seed, 4);
+    }
+}
+
+#[test]
+fn p5_parity_fuzz_slot3() {
+    if !root().join("data/blobs/g3_origin.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with_muts(600, 301, 3, build_legal_slot3, &MUTATIONS);
+    for b in bad.iter().take(20) {
+        eprintln!("{b}");
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
 }
 
 #[test]
@@ -681,6 +794,11 @@ fn p5_parity_corpus() {
                         | "EncounterStatic4Pokewalker"
                         | "EncounterTrade4PID"
                         | "EncounterTrade4RanchGift"
+                        | "EncounterSlot3"
+                        | "EncounterSlot3Swarm"
+                        | "EncounterStatic3"
+                        | "EncounterTrade3"
+                        | "EncounterEgg3"
                         | "PCD"
                         | "PGT"
                 )
@@ -688,7 +806,7 @@ fn p5_parity_corpus() {
                 continue;
             }
             let pk = Pkm::from_decrypted(Format::Pk4, &fs::read(dir.join(f)).unwrap()).unwrap();
-            if !matches!(pk.version(), 7 | 8 | 10..=12) {
+            if !matches!(pk.version(), 1..=5 | 7 | 8 | 10..=12) {
                 continue;
             }
             let r = verity::legality::analysis4::analyze4(ctx, &pk);

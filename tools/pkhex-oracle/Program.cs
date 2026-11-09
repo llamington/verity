@@ -45,6 +45,7 @@ public static class Program
                 "gen-gift4" => HandleGenGift4(args),
                 "gen-egg4" => HandleGenEgg4(args),
                 "gen-ranch4" => HandleGenRanch4(args),
+                "gen-slot3" => HandleGenSlot3(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -741,6 +742,7 @@ public static class Program
             ["pkhex_version"] = typeof(EntityFormat).Assembly.GetName().Version?.ToString() ?? "?",
             ["timestamp"] = DateTime.UtcNow.ToString("o"),
         };
+        File.WriteAllText(Path.Combine(outDir, "g3.json"), JsonSerializer.Serialize(ExportG3()));
         foreach (var (key, make) in games)
         {
             var data = make();
@@ -859,9 +861,17 @@ public static class Program
         {
             var f = o.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             if (f?.GetValue(o) is ReadOnlyMemory<string> m)
-                d[name] = m.ToArray();
+                d[name] = o is EncounterTrade3 ? m.ToArray().Select((n, lang) => Gen3NameIn4(n, lang)).ToArray() : m.ToArray();
         }
         return d;
+    }
+
+    /// Same conversion `EncounterTrade3.IsTrainerMatch` applies before comparing in the Gen 4 format.
+    private static string Gen3NameIn4(string name, int language)
+    {
+        Span<char> tmp = stackalloc char[name.Length];
+        StringConverter345.TransferGlyphs34(name, language, tmp);
+        return new string(tmp);
     }
 
     private static int HandleExportEncounters(string[] args)
@@ -871,7 +881,7 @@ public static class Program
         var asm = typeof(EntityFormat).Assembly;
         const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
         var summary = new System.Collections.Generic.Dictionary<string, object>();
-        foreach (var cls in new[] { "Encounters4DPPt", "Encounters4HGSS", "Encounters5BW", "Encounters5B2W2", "Encounters5DR" })
+        foreach (var cls in new[] { "Encounters3RSE", "Encounters3FRLG", "Encounters4DPPt", "Encounters4HGSS", "Encounters5BW", "Encounters5B2W2", "Encounters5DR" })
         {
             var t = asm.GetType("PKHeX.Core." + cls) ?? throw new InvalidOperationException(cls);
             var groups = new System.Collections.Generic.Dictionary<string, object>();
@@ -901,10 +911,10 @@ public static class Program
             summary[cls] = groups.ToDictionary(g => g.Key, g => (int)((System.Collections.ICollection)((dynamic)g.Value).items).Count);
         }
 
-        foreach (var (ctx, gen, max) in new[] { (EntityContext.Gen4, 4, (int)Sav(GameVersion.HG).MaxSpeciesID), (EntityContext.Gen5, 5, (int)Sav(GameVersion.B2).MaxSpeciesID) })
+        foreach (var (ctx, gen, max) in new[] { (EntityContext.Gen3, 3, 386), (EntityContext.Gen4, 4, (int)Sav(GameVersion.HG).MaxSpeciesID), (EntityContext.Gen5, 5, (int)Sav(GameVersion.B2).MaxSpeciesID) })
         {
             var tree = EvolutionTree.GetEvolutionTree(ctx);
-            var table = gen == 4 ? (IPersonalTable)PersonalTable.HGSS : PersonalTable.B2W2;
+            var table = gen == 3 ? (IPersonalTable)PersonalTable.E : gen == 4 ? PersonalTable.HGSS : PersonalTable.B2W2;
             var evos = new System.Collections.Generic.List<object>();
             for (ushort sp = 1; sp <= max; sp++)
             {
@@ -1023,6 +1033,131 @@ public static class Program
             var tr = Sav(GameVersion.D);
             tr.Language = languages[rng.Next(languages.Length)];
             var pk = gifts[rng.Next(gifts.Length)].ConvertToPKM(tr);
+            pk.RefreshChecksum();
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            File.WriteAllBytes(Path.Combine(args[3], $"{made:D6}.pk4"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
+        return made > 0 ? 0 : 1;
+    }
+
+    /// Gen 3 origin data: Emerald's species table, the TM/HM and tutor bits, and the level-up moves of each game.
+    private static object ExportG3()
+    {
+        var table = PersonalTable.E;
+        var personal = new System.Collections.Generic.List<int[]>();
+        var tutors = new System.Collections.Generic.List<int[]>();
+        var forms = new System.Collections.Generic.List<int[]>();
+        for (int i = 0; i < table.Count; i++)
+        {
+            var pi = table[i];
+            var raw = new int[0x2C];
+            Raw(pi).CopyTo(raw, 0);
+            // Lay it out as a Gen 4 entry so the reader is shared: TM/HM bits at 0x1C, no forms.
+            Array.Clear(raw, 0x1C, 0x10);
+            for (int b = 0; b < pi.TMHM.Length; b++)
+                if (pi.TMHM[b]) raw[0x1C + (b >> 3)] |= 1 << (b & 7);
+            raw[0x29] = pi.FormCount;
+            raw[0x2A] = pi.FormStatsIndex & 0xFF;
+            raw[0x2B] = pi.FormStatsIndex >> 8;
+            personal.Add(raw);
+            tutors.Add(pi.TypeTutors.Select(b => b ? 1 : 0).ToArray());
+        }
+        for (ushort sp = 1; sp <= 386; sp++)
+        {
+            var fc = table.GetFormEntry(sp, 0).FormCount;
+            for (byte f = 0; f < Math.Max((byte)1, fc); f++)
+                forms.Add(new[] { (int)sp, f, table.GetFormIndex(sp, f) });
+        }
+        object Levels(Func<ushort, byte, Learnset> get)
+        {
+            var o = new System.Collections.Generic.List<object>();
+            for (ushort sp = 1; sp <= 386; sp++)
+            {
+                var ls = get(sp, 0);
+                var mv = ls.GetAllMoves(); var lv = ls.GetAllLevels();
+                var arr = new int[mv.Length][];
+                for (int k = 0; k < mv.Length; k++) arr[k] = new int[] { lv[k], mv[k] };
+                o.Add(new { index = (int)sp, moves = arr });
+            }
+            return o;
+        }
+        var egg = new System.Collections.Generic.List<object>();
+        for (ushort sp = 1; sp <= 386; sp++)
+        {
+            var e = LearnSource3E.Instance.GetEggMoves(sp, 0).ToArray();
+            if (e.Length > 0) egg.Add(new { species = sp, form = 0, moves = e });
+        }
+        return new
+        {
+            game = "g3",
+            generation = 3,
+            max_species = 386,
+            personal_size = 0x2C,
+            personal,
+            type_tutors = tutors,
+            forms,
+            levelup = Levels(LearnSource3E.Instance.GetLearnset),
+            levelup_rs = Levels(LearnSource3RS.Instance.GetLearnset),
+            levelup_fr = Levels(LearnSource3FR.Instance.GetLearnset),
+            levelup_lg = Levels(LearnSource3LG.Instance.GetLearnset),
+            egg_moves = egg,
+            held_items = Array.Empty<int>(),
+        };
+    }
+
+    /// PKHeX-legal Gen 3 wild Pokémon sent through Pal Park: random trainer, slot, language and level gain.
+    private static int HandleGenSlot3(string[] args)
+    {
+        int count = int.Parse(args[1]);
+        var rng = new Random(int.Parse(args[2]));
+        Directory.CreateDirectory(args[3]);
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var asm = typeof(EntityFormat).Assembly;
+        EncounterArea3[] Get(string cls, string field) => (EncounterArea3[])asm.GetType("PKHeX.Core." + cls)!.GetField(field, all)!.GetValue(null)!;
+        T[] Field<T>(string cls, string field) => (T[])asm.GetType("PKHeX.Core." + cls)!.GetField(field, all)!.GetValue(null)!;
+        IEncounterConvertible[] Stat(string cls, params string[] fields) => fields.SelectMany(f => Field<EncounterStatic3>(cls, f)).Cast<IEncounterConvertible>().ToArray();
+        IEncounterConvertible[] Trade(string cls, params string[] fields) => fields.SelectMany(f => Field<EncounterTrade3>(cls, f)).Cast<IEncounterConvertible>().ToArray();
+        IEncounterConvertible[] Slots(EncounterArea3[] areas) => areas.SelectMany(a => a.Slots).Cast<IEncounterConvertible>().ToArray();
+        IEncounterConvertible[] Eggs(GameVersion v) => Enumerable.Range(1, 386).Where(sp => Breeding.CanHatchAsEgg((ushort)sp) && EvolutionTree.Evolves3.GetBaseSpeciesForm((ushort)sp, 0).Item1 == sp)
+            .Select(sp => (IEncounterConvertible)new EncounterEgg3((ushort)sp, v)).ToArray();
+        string mode = args.Length > 4 ? args[4] : "slot";
+        (GameVersion V, IEncounterConvertible[] Slots) Game(GameVersion v, string rse, string frlg)
+        {
+            bool isRse = v is GameVersion.R or GameVersion.S or GameVersion.E;
+            var cls = isRse ? "Encounters3RSE" : "Encounters3FRLG";
+            var shared = isRse ? "StaticRSE" : "StaticFRLG";
+            return (v, mode switch
+            {
+                "static" => Stat(cls, rse, shared),
+                "trade" => isRse
+                    ? Trade(cls, v == GameVersion.E ? new[] { "TradeGift_E" } : new[] { "TradeGift_RS", "TradeGift_E" })
+                    : Trade(cls, frlg, "TradeGift_FRLG"),
+                "egg" => Eggs(v),
+                _ => Slots(Get(cls, "Slots" + v)),
+            });
+        }
+        var games = new[]
+        {
+            Game(GameVersion.R, "StaticR", ""), Game(GameVersion.S, "StaticS", ""), Game(GameVersion.E, "StaticE", ""),
+            Game(GameVersion.FR, "StaticFR", "TradeGift_FR"), Game(GameVersion.LG, "StaticLG", "TradeGift_LG"),
+        };
+        int[] languages = [1, 2, 3, 4, 5, 7];
+        int made = 0, tried = 0;
+        while (made < count && tried < count * 20)
+        {
+            tried++;
+            var (v, slots) = games[rng.Next(games.Length)];
+            var slot = slots[rng.Next(slots.Length)];
+            var tr = Sav(v);
+            tr.Language = languages[rng.Next(languages.Length)];
+            tr.TID16 = (ushort)rng.Next(65536);
+            tr.SID16 = (ushort)rng.Next(65536);
+            var pk3 = (PK3)slot.ConvertToPKM(tr);
+            pk3.CurrentLevel = (byte)Math.Min(100, Math.Max(pk3.MetLevel, (byte)5) + rng.Next(3) * rng.Next(20));
+            var pk = pk3.ConvertToPK4();
             pk.RefreshChecksum();
             if (!new LegalityAnalysis(pk).Valid)
                 continue;

@@ -22,6 +22,21 @@ pub enum BlobKind {
     Gifts = 5,
 }
 
+impl TryFrom<u8> for BlobKind {
+    type Error = BlobError;
+
+    fn try_from(v: u8) -> Result<Self, BlobError> {
+        Ok(match v {
+            1 => Self::Game,
+            2 => Self::Moves,
+            3 => Self::Strings,
+            4 => Self::Encounters,
+            5 => Self::Gifts,
+            _ => return Err(BlobError::WrongKind),
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlobError {
     TooShort,
@@ -90,6 +105,18 @@ impl<'a> Blob<'a> {
             u32::from_le_bytes([e[4], e[5], e[6], e[7]]) as usize,
             u32::from_le_bytes([e[8], e[9], e[10], e[11]]) as usize,
         )
+    }
+
+    /// Every table as (id, element size, bytes).
+    pub fn tables(&self) -> impl Iterator<Item = (u16, u16, &'a [u8])> + '_ {
+        (0..self.tables).map(|i| {
+            let (id, elem, ofs, len) = self.entry(i);
+            (id, elem, &self.data[ofs..ofs + len])
+        })
+    }
+
+    pub fn kind_raw(&self) -> u8 {
+        self.kind
     }
 
     /// Table bytes and element size.

@@ -12,6 +12,8 @@ pub mod table {
     pub const SLOTS: u16 = 5;
     /// In-game trade nicknames and OT names by language, one record per template.
     pub const TRADE_NAMES: u16 = 6;
+    /// Fixed moves of Gen 3 swarm slots, 4 u16s each, indexed by the slot record's byte 19.
+    pub const SWARM_MOVES: u16 = 7;
 }
 
 pub const TEMPLATE_LEN: usize = 68;
@@ -35,6 +37,10 @@ pub enum EncounterKind {
     Pokewalker4 = 3,
     Trade4Pid = 4,
     Ranch4 = 5,
+    Slot3 = 6,
+    Slot3Swarm = 7,
+    Static3 = 8,
+    Trade3 = 9,
     Slot5 = 10,
     Static5 = 11,
     Entree5 = 12,
@@ -53,6 +59,10 @@ impl EncounterKind {
             3 => Pokewalker4,
             4 => Trade4Pid,
             5 => Ranch4,
+            6 => Slot3,
+            7 => Slot3Swarm,
+            8 => Static3,
+            9 => Trade3,
             10 => Slot5,
             11 => Static5,
             12 => Entree5,
@@ -72,6 +82,10 @@ impl EncounterKind {
             "EncounterStatic4Pokewalker" => Pokewalker4,
             "EncounterTrade4PID" => Trade4Pid,
             "EncounterTrade4RanchGift" => Ranch4,
+            "EncounterSlot3" => Slot3,
+            "EncounterSlot3Swarm" => Slot3Swarm,
+            "EncounterStatic3" => Static3,
+            "EncounterTrade3" => Trade3,
             "EncounterSlot5" => Slot5,
             "EncounterStatic5" => Static5,
             "EncounterStatic5Entree" => Entree5,
@@ -425,6 +439,21 @@ impl<'a> EncounterData<'a> {
             .bytes(table::TEMPLATES)
             .get(i * TEMPLATE_LEN..(i + 1) * TEMPLATE_LEN)
             .map(Template)
+    }
+
+    /// Fixed moves of a Gen 3 swarm slot.
+    pub fn swarm_moves(&self, e: &Encounter<'a>) -> Option<[u16; 4]> {
+        let Encounter::Slot { slot, .. } = e else {
+            return None;
+        };
+        if slot[0] != EncounterKind::Slot3Swarm as u8 {
+            return None;
+        }
+        let b = self.blob.bytes(table::SWARM_MOVES);
+        let r = b.get(slot[19] as usize * 8..slot[19] as usize * 8 + 8)?;
+        Some(core::array::from_fn(|i| {
+            u16::from_le_bytes([r[2 * i], r[2 * i + 1]])
+        }))
     }
 
     /// Fixed nickname and OT name (UTF-16 units) of a trade template for a language ID, if the

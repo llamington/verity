@@ -25,6 +25,16 @@ impl BlobWriter {
         }
     }
 
+    /// A writer holding every table of an already built blob.
+    pub fn reopen(data: &[u8]) -> Self {
+        let b = verity::data::blob::Blob::parse(data).unwrap();
+        let mut w = Self::new(b.generation(), b.kind_raw().try_into().unwrap());
+        for (id, elem, bytes) in b.tables() {
+            w.table(id, elem, bytes.to_vec());
+        }
+        w
+    }
+
     pub fn table(&mut self, id: u16, elem_size: u16, bytes: Vec<u8>) {
         self.tables.push((id, elem_size, bytes));
     }
@@ -429,6 +439,34 @@ fn encode_slot(t: &Value, area: u16) -> Vec<u8> {
     r
 }
 
+/// Gen 3 origin data in one blob: Emerald's game tables, the other games' level-up moves and
+/// the encounter blob as an embedded table.
+pub fn build_g3_origin(j: &Value, evolutions: &Value, encounters: &Value) -> Vec<u8> {
+    let game = build_game(j, evolutions);
+    let enc = build_encounters(encounters);
+    let mut w = BlobWriter::reopen(&game);
+    let count = j["personal"].as_array().unwrap().len();
+    for (key, id) in [
+        ("levelup_rs", gt::LEVELUP_RS),
+        ("levelup_fr", gt::LEVELUP_FR),
+        ("levelup_lg", gt::LEVELUP_LG),
+    ] {
+        let mut levelup = vec![Vec::new(); count];
+        for e in j[key].as_array().unwrap() {
+            let rec = &mut levelup[e["index"].as_u64().unwrap() as usize];
+            for m in e["moves"].as_array().unwrap() {
+                let m = ints(m);
+                rec.extend((m[1] as u16).to_le_bytes());
+                rec.push(m[0] as u8);
+                rec.push(0);
+            }
+        }
+        w.indexed(id, &levelup);
+    }
+    w.table(gt::ENCOUNTERS, 0, enc);
+    w.finish()
+}
+
 pub fn build_encounters(j: &Value) -> Vec<u8> {
     use verity::data::encounters::{table, AREA_LEN, RANGE_SLOTS, SLOT_LEN, TEMPLATE_LEN};
     let mut templates = Vec::new();
@@ -437,6 +475,7 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
     let mut names = Vec::new();
     let mut ranges = Vec::new();
     let mut trade_names: Vec<Vec<u8>> = Vec::new();
+    let mut swarm_moves: Vec<u8> = Vec::new();
     let mut generation = 0;
     for (name, group) in j.as_object().unwrap() {
         let items = group["items"].as_array().unwrap();
@@ -459,7 +498,14 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
                 areas.extend(rec);
                 for slot in a["slots"].as_array().unwrap() {
                     generation = num(slot, "Generation", generation);
-                    slots.extend(encode_slot(slot, ai));
+                    let mut rec = encode_slot(slot, ai);
+                    if slot["kind"] == "EncounterSlot3Swarm" {
+                        rec[19] = (swarm_moves.len() / 8) as u8;
+                        for k in ["Move1", "Move2", "Move3", "Move4"] {
+                            swarm_moves.extend((num(&slot["Moves"], k, 0) as u16).to_le_bytes());
+                        }
+                    }
+                    slots.extend(rec);
                 }
             }
             (start, (slots.len() / SLOT_LEN - start) as u32 | RANGE_SLOTS)
@@ -483,6 +529,9 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
     w.indexed(table::GROUP_NAMES, &names);
     w.table(table::GROUP_RANGES, 8, ranges);
     w.indexed(table::TRADE_NAMES, &trade_names);
+    if !swarm_moves.is_empty() {
+        w.table(table::SWARM_MOVES, 8, swarm_moves);
+    }
     w.finish()
 }
 
@@ -629,6 +678,20 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
             build_game(&load(&exports.join(format!("{g}.json"))), evo),
         );
     }
+    let mut enc3 = load(&exports.join("enc_Encounters3RSE.json"));
+    let frlg = load(&exports.join("enc_Encounters3FRLG.json"));
+    let groups = enc3.as_object_mut().unwrap();
+    groups.extend(frlg.as_object().unwrap().clone());
+    // Colosseum bonus-disc gifts belong with the Wonder Card events, not this table.
+    groups.retain(|name, _| !name.starts_with("ColoGifts"));
+    put(
+        "g3_origin.bin".into(),
+        build_g3_origin(
+            &load(&exports.join("g3.json")),
+            &load(&exports.join("evolutions3.json")),
+            &enc3,
+        ),
+    );
     for (key, src) in ENCOUNTER_SOURCES {
         put(
             format!("enc_{key}.bin"),

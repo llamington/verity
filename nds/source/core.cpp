@@ -221,6 +221,7 @@ bool ensure_gen4_data()
     ok &= attach(VERITY_BLOB_NAMES4, "names4.bin");
     ok &= attach(VERITY_BLOB_ENC_HGSS, "enc_hgss.bin");
     ok &= attach(VERITY_BLOB_GIFTS4, "gifts4.bin");
+    attach(VERITY_BLOB_G3_ORIGIN, "g3_origin.bin"); // Optional: Pal Park Pokémon stay unchecked.
     return ok;
 }
 
