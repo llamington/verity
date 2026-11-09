@@ -13,6 +13,8 @@ const FATHER_EGG: u8 = 2;
 const FATHER_TM: u8 = 3;
 const PARENT_LEVEL_UP: u8 = 4;
 const VOLT_TACKLE_SOURCE: u8 = 6;
+/// The highest source value, 4 in both `EggSource34` and `EggSource5`.
+const MAX_SOURCE: u8 = 4;
 
 const PICHU: u16 = 172;
 const VOLT_TACKLE: u16 = 344;
@@ -97,24 +99,81 @@ fn recurse(info: &mut Info, start: usize, source: u8) -> bool {
     verify_base(info)
 }
 
-/// `MoveBreed4.Validate`: whether `moves` is an order the game can give an egg of `species`,
-/// and the source found for each move (best effort when it isn't).
-fn validate_origins(
-    learn: &Learn4,
+/// What one generation's egg rules know about a species.
+pub(super) trait Breed {
+    fn species(&self) -> u16;
+    fn base_moves(&self) -> ([u16; 4], usize);
+    /// The `EggSource` value for moves inherited from level-up, which differs by generation.
+    fn parent_level_up(&self) -> u8;
+    fn father_tm(&self) -> u8;
+    /// Level-up moves both parents can pass on.
+    fn is_level_up(&self, mv: u16) -> bool;
+    fn is_egg_move(&self, mv: u16) -> bool;
+    fn is_tm(&self, mv: u16) -> bool;
+}
+
+struct Breed4<'c, 'a> {
+    learn: &'c Learn4<'a>,
     species: u16,
     version: u8,
-    moves: [u16; 4],
-    previous: [u8; 4],
-) -> (bool, [u8; 4]) {
+}
+
+impl Breed for Breed4<'_, '_> {
+    fn species(&self) -> u16 {
+        self.species
+    }
+    fn base_moves(&self) -> ([u16; 4], usize) {
+        base_egg_moves(
+            game(self.learn, self.version),
+            self.species as usize,
+            EGG_LEVEL,
+        )
+    }
+    fn parent_level_up(&self) -> u8 {
+        PARENT_LEVEL_UP
+    }
+    fn father_tm(&self) -> u8 {
+        FATHER_TM
+    }
+    fn is_level_up(&self, mv: u16) -> bool {
+        let table = game(self.learn, self.version);
+        can_inherit(table, self.species)
+            && table.levelup(self.species as usize).any(|(_, m)| m == mv)
+    }
+    fn is_egg_move(&self, mv: u16) -> bool {
+        let table = if matches!(self.version, 7 | 8) {
+            &self.learn.hgss
+        } else {
+            &self.learn.dp
+        };
+        table
+            .egg_moves(self.species as usize)
+            .iter()
+            .any(|m| m == mv)
+    }
+    fn is_tm(&self, mv: u16) -> bool {
+        let learn = self.learn;
+        let pi = game(learn, self.version).personal(self.species as usize);
+        let hm_list = if matches!(self.version, 7 | 8) {
+            mt::G4_HM_HGSS
+        } else {
+            mt::G4_HM_DPPT
+        };
+        let tm = learn.moves.list(mt::G4_TM).iter().position(|m| m == mv);
+        let hm = learn.moves.list(hm_list).iter().position(|m| m == mv);
+        tm.is_some_and(|t| t < 92 && pi.tmhm(t)) || hm.is_some_and(|h| h < 8 && pi.tmhm(92 + h))
+    }
+}
+
+/// `MoveBreed.Validate`: whether `moves` is an order the game can give an egg of this species,
+/// and the source found for each move (best effort when it isn't).
+fn validate_origins<B: Breed>(b: &B, moves: [u16; 4], previous: [u8; 4]) -> (bool, [u8; 4]) {
     let mut count = moves.iter().position(|&m| m == 0).unwrap_or(4);
     if count == 0 {
         return (false, previous);
     }
     let marked = count;
-    let hgss = matches!(version, 7 | 8);
-    let table = game(learn, version);
-    let index = species as usize;
-    let (base, base_len) = base_egg_moves(table, index, EGG_LEVEL);
+    let (base, base_len) = b.base_moves();
     let mut info = Info {
         moves,
         actual: previous,
@@ -122,39 +181,30 @@ fn validate_origins(
         base,
         base_len,
     };
-    if species == PICHU && moves[count - 1] == VOLT_TACKLE {
+    if b.species() == PICHU && moves[count - 1] == VOLT_TACKLE {
         count -= 1;
         info.actual[count] = VOLT_TACKLE_SOURCE;
     }
     let valid = if count == 0 {
         verify_base(&info)
     } else {
-        let inherit = can_inherit(table, species);
-        let egg_table = if hgss { &learn.hgss } else { &learn.dp };
-        let hm_list = if hgss { mt::G4_HM_HGSS } else { mt::G4_HM_DPPT };
-        let pi = table.personal(index);
         for (i, &mv) in moves.iter().enumerate().take(count) {
             let mut p = 0u8;
             if base[..base_len].contains(&mv) {
                 p |= 1 << BASE;
             }
-            if inherit && table.levelup(index).any(|(_, m)| m == mv) {
-                p |= 1 << PARENT_LEVEL_UP;
+            if b.is_level_up(mv) {
+                p |= 1 << b.parent_level_up();
             }
-            if egg_table.egg_moves(index).iter().any(|m| m == mv) {
+            if b.is_egg_move(mv) {
                 p |= 1 << FATHER_EGG;
             }
-            let tm = learn.moves.list(mt::G4_TM).iter().position(|m| m == mv);
-            if tm.is_some_and(|t| t < 92 && pi.tmhm(t)) {
-                p |= 1 << FATHER_TM;
-            }
-            let hm = learn.moves.list(hm_list).iter().position(|m| m == mv);
-            if hm.is_some_and(|h| h < 8 && pi.tmhm(92 + h)) {
-                p |= 1 << FATHER_TM;
+            if b.is_tm(mv) {
+                p |= 1 << b.father_tm();
             }
             info.possible[i] = p;
         }
-        recurse(&mut info, count - 1, PARENT_LEVEL_UP)
+        recurse(&mut info, count - 1, MAX_SOURCE)
     };
     if !valid {
         // CleanResult: name a source for each move the search didn't reach.
@@ -178,7 +228,12 @@ pub fn game<'a, 'b>(learn: &'b Learn4<'a>, version: u8) -> &'b GameData<'a> {
 
 /// `MoveBreed.Validate`.
 pub fn validate(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]) -> bool {
-    validate_origins(learn, species, version, moves, [0; 4]).0
+    let b = Breed4 {
+        learn,
+        species,
+        version,
+    };
+    validate_origins(&b, moves, [0; 4]).0
 }
 
 /// One move of an unhatched egg, from [`verify_moves`].
@@ -194,19 +249,28 @@ pub enum EggMove {
 /// moveset as a whole passes (a move after an empty slot). The source buffer is reused on the
 /// second pass, as PKHeX does.
 pub fn verify_moves(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]) -> [EggMove; 4] {
-    let (valid, origins) = validate_origins(learn, species, version, moves, [0; 4]);
+    let b = Breed4 {
+        learn,
+        species,
+        version,
+    };
+    verify_moves_with(&b, moves)
+}
+
+pub(super) fn verify_moves_with<B: Breed>(b: &B, moves: [u16; 4]) -> [EggMove; 4] {
+    let (valid, origins) = validate_origins(b, moves, [0; 4]);
     let (expected, origins) = if valid {
         (moves, origins)
     } else {
-        let expected = expected_moves(learn, species, version, moves);
-        let (_, o) = validate_origins(learn, species, version, expected, origins);
+        let expected = expected_with(b, moves);
+        let (_, o) = validate_origins(b, expected, origins);
         (expected, o)
     };
     core::array::from_fn(|i| match (moves[i], origins[i]) {
         (m, _) if m != expected[i] => EggMove::Invalid,
         (0, _) => EggMove::Empty,
         (_, 0) => EggMove::Invalid,
-        (_, PARENT_LEVEL_UP) => EggMove::Inherited,
+        (_, o) if o == b.parent_level_up() => EggMove::Inherited,
         _ => EggMove::Other,
     })
 }
@@ -214,7 +278,16 @@ pub fn verify_moves(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]) 
 /// `MoveBreed.GetExpectedMoves`: `moves` when legal, else the nearest legal order: sorted by
 /// source, then with fresh base moves, then just the base moves.
 pub fn expected_moves(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]) -> [u16; 4] {
-    let (valid, origins) = validate_origins(learn, species, version, moves, [0; 4]);
+    let b = Breed4 {
+        learn,
+        species,
+        version,
+    };
+    expected_with(&b, moves)
+}
+
+fn expected_with<B: Breed>(b: &B, moves: [u16; 4]) -> [u16; 4] {
+    let (valid, origins) = validate_origins(b, moves, [0; 4]);
     if valid {
         return moves;
     }
@@ -237,10 +310,10 @@ pub fn expected_moves(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]
         count += 1;
     }
     let result = sorted.map(|(m, _)| m);
-    if validate(learn, species, version, result) {
+    if validate_origins(b, result, [0; 4]).0 {
         return result;
     }
-    let (base, base_len) = base_egg_moves(game(learn, version), species as usize, EGG_LEVEL);
+    let (base, base_len) = b.base_moves();
     let base = &base[..base_len];
     // RebuildMoves.
     let (mut not_base, mut n) = ([0u16; 4], 0);
@@ -254,7 +327,7 @@ pub fn expected_moves(learn: &Learn4, species: u16, version: u8, moves: [u16; 4]
     let mut result = [0u16; 4];
     result[..keep].copy_from_slice(&base[base.len() - keep..]);
     result[keep..keep + n].copy_from_slice(&not_base[..n]);
-    if validate(learn, species, version, result) {
+    if validate_origins(b, result, [0; 4]).0 {
         return result;
     }
     let mut result = [0u16; 4];

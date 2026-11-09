@@ -18,7 +18,7 @@ namespace {
 
 Doc g_doc;
 bool g_nitro_tried = false, g_nitro = false;
-bool g_loaded[16] = {false};
+bool g_loaded[24] = {false};
 bool g_data_ok = false;
 constexpr size_t kMaxSave = 1024 * 1024;
 
@@ -133,8 +133,7 @@ verity_legality_report legality(uint8_t box_index, uint8_t s, uint32_t* ms)
     memset(&r, 0, sizeof(r));
     if (!g_doc.loaded())
         return r;
-    if (g_doc.info.generation == 4)
-        ensure_gen4_data();
+    ensure_save_data();
     cpuStartTiming(0);
     if (verity_legality(g_doc.buf, g_doc.len, verity_loc{box_index, s}, &r) != VERITY_OK)
         memset(&r, 0, sizeof(r));
@@ -225,6 +224,25 @@ bool ensure_gen4_data()
     return ok;
 }
 
+bool ensure_gen5_data()
+{
+    if (!g_nitro_tried)
+        load_data_for(g_doc.info.kind);
+    bool ok = attach(VERITY_BLOB_BW, "bw.bin");
+    ok &= attach(VERITY_BLOB_B2W2, "b2w2.bin");
+    ok &= attach(VERITY_BLOB_MOVES5, "moves5.bin");
+    ok &= attach(VERITY_BLOB_ENC_BW, "enc_bw.bin");
+    ok &= attach(VERITY_BLOB_ENC_B2W2, "enc_b2w2.bin");
+    ok &= attach(VERITY_BLOB_ENC_DR, "enc_dr.bin");
+    ok &= attach(VERITY_BLOB_NAMES5, "names5.bin");
+    return ok;
+}
+
+bool ensure_save_data()
+{
+    return g_doc.info.generation == 5 ? ensure_gen5_data() : ensure_gen4_data();
+}
+
 bool ensure_events_data()
 {
     if (!g_nitro_tried)
@@ -265,9 +283,8 @@ bool save_to_disk(const char** message)
         *message = "no save open";
         return false;
     }
-    // The validator reads the Gen 4 data, which no earlier screen may have needed.
-    if (g_doc.info.generation == 4)
-        ensure_gen4_data();
+    // The validator reads the game data, which no earlier screen may have needed.
+    ensure_save_data();
     verity_save_finalize(g_doc.buf, g_doc.len);
     verity_save_check_result c;
     if (verity_save_check(g_doc.buf, g_doc.len, &c) != VERITY_OK || c.issue != 0)

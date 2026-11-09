@@ -237,6 +237,7 @@ pub fn build_moves(j: &Value, tables: &Value) -> Vec<u8> {
     } else {
         w.u16s(mt::G5_TMHM, &list("g5_tmhm"));
         w.u16s(mt::G5_TYPE_TUTOR, &list("g5_type_tutor_moves"));
+        w.u16s(mt::G5_HATCH, &list("g5_hatch"));
         let b2 = tables["b2w2_tutor_moves"].as_array().unwrap();
         for (i, id) in [
             mt::B2W2_TUTOR_1,
@@ -739,6 +740,10 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     put(
         "names4.bin".into(),
         build_names4(&load(&exports.join("names4.json"))),
+    );
+    put(
+        "names5.bin".into(),
+        build_names4(&load(&exports.join("names5.json"))),
     );
     let gifts = load(&exports.join("gifts4.json"));
     let events4 = fs::read_to_string(exports.parent().unwrap().join("events4.tsv")).unwrap();

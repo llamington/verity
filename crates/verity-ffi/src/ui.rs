@@ -30,9 +30,13 @@ pub enum BlobKind {
     Gifts4 = 12,
     Events4 = 13,
     G3Origin = 14,
+    EncBw = 15,
+    EncB2w2 = 16,
+    EncDr = 17,
+    Names5 = 18,
 }
 
-const SLOTS: usize = 16;
+const SLOTS: usize = 24;
 
 /// Attached blobs. ARMv5 has no atomics; the FFI is single-threaded by contract (the DS front end
 /// calls it from its main loop only), which is what makes the `Sync` impl sound.
@@ -74,6 +78,10 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         12 => Gifts4,
         13 => Events4,
         14 => G3Origin,
+        15 => EncBw,
+        16 => EncB2w2,
+        17 => EncDr,
+        18 => Names5,
         _ => return None,
     })
 }
@@ -94,10 +102,12 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
         let ok = match k {
             BlobKind::Strings => Strings::load(data).is_ok(),
             BlobKind::Moves4 | BlobKind::Moves5 => verity::data::MoveData::load(data).is_ok(),
-            BlobKind::EncDppt | BlobKind::EncHgss => {
-                verity::data::encounters::EncounterData::load(data).is_ok()
-            }
-            BlobKind::Names4 => Strings::load(data).is_ok(),
+            BlobKind::EncDppt
+            | BlobKind::EncHgss
+            | BlobKind::EncBw
+            | BlobKind::EncB2w2
+            | BlobKind::EncDr => verity::data::encounters::EncounterData::load(data).is_ok(),
+            BlobKind::Names4 | BlobKind::Names5 => Strings::load(data).is_ok(),
             BlobKind::Gifts4 | BlobKind::Events4 => verity::gift::pcd::Gifts4::load(data).is_ok(),
             BlobKind::G3Origin => verity::legality::analysis3::Context3::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),
@@ -423,12 +433,18 @@ pub(crate) mod legal {
     use verity::data::encounters::EncounterData;
     use verity::data::MoveData;
     use verity::legality::analysis4::{analyze4, Context4, Matched};
+    use verity::legality::analysis5::{analyze5, Context5};
     use verity::legality::{evo::Evo4, moves4::Learn4};
 
     struct Holder(Cell<Option<&'static Context4<'static>>>);
     // SAFETY: single-threaded FFI (see `Registry`).
     unsafe impl Sync for Holder {}
     static CTX: Holder = Holder(Cell::new(None));
+
+    struct Holder5(Cell<Option<&'static Context5<'static>>>);
+    // SAFETY: single-threaded FFI (see `Registry`).
+    unsafe impl Sync for Holder5 {}
+    static CTX5: Holder5 = Holder5(Cell::new(None));
 
     /// The Gen 4 legality context, built once from attached blobs.
     pub(crate) fn context() -> Option<&'static Context4<'static>> {
@@ -469,7 +485,72 @@ pub(crate) mod legal {
         Some(leaked)
     }
 
+    /// The Gen 5 legality context, built once from attached blobs.
+    fn context5() -> Option<&'static Context5<'static>> {
+        if let Some(c) = CTX5.0.get() {
+            return Some(c);
+        }
+        let g = |k| blob(k).and_then(|b| GameData::load(b).ok());
+        let (bw, b2w2) = (g(BlobKind::Bw)?, g(BlobKind::B2w2)?);
+        let enc = |k| blob(k).and_then(|b| EncounterData::load(b).ok());
+        let ctx = Context5 {
+            bw,
+            b2w2,
+            moves: MoveData::load(blob(BlobKind::Moves5)?).ok()?,
+            enc_bw: enc(BlobKind::EncBw)?,
+            enc_b2w2: enc(BlobKind::EncB2w2)?,
+            enc_dr: enc(BlobKind::EncDr)?,
+            evo: Evo4::new(bw, b2w2),
+            names: Strings::load(blob(BlobKind::Names5)?).ok()?,
+        };
+        let leaked: &'static Context5<'static> =
+            alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
+        CTX5.0.set(Some(leaked));
+        Some(leaked)
+    }
+
+    fn fill(r: &verity::legality::analysis4::Report, out: &mut VerityLegality) {
+        out.status = if r.valid() { 1 } else { 2 };
+        for (i, c) in r.invalid.iter().take(out.checks.len()).enumerate() {
+            out.checks[i] = *c as u8;
+            out.check_count = i as u8 + 1;
+        }
+        out.move_ok = r.moves.map(|m| m.valid() as u8);
+        if let Matched::Slot { encounter, .. } = r.matched {
+            out.enc_location = encounter.location();
+            out.enc_slot = encounter.slot_number();
+        }
+    }
+
+    fn check5(pk: &Pkm, out: &mut VerityLegality) {
+        // Pokémon sent from Gen 4 aren't modelled yet.
+        if !verity::legality::analysis5::is_gen5_version(pk.version()) {
+            out.unsupported = 2;
+            return;
+        }
+        let Some(ctx) = context5() else {
+            out.unsupported = 3;
+            return;
+        };
+        let r = analyze5(ctx, pk);
+        if matches!(r.matched, Matched::Invalid) {
+            out.unsupported = 6;
+            return;
+        }
+        // Wonder Card events aren't modelled yet, and every one is fateful: a fateful Pokémon
+        // that fails might just be an event.
+        if pk.fateful() && !r.valid() {
+            out.unsupported = 2;
+            return;
+        }
+        fill(&r, out);
+    }
+
     pub(crate) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
+        if save.generation() == 5 {
+            check5(pk, out);
+            return;
+        }
         if save.generation() != 4 {
             out.unsupported = 4;
             return;
@@ -494,16 +575,7 @@ pub(crate) mod legal {
             out.unsupported = 6;
             return;
         }
-        out.status = if r.valid() { 1 } else { 2 };
-        for (i, c) in r.invalid.iter().take(out.checks.len()).enumerate() {
-            out.checks[i] = *c as u8;
-            out.check_count = i as u8 + 1;
-        }
-        out.move_ok = r.moves.map(|m| m.valid() as u8);
-        if let Matched::Slot { encounter, .. } = r.matched {
-            out.enc_location = encounter.location();
-            out.enc_slot = encounter.slot_number();
-        }
+        fill(&r, out);
     }
 }
 

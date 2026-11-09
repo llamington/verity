@@ -126,18 +126,18 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
         "met_level" => {
             let mut d = pk.decrypted().to_vec();
             d[0x84] = (d[0x84] & 0x80) | (r.next_u32() % 101) as u8;
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         "ball" => {
             let mut d = pk.decrypted().to_vec();
             d[0x83] = (r.next_u32() % 26) as u8;
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         "met_location" => {
             let mut d = pk.decrypted().to_vec();
             d[0x80..0x82].copy_from_slice(&((r.next_u32() % 120) as u16).to_le_bytes());
             d[0x46..0x48].copy_from_slice(&0u16.to_le_bytes());
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         "pid" => pk.set_pid(r.next_u32()),
         "gender" => {
@@ -169,6 +169,22 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
         "form" => pk.set_fateful_gender_form(pk.fateful(), pk.gender(), (r.next_u32() % 4) as u8),
         "fateful" => pk.set_fateful_gender_form(!pk.fateful(), pk.gender(), pk.form()),
         "tid" => pk.set_ids(r.next_u32() as u16, pk.sid()),
+        "nature5" => {
+            let mut d = pk.decrypted().to_vec();
+            d[0x41] = (r.next_u32() % 25) as u8;
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
+        }
+        "flags5" => {
+            // Hidden Ability and N's sparkle.
+            let mut d = pk.decrypted().to_vec();
+            d[0x42] ^= 1 << (r.next_u32() % 2);
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
+        }
+        "fame5" => {
+            let mut d = pk.decrypted().to_vec();
+            d[0x87] = [0, 25, 30, 50, 55, 255, 7][r.next_u32() as usize % 7];
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
+        }
         "contest" => {
             // Fully random, Sheen alone, stats alone, or stats with a plausible Sheen near each limit.
             let mut d = pk.decrypted().to_vec();
@@ -194,7 +210,7 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
                 }
             }
             d[0x1E..0x24].copy_from_slice(&stats);
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         "ribbon" => {
             // Any ribbon bit (PK4 ribbon bytes 0x24-0x27, 0x3C-0x3F, 0x60-0x63).
@@ -203,12 +219,12 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
                 0x24, 0x25, 0x26, 0x27, 0x3C, 0x3D, 0x3E, 0x3F, 0x60, 0x61, 0x62, 0x63,
             ][r.next_u32() as usize % 12];
             d[ofs] ^= 1 << (r.next_u32() % 8);
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         "version" => {
             let mut d = pk.decrypted().to_vec();
             d[0x5F] = [7, 8, 10, 11, 12][r.next_u32() as usize % 5];
-            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+            *pk = Pkm::from_decrypted(pk.format(), &d).unwrap();
         }
         _ => unreachable!(),
     }
@@ -622,6 +638,236 @@ fn closest_ivs(build: fn(usize, &Path, u64), n: usize, seed: u64) -> (usize, usi
     }
     let _ = fs::remove_dir_all(&tmp);
     (proposed, refused)
+}
+
+fn context5() -> verity::legality::analysis5::Context5<'static> {
+    use verity::data::MoveData;
+    use verity::legality::{analysis5::Context5, evo::Evo4};
+    let bw = GameData::load(load("bw.bin")).unwrap();
+    let b2w2 = GameData::load(load("b2w2.bin")).unwrap();
+    Context5 {
+        bw,
+        b2w2,
+        moves: MoveData::load(load("moves5.bin")).unwrap(),
+        enc_bw: EncounterData::load(load("enc_bw.bin")).unwrap(),
+        enc_b2w2: EncounterData::load(load("enc_b2w2.bin")).unwrap(),
+        enc_dr: EncounterData::load(load("enc_dr.bin")).unwrap(),
+        evo: Evo4::new(bw, b2w2),
+        names: verity::data::Strings::load(load("names5.bin")).unwrap(),
+    }
+}
+
+const MUTATIONS5: [&str; 23] = [
+    "nature5",
+    "flags5",
+    "fame5",
+    "contest",
+    "ivs",
+    "evs",
+    "level_exp",
+    "met_level",
+    "ball",
+    "met_location",
+    "pid",
+    "gender",
+    "ability",
+    "nickname",
+    "ot_name",
+    "held_item",
+    "moves",
+    "language",
+    "friendship",
+    "form",
+    "fateful",
+    "tid",
+    "ribbon",
+];
+
+fn compare5(
+    ctx: &'static verity::legality::analysis5::Context5<'static>,
+    pk: &Pkm,
+    v: &serde_json::Value,
+    label: &str,
+    bad: &mut Vec<String>,
+    per_id: &mut BTreeMap<String, (u32, u32)>,
+) {
+    let report = verity::legality::analysis5::analyze5(ctx, pk);
+    let ours: std::collections::BTreeSet<String> = report
+        .invalid
+        .iter()
+        .map(|c| c.name().to_string())
+        .collect();
+    let theirs: std::collections::BTreeSet<String> = v["invalid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    let our_moves: Vec<bool> = report.moves.iter().map(|m| m.valid()).collect();
+    let their_moves: Vec<bool> = v["move_valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_bool().unwrap())
+        .collect();
+    for id in theirs.difference(&ours) {
+        per_id.entry(id.clone()).or_default().0 += 1;
+    }
+    for id in ours.difference(&theirs) {
+        per_id.entry(id.clone()).or_default().1 += 1;
+    }
+    if our_moves != their_moves {
+        per_id.entry("moves".into()).or_default().0 += 1;
+    }
+    if ours != theirs || our_moves != their_moves || report.valid() != v["valid"].as_bool().unwrap()
+    {
+        let matched = match report.matched {
+            verity::legality::analysis4::Matched::Slot { encounter, .. } => {
+                format!("{}/{:?}", encounter.species(), encounter.kind())
+            }
+            verity::legality::analysis4::Matched::Egg { species } => format!("egg {species}"),
+            verity::legality::analysis4::Matched::Invalid => "invalid".into(),
+            _ => "other".into(),
+        };
+        bad.push(format!(
+            "{label} v{} lang {} sp {} ball {} loc {} ml {} enc {matched} ({}): ours {ours:?} {our_moves:?} pkhex {theirs:?} {their_moves:?} {}",
+            pk.version(),
+            pk.language(),
+            pk.species(),
+            pk.ball(),
+            pk.met_location(),
+            pk.met_level(),
+            v["enc_kind"].as_str().unwrap_or(""),
+            v["report"].as_str().unwrap_or("").replace('\n', " | ")
+        ));
+    }
+}
+
+/// Kinds verity doesn't model for a Gen 5 origin yet.
+fn gen5_unmodelled(kind: &str) -> bool {
+    matches!(kind, "PGF" | "WC5" | "EncounterInvalid")
+}
+
+fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
+    if !root().join("data/blobs/names5.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let ctx = Box::leak(Box::new(context5()));
+    let tmp = std::env::temp_dir().join(format!("verity-p5g5-{}-{seed}", std::process::id()));
+    let (legal, mutated) = (tmp.join("legal"), tmp.join("mutated"));
+    fs::create_dir_all(&mutated).unwrap();
+    oracle(&[
+        "gen-origin5".as_ref(),
+        n.to_string().as_ref(),
+        seed.to_string().as_ref(),
+        legal.as_os_str(),
+        mode.as_ref(),
+    ]);
+    let mut r = Rand::new(seed ^ 0xABCD);
+    let mut files = Vec::new();
+    for (i, e) in fs::read_dir(&legal).unwrap().flatten().enumerate() {
+        let mut pk = Pkm::from_decrypted(Format::Pk5, &fs::read(e.path()).unwrap()).unwrap();
+        for _ in 0..r.next_u32() % (muts + 1) {
+            let kind = MUTATIONS5[r.next_u32() as usize % MUTATIONS5.len()];
+            mutate(&mut pk, kind, &mut r);
+        }
+        let f = format!("{i:05}.pk5");
+        fs::write(mutated.join(&f), &pk.decrypted()[..136]).unwrap();
+        files.push((f, pk));
+    }
+    let out = oracle(&["legality-batch".as_ref(), mutated.as_os_str()]);
+    let mut pkhex = std::collections::HashMap::new();
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        pkhex.insert(v["file"].as_str().unwrap().to_string(), v);
+    }
+    let (mut checked, mut bad, mut per_id) = (0, Vec::new(), BTreeMap::new());
+    for (f, pk) in &files {
+        let v = &pkhex[f];
+        if !matches!(pk.version(), 20..=23)
+            || gen5_unmodelled(v["enc_kind"].as_str().unwrap_or(""))
+            || v["report"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Flagged pattern")
+        {
+            continue;
+        }
+        compare5(ctx, pk, v, f, &mut bad, &mut per_id);
+        checked += 1;
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    for b in bad.iter().take(16) {
+        eprintln!("{b}");
+    }
+    eprintln!(
+        "{mode}: checked {checked}, mismatched {}: {per_id:?}",
+        bad.len()
+    );
+    assert!(bad.is_empty());
+}
+
+#[test]
+fn p5_parity_fuzz_gen5() {
+    for (i, mode) in ["slot", "static", "entree", "radar", "n", "trade", "egg"]
+        .iter()
+        .enumerate()
+    {
+        parity5(mode, 150, 900 + i as u64, 3);
+    }
+}
+
+#[test]
+#[ignore]
+fn p5_parity_gen5_1e4() {
+    for (i, mode) in ["slot", "static", "entree", "radar", "n", "trade", "egg"]
+        .iter()
+        .enumerate()
+    {
+        parity5(mode, 10_000, 9000 + i as u64, 4);
+    }
+}
+
+#[test]
+fn p5_parity_corpus_gen5() {
+    if !root().join("data/blobs/names5.bin").exists() {
+        return;
+    }
+    let Ok(rd) = fs::read_dir(root().join("corpus/reports/oracle-smoke")) else {
+        return;
+    };
+    let ctx = Box::leak(Box::new(context5()));
+    let (mut checked, mut bad, mut per_id) = (0, Vec::new(), BTreeMap::new());
+    for e in rd.flatten() {
+        let dir = e.path();
+        if !dir.is_dir() || !dir.to_string_lossy().ends_with(".pkm") {
+            continue;
+        }
+        let out = oracle(&["legality-batch".as_ref(), dir.as_os_str()]);
+        for line in String::from_utf8_lossy(&out).lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let f = v["file"].as_str().unwrap();
+            if !f.ends_with(".pk5") || gen5_unmodelled(v["enc_kind"].as_str().unwrap_or("")) {
+                continue;
+            }
+            let pk = Pkm::from_decrypted(Format::Pk5, &fs::read(dir.join(f)).unwrap()).unwrap();
+            if !matches!(pk.version(), 20..=23) {
+                continue;
+            }
+            compare5(ctx, &pk, &v, f, &mut bad, &mut per_id);
+            checked += 1;
+        }
+    }
+    for b in bad.iter().take(16) {
+        eprintln!("{b}");
+    }
+    eprintln!(
+        "corpus checked {checked}, mismatched {}: {per_id:?}",
+        bad.len()
+    );
+    assert!(checked > 0);
+    assert!(bad.is_empty());
 }
 
 #[test]
