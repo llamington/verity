@@ -10,6 +10,7 @@ use super::enc4::{event_matches, wild_slots, Deferral, Enc4, MatchPkm, WildMatch
 use super::evo::{Evo4, EvoCriteria, EvoPkm};
 use super::gift4;
 use super::moves4::{Learn4, MoveResult};
+use super::ranch4::{self, RanchGift, RANCH_GIFTS};
 use crate::data::encounters::{Encounter, EncounterData};
 use crate::data::GameData;
 use crate::gift::pcd::{Gift4, Gifts4};
@@ -124,6 +125,10 @@ pub enum Matched<'a> {
     },
     /// The Pokémon Ranger Manaphy egg (PKHeX `EncounterGenerator4.RangerManaphy`).
     RangerManaphy,
+    /// A My Pokémon Ranch gift.
+    Ranch {
+        gift: &'static RanchGift,
+    },
     Invalid,
 }
 
@@ -284,8 +289,28 @@ pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
         event_partial = ev.partial;
     }
     if egg_location_bred4(pk.egg_location(), pk.version()) {
-        analyze_bred_egg(ctx, &inp, &chain, &mut report);
-        return report;
+        // Eggs are yielded first, then the D Ranch gifts (a hatched Wynaut has a Day Care egg
+        // location), so a Ranch gift can only follow an egg that failed its checks.
+        let ranch_follows = pk.version() == 10
+            && chain.iter().any(|evo| {
+                RANCH_GIFTS.iter().any(|g| {
+                    g.species == evo.species && ranch4::is_match_exact(g, &inp.matcher, evo)
+                })
+            });
+        let passed = analyze_bred_egg(ctx, &inp, &chain, &mut report);
+        // A deferred Ranch gift ties with a deferred egg, and the egg came first.
+        let ranch_yielded = pk.ground_tile() == 0
+            && !matches!(pk.ball(), 5 | 24)
+            && analyze(&inp.analyze, ratio).kind == crate::rng::finder::PidType::None;
+        let egg_found = matches!(report.matched, Matched::Egg { .. });
+        if passed || !ranch_follows || (!ranch_yielded && egg_found) {
+            return report;
+        }
+        report = Report {
+            matched: Matched::Invalid,
+            moves: [MoveResult::Unparsed; 4],
+            invalid: Vec::new(),
+        };
     }
     let pidiv = analyze(&inp.analyze, ratio);
     let (group, enc_data): (&[u8], _) = match pk.version() {
@@ -318,6 +343,7 @@ fn species_of(e: &Enc4) -> u16 {
         Enc4::Data(e) => e.species(),
         Enc4::Gift(g) => g.species(),
         Enc4::Ranger => 490,
+        Enc4::Ranch(g) => g.species,
     }
 }
 
@@ -327,6 +353,7 @@ fn enc_level_min(e: &Enc4) -> u8 {
         Enc4::Data(e) => e.level_min(),
         Enc4::Gift(g) => g.pk().met_level(),
         Enc4::Ranger => 1,
+        Enc4::Ranch(g) => g.level,
     }
 }
 
@@ -339,6 +366,7 @@ fn enc_moves(e: &Enc4) -> Option<[u16; 4]> {
             (m[0] != 0).then_some(m)
         }
         Enc4::Ranger => None,
+        Enc4::Ranch(g) => Some(g.moves),
     }
 }
 
@@ -386,7 +414,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
             partial_chosen = match &e {
                 Enc4::Data(d) => super::enc4::data_is_partial(d, &inp.matcher),
                 Enc4::Gift(g) => gift4::is_partial(&g.pk(), pk),
-                Enc4::Ranger => false,
+                Enc4::Ranger | Enc4::Ranch(_) => false,
             };
             chosen = Some((e, lead, d));
             break;
@@ -403,6 +431,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
         Enc4::Data(encounter) => Matched::Slot { encounter, lead },
         Enc4::Gift(gift) => Matched::Gift { gift },
         Enc4::Ranger => Matched::RangerManaphy,
+        Enc4::Ranch(gift) => Matched::Ranch { gift },
     };
     // EncounterFinder adds EncInvalid when the chosen encounter is only a partial match.
     if partial_chosen {
@@ -422,6 +451,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
         Enc4::Data(e) => !pk.is_egg() && e.template().is_some_and(|t| t.egg_location() != 0),
         Enc4::Gift(g) => g.is_egg() && !pk.is_egg(),
         Enc4::Ranger => !pk.is_egg(),
+        Enc4::Ranch(_) => false,
     };
     if hatched_gift {
         verify_hatched4(pk, report);
@@ -610,6 +640,7 @@ fn enc_egg_moves(ctx: &Context4, pk: &Pkm, e: &Enc4) -> [MoveResult; 4] {
         Enc4::Gift(g) => g.pk().version(),
         // PGT.Version is Gen4 for the Ranger egg; GetLearnSource maps that to HG/SS.
         Enc4::Ranger => 7,
+        Enc4::Ranch(_) => 10,
     };
     if version == 0 {
         // PKHeX has no learnset for version Any/Gen4 and leaves the moves unparsed.
@@ -642,7 +673,15 @@ fn invalid_moves(ctx: &Context4, inp: &Inputs) -> [MoveResult; 4] {
 
 /// The bred-egg branch of the Gen 4 encounter search (`EncounterEnumerator4` Bred state and
 /// `EncounterGenerator4` filters), then `EncounterVerifier.VerifyEncounterEgg4`.
-fn analyze_bred_egg(ctx: &Context4, inp: &Inputs, chain: &[EvoCriteria], report: &mut Report) {
+///
+/// Returns whether an egg was yielded directly and passed the moves, evolution and encounter
+/// checks (`EncounterFinder` would stop there).
+fn analyze_bred_egg(
+    ctx: &Context4,
+    inp: &Inputs,
+    chain: &[EvoCriteria],
+    report: &mut Report,
+) -> bool {
     let pk = &inp.pk;
     let pidiv = analyze(&inp.analyze, |s| ctx.ratio(s));
     let list = egg_species(ctx, chain);
@@ -700,12 +739,13 @@ fn analyze_bred_egg(ctx: &Context4, inp: &Inputs, chain: &[EvoCriteria], report:
             chosen = Some((sp, true));
         }
     }
-    let Some((species, _)) = chosen else {
+    let Some((species, deferred_choice)) = chosen else {
         report.flag(CheckId::Encounter);
         report.moves = invalid_moves(ctx, inp);
         verify_common(ctx, inp, None, report);
-        return;
+        return false;
     };
+    let (species, deferred) = (species, deferred_choice);
     report.matched = Matched::Egg { species };
     // PIDVerifier.VerifyEggGender8000: Nidoran and Volbeat/Illumise take gender from PID bit 15;
     // a male that broke the rule needs a Ditto parent, which rules out inherited moves.
@@ -716,12 +756,18 @@ fn analyze_bred_egg(ctx: &Context4, inp: &Inputs, chain: &[EvoCriteria], report:
             report.flag(CheckId::EC);
         }
     }
+    let before = report.invalid.len();
     if pk.is_egg() {
         verify_unhatched4(pk, report);
     } else {
         verify_hatched4(pk, report);
     }
+    let passed = !deferred
+        && report.invalid.len() == before
+        && report.moves.iter().all(|m| m.valid())
+        && !report.invalid.contains(&CheckId::Evolution);
     verify_common_egg(ctx, inp, species, report);
+    passed
 }
 
 /// A static encounter's fixed moveset (PKHeX `IMoveset`), if it has one.
@@ -756,6 +802,10 @@ fn verify_common_inner(
         _ => None,
     };
     let ranger = matches!(enc, Some(Enc4::Ranger));
+    let ranch = match enc {
+        Some(Enc4::Ranch(g)) => Some(*g),
+        _ => None,
+    };
     let event = gift.is_some() || ranger;
     let pi = ctx.hgss.species_form(pk.species(), pk.form());
     let growth = pi.growth();
@@ -830,6 +880,7 @@ fn verify_common_inner(
     }
 
     // AbilityVerifier (Gen 4 origin, format 4: must match PID bit 0)
+    let species_now = pk.species();
     let [a1, a2, _] = pi.abilities();
     let ab = pk.ability();
     if ab != a1 && ab != a2 {
@@ -843,8 +894,21 @@ fn verify_common_inner(
             report.flag(CheckId::Ability);
         }
     } else {
-        let expect = if pk.pid() & 1 == 0 { a1 } else { a2 };
-        if expect != ab {
+        // AbilityVerifier.VerifyFixedAbility, for an unevolved encounter with one fixed slot:
+        // either the ability or the PID bit may be the one that matches.
+        let fixed = ranch
+            .map(|g| g.ability)
+            .or(data.filter(|e| !e.is_slot()).map(|e| e.ability()))
+            .filter(|a| matches!(a, 1 | 2))
+            .filter(|_| enc_species == species_now);
+        let ok = match fixed {
+            Some(a) => {
+                let index = a - 1;
+                (if ab == a1 { 0 } else { 1 }) == index || (pk.pid() & 1) as u8 == index
+            }
+            None => ab == if pk.pid() & 1 == 0 { a1 } else { a2 },
+        };
+        if !ok {
             report.flag(CheckId::Ability);
         }
     }
@@ -858,7 +922,10 @@ fn verify_common_inner(
     let fateful_expected = match (&gift, ranger) {
         (Some((_, t)), _) => t.fateful(),
         (None, true) => true,
-        _ => data.is_some_and(|e| e.has(crate::data::encounters::flag::FATEFUL)),
+        _ => {
+            ranch.is_some_and(|g| g.fateful)
+                || data.is_some_and(|e| e.has(crate::data::encounters::flag::FATEFUL))
+        }
     };
     if let Some((_, t)) = &gift {
         // VerifyReceivability: version-locked cards with no stored version.
@@ -892,15 +959,15 @@ fn verify_common_inner(
                 report.flag(CheckId::Nature);
             }
         }
-        // AbilityPermission: 1 OnlyFirst, 2 OnlySecond (Gen 4: PID bit 0).
-        match e.ability() {
-            1 if pk.pid() & 1 != 0 => report.flag(CheckId::Ability),
-            2 if pk.pid() & 1 != 1 => report.flag(CheckId::Ability),
-            _ => {}
-        }
         // Shiny.Never.
         if e.shiny() == 1 && pk.is_shiny() {
             report.flag(CheckId::Shiny);
+        }
+    }
+    if let Some(g) = ranch {
+        // BallVerifier: fixed ball.
+        if pk.ball() != g.ball {
+            report.flag(CheckId::Ball);
         }
     }
     let pkrs = pk.pokerus();
@@ -1086,7 +1153,7 @@ fn verify_common_inner(
     // IsPlayerOriginalTrainer: not for fixed-trainer trades or any gift (MysteryGift has a
     // trainer ID of its own, so `ITrainerID16ReadOnly` excludes gift eggs too).
     let gift_ot = event;
-    if trade.is_none() && !gift_ot {
+    if trade.is_none() && !gift_ot && ranch.is_none() {
         let too_many_digits = on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
         if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
             report.flag(CheckId::Trainer);
@@ -1145,6 +1212,9 @@ fn verify_common_inner(
     if let Some(t) = trade {
         verify_trade4(ctx, pk, t, ot, report);
     } else {
+        if ranch.is_some() && !ranch4::trainer_matches(pk.language(), ot) {
+            report.flag(CheckId::Trainer);
+        }
         verify_nickname(ctx, pk, enc_species, report);
     }
 

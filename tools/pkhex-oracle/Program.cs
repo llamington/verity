@@ -44,6 +44,7 @@ public static class Program
                 "gen-wild4" => HandleGenWild4(args),
                 "gen-gift4" => HandleGenGift4(args),
                 "gen-egg4" => HandleGenEgg4(args),
+                "gen-ranch4" => HandleGenRanch4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -1006,6 +1007,32 @@ public static class Program
 
     /// M6: `gen-gift4 <count> <seed> <out-dir>`: PKHeX-generated legal Gen 4 gift PK4s (random
     /// Wonder Cards from `MGDB_G4`, plus Ranger Manaphy eggs) via `ConvertToPKM`.
+    /// My Pokémon Ranch gifts on Diamond, in each language with a trainer name.
+    private static int HandleGenRanch4(string[] args)
+    {
+        int count = int.Parse(args[1]);
+        var rng = new Random(int.Parse(args[2]));
+        Directory.CreateDirectory(args[3]);
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var gifts = (EncounterTrade4RanchGift[])typeof(EncounterGenerator4).Assembly.GetType("PKHeX.Core.Encounters4DPPt")!.GetField("RanchGifts", all)!.GetValue(null)!;
+        int[] languages = [1, 2, 3, 4, 5, 7];
+        int made = 0, tried = 0;
+        while (made < count && tried < count * 20)
+        {
+            tried++;
+            var tr = Sav(GameVersion.D);
+            tr.Language = languages[rng.Next(languages.Length)];
+            var pk = gifts[rng.Next(gifts.Length)].ConvertToPKM(tr);
+            pk.RefreshChecksum();
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            File.WriteAllBytes(Path.Combine(args[3], $"{made:D6}.pk4"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
+        return made > 0 ? 0 : 1;
+    }
+
     /// Unhatched Gen 4 eggs: bred (random legal moves from MoveBreed), gift eggs and Ranger Manaphy.
     private static int HandleGenEgg4(string[] args)
     {
