@@ -313,6 +313,9 @@ impl Encounter<'_> {
     pub fn is_slot(&self) -> bool {
         matches!(self, Encounter::Slot { .. })
     }
+    pub fn is_hidden_grotto(&self) -> bool {
+        matches!(self, Encounter::Slot { slot, .. } if slot[11] & SLOT_HIDDEN_GROTTO != 0)
+    }
     pub fn species(&self) -> u16 {
         pick!(
             self,

@@ -1113,7 +1113,7 @@ public:
         if (!loaded_)
         {
             loaded_ = true;
-            core::ensure_gen4_data();
+            core::ensure_save_data();
             orig_ = core::slot(box_, slot_);
             memset(&e_, 0, sizeof(e_));
             e_.held_item = orig_.held_item;

@@ -3,6 +3,7 @@
 #[cfg(feature = "alloc")]
 pub mod analysis3;
 pub mod analysis4;
+pub mod analysis5;
 #[cfg(feature = "alloc")]
 pub mod breed4;
 pub mod contest;

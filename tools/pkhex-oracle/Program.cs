@@ -46,6 +46,7 @@ public static class Program
                 "gen-egg4" => HandleGenEgg4(args),
                 "gen-ranch4" => HandleGenRanch4(args),
                 "gen-slot3" => HandleGenSlot3(args),
+                "gen-origin5" => HandleGenOrigin5(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -769,6 +770,8 @@ public static class Program
             g4_special_draco_meteor = PersonalInfo4.SpecialTutorDracoMeteor.ToArray(),
             g5_tmhm = PersonalInfo5BW.MachineMoves.ToArray(),
             g5_type_tutor_moves = PersonalInfo5BW.TypeTutorMoves.ToArray(),
+            g5_hatch = Enumerable.Range(0, 256).Select(loc => new[] { GameVersion.W, GameVersion.B, GameVersion.W2, GameVersion.B2 }
+                .Select((v, i) => EggHatchLocation5.IsValidMet5((ushort)loc, v) ? 1 << i : 0).Sum()).ToArray(),
             g4_released_held = Enumerable.Range(1, 1000).Where(i => ItemRestrictions.IsHeldItemAllowed(i, EntityContext.Gen4)).ToArray(),
             g5_released_held = Enumerable.Range(1, 1000).Where(i => ItemRestrictions.IsHeldItemAllowed(i, EntityContext.Gen5)).ToArray(),
             b2w2_tutor_moves = new[] { PersonalInfo5B2W2.TutorMoves1.ToArray(), PersonalInfo5B2W2.TutorMoves2.ToArray(), PersonalInfo5B2W2.TutorMoves3.ToArray(), PersonalInfo5B2W2.TutorMoves4.ToArray() },
@@ -797,6 +800,10 @@ public static class Program
                 loc5_60000 = gs.Gen5.Met6.ToArray(),
             }));
         }
+        var names5 = new System.Collections.Generic.Dictionary<string, string[]>();
+        foreach (var lang in new[] { 1, 2, 3, 4, 5, 7, 8 })
+            names5[lang.ToString()] = Enumerable.Range(0, 650).Select(sp => SpeciesName.GetSpeciesNameGeneration((ushort)sp, lang, 5)).ToArray();
+        File.WriteAllText(Path.Combine(outDir, "names5.json"), JsonSerializer.Serialize(names5));
         var names4 = new System.Collections.Generic.Dictionary<string, string[]>();
         foreach (var lang in Enumerable.Range(0, 11))
             names4[lang.ToString()] = Enumerable.Range(0, Sav(GameVersion.HG).MaxSpeciesID + 1)
@@ -1110,6 +1117,62 @@ public static class Program
             egg_moves = egg,
             held_items = Array.Empty<int>(),
         };
+    }
+
+    /// PKHeX-legal Pokémon from a Gen 5 game: random trainer, encounter, language and level gain.
+    private static int HandleGenOrigin5(string[] args)
+    {
+        int count = int.Parse(args[1]);
+        var rng = new Random(int.Parse(args[2]));
+        Directory.CreateDirectory(args[3]);
+        string mode = args.Length > 4 ? args[4] : "slot";
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var asm = typeof(EntityFormat).Assembly;
+        IEnumerable<IEncounterConvertible> Field(string cls, string f) => ((Array)asm.GetType("PKHeX.Core." + cls)!.GetField(f, all)!.GetValue(null)!).Cast<IEncounterConvertible>();
+        IEnumerable<IEncounterConvertible> Areas(string cls, string f) => ((Array)asm.GetType("PKHeX.Core." + cls)!.GetField(f, all)!.GetValue(null)!).Cast<EncounterArea5>().SelectMany(a => a.Slots).Cast<IEncounterConvertible>();
+        const string bw = "Encounters5BW", b2 = "Encounters5B2W2", dr = "Encounters5DR";
+        IEncounterConvertible[] Eggs(GameVersion v) => Enumerable.Range(1, 649).Where(sp => Breeding.CanHatchAsEgg((ushort)sp) && EvolutionTree.Evolves5.GetBaseSpeciesForm((ushort)sp, 0).Item1 == sp)
+            .Select(sp => (IEncounterConvertible)new EncounterEgg5((ushort)sp, 0, v)).ToArray();
+        (GameVersion V, IEncounterConvertible[] L) Game(GameVersion v)
+        {
+            bool isBw = v is GameVersion.B or GameVersion.W;
+            string cls = isBw ? bw : b2;
+            IEnumerable<IEncounterConvertible> list = mode switch
+            {
+                "static" => Field(cls, "Static" + v).Concat(Field(cls, isBw ? "Encounter_BW" : "Encounter_B2W2_Regular")),
+                "entree" => Field(cls, isBw ? "DreamWorld_BW" : "DreamWorld_B2W2").Concat(Field(dr, "DreamWorld_Common")),
+                "radar" => isBw ? Array.Empty<IEncounterConvertible>() : Field(dr, "Encounter_DreamRadar"),
+                "n" => isBw ? Array.Empty<IEncounterConvertible>() : Field(b2, "Encounter_B2W2_N"),
+                "trade" => Field(cls, "TradeGift_" + v).Concat(Field(cls, isBw ? "TradeGift_BW" : "TradeGift_B2W2")),
+                "egg" => Eggs(v),
+                _ => Areas(cls, "Slots" + v),
+            };
+            return (v, list.ToArray());
+        }
+        var games = new[] { GameVersion.W, GameVersion.B, GameVersion.W2, GameVersion.B2 }.Select(Game).Where(g => g.L.Length > 0).ToArray();
+        int[] languages = [1, 2, 3, 4, 5, 7, 8];
+        int made = 0, tried = 0;
+        while (made < count && tried < count * 20)
+        {
+            tried++;
+            var (v, list) = games[rng.Next(games.Length)];
+            var enc = list[rng.Next(list.Length)];
+            var tr = Sav(v);
+            tr.Language = languages[rng.Next(languages.Length)];
+            tr.TID16 = (ushort)rng.Next(65536);
+            tr.SID16 = (ushort)rng.Next(65536);
+            if (enc.ConvertToPKM(tr) is not PK5 pk)
+                continue;
+            if (!pk.IsEgg)
+                pk.CurrentLevel = (byte)Math.Min(100, pk.CurrentLevel + rng.Next(3) * rng.Next(20));
+            pk.RefreshChecksum();
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            File.WriteAllBytes(Path.Combine(args[3], $"{made:D6}.pk5"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried }));
+        return made > 0 ? 0 : 1;
     }
 
     /// PKHeX-legal Gen 3 wild Pokémon sent through Pal Park: random trainer, slot, language and level gain.

@@ -39,6 +39,10 @@ typedef enum verity_blob_kind {
     VERITY_BLOB_GIFTS4 = 12, /* Gen 4 event database (gifts4.bin); optional */
     VERITY_BLOB_G3_ORIGIN = 14, /* Gen 3 origin data (g3_origin.bin); optional */
     VERITY_BLOB_EVENTS4 = 13, /* Gen 4 non-Pokemon gifts (events4.bin); for the gift screen */
+    VERITY_BLOB_ENC_BW = 15,
+    VERITY_BLOB_ENC_B2W2 = 16,
+    VERITY_BLOB_ENC_DR = 17,
+    VERITY_BLOB_NAMES5 = 18,
 } verity_blob_kind;
 
 /** Name categories for verity_name (string_table in the strings blob). */

@@ -144,5 +144,8 @@ for it yet (P9.1).
    refuses Japanese and Korean Pokémon). That needs a font with a suitable licence, or the
    plan's stretch goal of loading fonts from the user's ROM. The closest-IV search blocks the UI;
    a search that runs out of budget is untimed on the DS.
-3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
+3. M5 Gen 5 in progress. `analysis5.rs` covers Pokémon that originated in B/W and B2/W2: wild slots,
+   statics, Dream World, Dream Radar, N, in-game trades and bred eggs. Still to do: PGF events (a
+   fateful Pokémon that fails shows "not checked yet"), Poké Transfer origins (Gen 3/4 Pokémon in a
+   Gen 5 save stay unchecked), generation, then PGF delivery. After that M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.

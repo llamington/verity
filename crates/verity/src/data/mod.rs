@@ -37,6 +37,8 @@ pub mod move_table {
     pub const G4_SPECIAL_DRACO_METEOR: u16 = 17;
     pub const G5_TMHM: u16 = 20;
     pub const G5_TYPE_TUTOR: u16 = 21;
+    /// Hatch location masks indexed by location: bits W, B, W2, B2.
+    pub const G5_HATCH: u16 = 31;
     pub const B2W2_TUTOR_1: u16 = 22;
     pub const B2W2_TUTOR_2: u16 = 23;
     pub const B2W2_TUTOR_3: u16 = 24;

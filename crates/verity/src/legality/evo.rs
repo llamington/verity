@@ -249,6 +249,24 @@ impl<'a> Evo4<'a> {
         if species > self.presence.max_species() {
             return false;
         }
+        if self.presence.generation() == 5 {
+            if form == 0 {
+                return true;
+            }
+            let p = self.presence.personal(species as usize);
+            if p.form_stats_index() != 0 && form < p.form_count() {
+                return true;
+            }
+            return match species {
+                201 => form < 28,
+                412 | 414 => form < 3,
+                421..=423 => form == 1,
+                493 => form < 17,
+                585 | 586 => form < 4,
+                649 => form <= 4,
+                _ => false,
+            };
+        }
         if self.presence.generation() == 3 {
             return form == 0
                 || match species {
@@ -353,6 +371,11 @@ impl<'a> Evo4<'a> {
         let mut chain = result[..count].to_vec();
         clean_devolve(&mut chain, level_min);
         chain
+    }
+
+    /// PKHeX `EncounterOrigin.GetOriginChain(pk, 5, Gen5)` for a PK5.
+    pub fn encounter_origin_chain5(&self, pk: &EvoPkm) -> Vec<EvoCriteria> {
+        self.origin_chain_inner(pk, pk.met_level.max(1), pk.current_level, 0, true)
     }
 
     /// PKHeX `EncounterOrigin.GetOriginChain(pk, 4, Gen4)` for a PK4.
