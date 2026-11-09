@@ -533,26 +533,79 @@ pub fn build_names4(j: &Value) -> Vec<u8> {
 /// M6: the Gen 4 event database (`gifts4.json`, PKHeX `MGDB_G4`) as table 1 of fixed-size
 /// records: u16 MGDB index, u16 reserved, then the 0x358-byte PCD with its PK4 decrypted.
 /// Only Pokémon gifts are kept (items and other card types cannot match an entity).
-pub fn build_gifts4(j: &Value) -> Vec<u8> {
-    const REC: usize = 4 + 0x358;
+pub fn build_gifts4(j: &Value, manifest: &str, entity: bool) -> Vec<u8> {
+    const REC: usize = 8 + 0x358;
+    let meta = parse_events4(manifest);
     let mut w = BlobWriter::new(4, BlobKind::Gifts);
     let mut out = Vec::new();
-    for g in j.as_array().unwrap() {
-        if !g["entity"].as_bool().unwrap() {
-            continue;
-        }
+    let mut rec = |index: u16, m: [u8; 4], raw: &[u8]| {
+        assert_eq!(raw.len(), 0x358);
+        out.extend(index.to_le_bytes());
+        out.extend(m);
+        out.extend(0u16.to_le_bytes());
+        out.extend(raw);
+    };
+    let db = j.as_array().unwrap();
+    assert_eq!(db.len(), meta.len(), "data/events4.tsv is out of date");
+    for g in db {
+        let index = g["index"].as_u64().unwrap() as u16;
         let hex = g["raw"].as_str().unwrap();
         let raw: Vec<u8> = (0..hex.len())
             .step_by(2)
             .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
             .collect();
-        assert_eq!(raw.len(), 0x358);
-        out.extend((g["index"].as_u64().unwrap() as u16).to_le_bytes());
-        out.extend(0u16.to_le_bytes());
-        out.extend(raw);
+        let m = &meta[index as usize];
+        assert_eq!(
+            (m.card_id, m.fnv64),
+            (g["card_id"].as_u64().unwrap() as u16, fnv64(&raw)),
+            "data/events4.tsv does not match card {index}; rerun scripts/gen-events4-manifest.py"
+        );
+        if g["entity"].as_bool().unwrap() == entity {
+            rec(index, [m.language, m.region, m.games, m.injectable], &raw);
+        }
+    }
+    if !entity {
+        // Ranger Manaphy: a bare type 7 gift with no Wonder Card, any game, any language but
+        // Korean (PKHeX `PGT.IsRangerManaphy`).
+        let mut raw = [0u8; 0x358];
+        raw[0] = 7;
+        rec(0xFFFF, [0, 0, 0x1F, 1], &raw);
     }
     w.table(1, REC as u16, out);
     w.finish()
+}
+
+struct EventMeta {
+    card_id: u16,
+    language: u8,
+    region: u8,
+    games: u8,
+    injectable: u8,
+    fnv64: u64,
+}
+
+/// `data/events4.tsv`, in index order.
+fn parse_events4(text: &str) -> Vec<EventMeta> {
+    let mut out = Vec::new();
+    for line in text.lines().filter(|l| !l.starts_with('#')) {
+        let f: Vec<&str> = line.split('\t').collect();
+        assert_eq!(f[0].parse::<usize>().unwrap(), out.len());
+        out.push(EventMeta {
+            card_id: f[1].parse().unwrap(),
+            language: f[2].parse().unwrap(),
+            region: f[3].parse().unwrap(),
+            games: f[4].parse().unwrap(),
+            injectable: f[5].parse().unwrap(),
+            fnv64: u64::from_str_radix(f[6], 16).unwrap(),
+        });
+    }
+    out
+}
+
+fn fnv64(data: &[u8]) -> u64 {
+    data.iter().fold(0xCBF2_9CE4_8422_2325, |h, &b| {
+        (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01B3)
+    })
 }
 
 /// Builds every blob from `exports` into `out`; returns (name, size) pairs.
@@ -593,10 +646,10 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
         "names4.bin".into(),
         build_names4(&load(&exports.join("names4.json"))),
     );
-    put(
-        "gifts4.bin".into(),
-        build_gifts4(&load(&exports.join("gifts4.json"))),
-    );
+    let gifts = load(&exports.join("gifts4.json"));
+    let events4 = fs::read_to_string(exports.parent().unwrap().join("events4.tsv")).unwrap();
+    put("gifts4.bin".into(), build_gifts4(&gifts, &events4, true));
+    put("events4.bin".into(), build_gifts4(&gifts, &events4, false));
     for l in LANGS {
         put(
             format!("strings_{l}.bin"),

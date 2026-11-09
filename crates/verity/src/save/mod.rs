@@ -408,6 +408,28 @@ impl<'a> Save<'a> {
     pub fn data(&self) -> &[u8] {
         self.data
     }
+
+    /// The Gen 4 General block and the offset of its Mystery Gift block, or `None` on Gen 5.
+    pub fn mystery4(&self) -> Option<(&[u8], usize)> {
+        match &self.layout {
+            Layout::Gen4(l) => Some((
+                &self.data[l.general_offset()..],
+                l.mystery_offset() - l.general_offset(),
+            )),
+            Layout::Gen5(_) => None,
+        }
+    }
+
+    /// Mutable form of [`Save::mystery4`].
+    pub fn mystery4_mut(&mut self) -> Option<(&mut [u8], usize)> {
+        match &self.layout {
+            Layout::Gen4(l) => Some((
+                &mut self.data[l.general_offset()..],
+                l.mystery_offset() - l.general_offset(),
+            )),
+            Layout::Gen5(_) => None,
+        }
+    }
 }
 
 const DESMUME_FOOTER: usize = 0x7A;

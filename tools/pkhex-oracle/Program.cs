@@ -133,10 +133,41 @@ public static class Program
             event_flag_count = Events(sav)?.EventFlagCount,
             event_work = Events(sav) is { } ew ? Enumerable.Range(0, ew.EventWorkCount).Select(ew.GetWork).ToArray() : null,
             box_names = sav is IBoxDetailName bn ? Enumerable.Range(0, sav.BoxCount).Select(bn.GetBoxName).ToArray() : null,
+            mystery = sav is SAV4 m4 ? Mystery4(m4) : null,
         };
 
         Console.WriteLine(JsonSerializer.Serialize(result, JsonOpts));
         return 0;
+    }
+
+    private static object Mystery4(SAV4 sav)
+    {
+        var m = sav.Mystery;
+        var store = (IMysteryGiftStorage)m;
+        return new
+        {
+            unlocked = sav.IsMysteryGiftUnlocked,
+            delivery_active = m.IsDeliveryManActive,
+            received_flags = Enumerable.Range(0, m.MysteryGiftReceivedFlagMax).Where(m.GetMysteryGiftReceivedFlag).ToArray(),
+            sentinels = m is MysteryBlock4DP dp ? Enumerable.Range(0, 11).Select(dp.GetMysteryGiftReceivedSentinel).ToArray() : null,
+            pgt = Enumerable.Range(0, 8).Select(i => (PGT)store.GetMysteryGift(i)).Select(g => new
+            {
+                type = (int)g.CardType,
+                slot = (int)g.Slot,
+                detail = (int)g.Detail,
+                species = g.IsEntity && g.GiftType != GiftType4.ManaphyEgg ? (int)g.Species : g.IsManaphyEgg ? 490 : 0,
+                item = g.IsItem ? g.ItemID : 0,
+                raw = Convert.ToHexString(g.Data),
+            }).ToArray(),
+            pcd = Enumerable.Range(8, 3).Select(i => (PCD)store.GetMysteryGift(i)).Select(g => new
+            {
+                type = (int)g.Gift.CardType,
+                card_id = g.CardID,
+                title = g.CardTitle,
+                compat = (int)g.CardCompatibility,
+                raw = Convert.ToHexString(g.Data),
+            }).ToArray(),
+        };
     }
 
     private static IEventFlag37? Events(SaveFile sav) => sav switch

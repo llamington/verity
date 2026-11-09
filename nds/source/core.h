@@ -47,6 +47,8 @@ const char* game_name(uint8_t kind);
 uint8_t wizard_version();
 // Makes sure the Gen 4 legality/generation data is attached.
 bool ensure_gen4_data();
+// Attaches the Mystery Gift databases (first use only; about 500 KB).
+bool ensure_events_data();
 
 // Writes the open save back to its file: finalise, validate (never writes if the validator
 // fails), rotate backups (<name>.bak1..3), write a temp file, swap it in, re-read and compare.

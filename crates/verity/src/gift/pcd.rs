@@ -7,14 +7,19 @@ use crate::pkm::{Format, Pkm, SIZE_4PARTY};
 
 pub const PCD_SIZE: usize = 0x358;
 pub const PGT_SIZE: usize = 0x104;
-/// Blob record: u16 MGDB index, u16 reserved, then the PCD (inner PK4 decrypted).
-const REC: usize = 4 + PCD_SIZE;
+/// Blob record: u16 MGDB index, u8 language, u8 region, u8 games, u8 flags, u16 reserved, then
+/// the PCD (inner PK4 decrypted).
+const HEADER: usize = 8;
+const REC: usize = HEADER + PCD_SIZE;
+/// `Gift4::mgdb_index` of the Ranger Manaphy record (no Wonder Card, not in PKHeX's database).
+pub const RANGER_INDEX: u16 = 0xFFFF;
 const PK_OFS: usize = 8;
 
 /// PKHeX `GiftType4`.
 pub mod gift_type {
     pub const POKEMON: u16 = 1;
     pub const POKEMON_EGG: u16 = 2;
+    pub const ITEM: u16 = 3;
     pub const MANAPHY_EGG: u16 = 7;
     pub const POKEMON_MOVIE: u16 = 13;
 }
@@ -74,9 +79,41 @@ impl<'a> Gift4<'a> {
         u16::from_le_bytes([self.rec[0], self.rec[1]])
     }
 
+    /// The language the card was distributed in (a save language ID); 0 means any.
+    pub fn language(&self) -> u8 {
+        self.rec[2]
+    }
+
+    /// The distribution region within that language: 0 none, 1 NA, 2 UK, 3 AU, 4 EU.
+    pub fn region(&self) -> u8 {
+        self.rec[3]
+    }
+
+    /// The games the event was for: bit 0 D, 1 P, 2 Pt, 3 HG, 4 SS.
+    pub fn games(&self) -> u8 {
+        self.rec[4]
+    }
+
+    /// Whether this is a genuine card that can be delivered (see `docs/research/events-region.md`).
+    pub fn injectable(&self) -> bool {
+        self.rec[5] != 0
+    }
+
     /// The whole Wonder Card (inner PK4 decrypted).
     pub fn pcd(&self) -> &'a [u8] {
-        &self.rec[4..]
+        &self.rec[HEADER..]
+    }
+
+    /// The gift's title (raw Gen 4 characters).
+    pub fn title_raw(&self) -> [u16; 36] {
+        let mut out = [0u16; 36];
+        for (o, c) in out
+            .iter_mut()
+            .zip(self.pcd()[0x104..0x14C].as_chunks::<2>().0)
+        {
+            *o = u16::from_le_bytes(*c);
+        }
+        out
     }
 
     /// The inner gift (PGT).

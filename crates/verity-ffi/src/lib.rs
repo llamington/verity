@@ -10,6 +10,7 @@ use core::slice;
 
 #[cfg(feature = "alloc")]
 pub mod edit;
+pub mod events;
 pub mod ui;
 
 /// The blob registry is global and single-threaded by contract; tests that touch it take this.

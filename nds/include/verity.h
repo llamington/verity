@@ -37,6 +37,7 @@ typedef enum verity_blob_kind {
     VERITY_BLOB_MOVES5 = 10,
     VERITY_BLOB_ENC_HGSS = 11,
     VERITY_BLOB_GIFTS4 = 12, /* Gen 4 event database (gifts4.bin); optional */
+    VERITY_BLOB_EVENTS4 = 13, /* Gen 4 non-Pokemon gifts (events4.bin); for the gift screen */
 } verity_blob_kind;
 
 /** Name categories for verity_name (string_table in the strings blob). */
@@ -156,6 +157,28 @@ typedef struct verity_gen_request {
     verity_gen_status_text. The save is not finalised. */
 uint8_t verity_gen_insert(uint8_t *buf, size_t len, const verity_gen_request *req, verity_loc loc);
 const char *verity_gen_status_text(uint8_t code);
+
+/** One Mystery Gift the open save can take. status: 0 available, else a verity_event_inject code. */
+typedef struct verity_event_view {
+    uint8_t blob;      /* 0 gifts4.bin, 1 events4.bin */
+    uint8_t gift_type; /* PKHeX GiftType4 */
+    uint16_t record;   /* position in that blob */
+    uint16_t card_id;
+    uint16_t species;  /* 0 for items */
+    uint8_t region;    /* 0 none, 1 NA, 2 UK, 3 AU, 4 EU */
+    uint8_t status;
+    uint8_t ranger;    /* 1 for the Ranger Manaphy egg (it has no title) */
+    uint8_t reserved;
+    uint16_t title[37]; /* UTF-16, 0-terminated */
+} verity_event_view;
+
+/** Gifts for this save's game and language; returns how many were written (at most cap). */
+size_t verity_events_list(uint8_t *buf, size_t len, verity_event_view *out, size_t cap);
+
+/** Delivers a gift for the player to collect from the deliveryman. days: days since 2000-01-01.
+    Returns 0 on success; see verity_event_status_text. The save is not finalised. */
+uint8_t verity_event_inject(uint8_t *buf, size_t len, uint8_t blob, uint16_t record, uint16_t days);
+const char *verity_event_status_text(uint8_t code);
 
 /** Fixes block checksums before writing the save out. */
 verity_err verity_save_finalize(uint8_t *buf, size_t len);
