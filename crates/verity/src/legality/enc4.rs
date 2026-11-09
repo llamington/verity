@@ -40,6 +40,9 @@ pub struct MatchPkm {
     pub is_shiny: bool,
     /// Contest stats (cool, beauty, cute, smart, tough, sheen).
     pub contest: [u8; 6],
+    /// The Unown form is possible at its met location (PKHeX `IsUnownFormValid`). It depends on
+    /// the PID, IVs and location, not the slot, so it is worked out once per Pokémon.
+    pub unown_form_ok: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -98,15 +101,7 @@ pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
         return Rating::PartialMatch;
     }
     // D/P/Pt Unown only appear in the Solaceon Ruins (PKHeX `EncounterArea4.IsUnownFormValid`).
-    if e.species() == UNOWN && {
-        use crate::rng::unown4 as u;
-        let (pid, iv) = (pk.analyze.pid, pk.analyze.iv32);
-        if e.location() == u::RUINS_OF_ALPH {
-            !u::alph_form_valid(pid, iv, pk.form)
-        } else {
-            !u::form_valid(pid, iv, pk.form)
-        }
-    } {
+    if e.species() == UNOWN && !pk.unown_form_ok {
         return Rating::PartialMatch;
     }
     Rating::Match
@@ -510,10 +505,7 @@ pub fn wild_slots<'a>(
         }
     };
     let push_slots = |seq: &mut Vec<(Enc4<'a>, bool)>, partial: &mut Option<(Enc4<'a>, u8)>| {
-        for e in ed.group(group) {
-            if e.location() != pk.met_location {
-                continue;
-            }
+        for e in ed.slots_at(group, pk.met_location) {
             let Some(evo) = evo_of(e.species()) else {
                 continue;
             };

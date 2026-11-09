@@ -186,7 +186,19 @@ fn inputs(ctx: &Context4, pk: &Pkm) -> Inputs {
             ground_tile: pk.ground_tile(),
             is_shiny: pk.is_shiny(),
             contest: pk.contest(),
+            unown_form_ok: pk.species() != 201 || unown_form_ok(pk),
         },
+    }
+}
+
+/// `EncounterArea4.IsUnownFormValid` for the Pokémon's met location.
+fn unown_form_ok(pk: &Pkm) -> bool {
+    use crate::rng::unown4 as u;
+    let (pid, iv32, form) = (pk.pid(), pk.iv32() & 0x3FFF_FFFF, pk.form());
+    if pk.met_location() == u::RUINS_OF_ALPH {
+        u::alph_form_valid(pid, iv32, form)
+    } else {
+        u::form_valid(pid, iv32, form)
     }
 }
 
