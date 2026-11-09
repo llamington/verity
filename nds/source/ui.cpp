@@ -56,7 +56,7 @@ void Input::poll()
 namespace {
 std::vector<Scene*> g_stack;
 Scene* g_pending = nullptr;
-PrintConsole g_top, g_bottom;
+Surface g_top, g_bottom;
 
 void fade(bool out)
 {
@@ -109,24 +109,117 @@ void run()
 
 // ---- text ----------------------------------------------------------------------------------
 
-PrintConsole* top() { return &g_top; }
-PrintConsole* bottom() { return &g_bottom; }
+// Proportional 8-pixel-high text. Each screen is a 32x24 grid of its own tiles, so text is drawn
+// as pixels. Glyphs come from libnds' console font, trimmed to their inked columns.
+namespace {
+constexpr int kTiles = 32 * 24;
+constexpr int kSpaceWidth = 4;
+int g_digit_width = 6;  // digits share one width so numbers line up
 
-void clear(PrintConsole* c)
+const uint8_t* g_font;
+int g_font_first, g_font_count;
+uint8_t g_left[128], g_width[128];  // inked start column and width per ASCII code
+
+void measure_font()
 {
-    consoleSelect(c);
-    printf("\x1b[2J");
+    const PrintConsole* d = consoleGetDefault();
+    g_font = (const uint8_t*)d->font.gfx;
+    g_font_first = d->font.asciiOffset;
+    g_font_count = d->font.numChars;
+    for (int c = 0; c < 128; c++)
+    {
+        int ix = c - g_font_first;
+        g_left[c] = 0;
+        g_width[c] = 0;
+        if (ix < 0 || ix >= g_font_count)
+            continue;
+        uint8_t mask = 0;
+        for (int y = 0; y < 8; y++)
+            mask |= g_font[ix * 8 + y];
+        int lo = 8, hi = -1;
+        for (int x = 0; x < 8; x++)
+            if (mask & (1 << x))
+            {
+                lo = lo < x ? lo : x;
+                hi = x;
+            }
+        if (hi >= 0)
+        {
+            g_left[c] = (uint8_t)lo;
+            g_width[c] = (uint8_t)(hi - lo + 1);
+        }
+    }
+    for (int c = '0'; c <= '9'; c++)
+        if (g_width[c] + 2 > g_digit_width)
+            g_digit_width = g_width[c] + 2;
 }
 
-void at(PrintConsole* c, int col, int row, const char* fmt, ...)
+void plot(Surface* c, int x, int y)
 {
-    consoleSelect(c);
-    printf("\x1b[%d;%dH", row, col);
+    if (x < 0 || x >= 256 || y < 0 || y >= 192)
+        return;
+    int tile = (y / 8) * 32 + x / 8;
+    uint16_t* word = c->tiles + tile * 16 + (y % 8) * 2 + (x % 8) / 4;
+    *word |= (uint16_t)(1 << (((x % 8) % 4) * 4));
+}
+
+// Draws one glyph; returns the x after it, with one pixel of spacing.
+int glyph(Surface* c, int x, int y, unsigned char ch)
+{
+    if (ch >= 128)
+        ch = '?';
+    int ix = ch - g_font_first;
+    if (ix < 0 || ix >= g_font_count)
+        return x + kSpaceWidth;
+    int digit_pad = (ch >= '0' && ch <= '9') ? (g_digit_width - 1 - g_width[ch]) / 2 : 0;
+    for (int row = 0; row < 8; row++)
+    {
+        uint8_t bits = g_font[ix * 8 + row];
+        for (int col = 0; col < g_width[ch]; col++)
+            if (bits & (1 << (col + g_left[ch])))
+                plot(c, x + digit_pad + col, y + row);
+    }
+    if (ch >= '0' && ch <= '9')
+        return x + g_digit_width;
+    return x + g_width[ch] + 1;
+}
+}  // namespace
+
+Surface* top() { return &g_top; }
+Surface* bottom() { return &g_bottom; }
+
+void clear(Surface* c) { memset(c->tiles, 0, kTiles * 32); }
+
+void at(Surface* c, int col, int row, const char* fmt, ...)
+{
+    char text[128];
     va_list ap;
     va_start(ap, fmt);
-    vprintf(fmt, ap);
+    vsnprintf(text, sizeof(text), fmt, ap);
     va_end(ap);
-    printf("\x1b[K");
+    if (row < 0 || row >= 24 || col < 0 || col >= 32)
+        return;
+    memset(c->tiles + (row * 32 + col) * 16, 0, (size_t)(32 - col) * 32);
+    int x = col * 8, y = row * 8;
+    for (int i = 0; text[i]; i++)
+    {
+        if (text[i] != ' ')
+        {
+            x = glyph(c, x, y, (unsigned char)text[i]);
+            continue;
+        }
+        int run = 1;
+        while (text[i + run] == ' ')
+            run++;
+        x += kSpaceWidth;
+        // Two or more spaces mean a table column: line up with the character grid.
+        if (run > 1)
+        {
+            int grid = (col + i + run) * 8;
+            x = x > grid ? x : grid;
+        }
+        i += run - 1;
+    }
 }
 
 void utf16_to_ascii(const uint16_t* s, char* out, int cap)
@@ -285,12 +378,24 @@ void sprites_init()
     videoSetMode(MODE_0_2D);
     videoSetModeSub(MODE_0_2D);
     vramSetPrimaryBanks(VRAM_A_MAIN_BG, VRAM_B_MAIN_SPRITE, VRAM_C_SUB_BG, VRAM_D_SUB_SPRITE);
-    consoleInit(&g_top, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0, true, true);
-    consoleInit(&g_bottom, 0, BgType_Text4bpp, BgSize_T_256x256, 31, 0, false, true);
+    measure_font();
+    int main_bg = bgInit(0, BgType_Text4bpp, BgSize_T_256x256, 31, 1);
+    int sub_bg = bgInitSub(0, BgType_Text4bpp, BgSize_T_256x256, 31, 1);
+    for (int s = 0; s < 2; s++)
+    {
+        Surface* c = s ? &g_bottom : &g_top;
+        c->tiles = bgGetGfxPtr(s ? sub_bg : main_bg);
+        uint16_t* map = bgGetMapPtr(s ? sub_bg : main_bg);
+        for (int i = 0; i < 32 * 32; i++)
+            map[i] = i < kTiles ? (uint16_t)i : 0;
+        clear(c);
+    }
     BG_PALETTE[0] = RGB15(3, 5, 9);
     BG_PALETTE_SUB[0] = RGB15(3, 5, 9);
-    bgSetPriority(g_bottom.bgId, 0);
-    bgSetPriority(g_top.bgId, 0);
+    BG_PALETTE[1] = RGB15(31, 31, 31);
+    BG_PALETTE_SUB[1] = RGB15(31, 31, 31);
+    bgSetPriority(main_bg, 0);
+    bgSetPriority(sub_bg, 0);
 
     oamInit(&oamMain, SpriteMapping_1D_64, false);
     oamInit(&oamSub, SpriteMapping_1D_64, false);

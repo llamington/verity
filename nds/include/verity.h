@@ -86,6 +86,10 @@ typedef struct verity_pkm_view {
     uint8_t evs[6];
     uint8_t types[2]; /* 0xFF when unknown */
     uint8_t friendship;
+    uint8_t is_nicknamed;
+    uint8_t met_date[3]; /* years since 2000, month, day */
+    uint8_t contest[6];  /* Cool, Beauty, Cute, Smart, Tough, Sheen */
+    uint8_t ribbons[12]; /* bytes 0x24..0x28, 0x3C..0x40, 0x60..0x64 */
 } verity_pkm_view;
 
 /**
@@ -197,7 +201,8 @@ verity_err verity_save_check(uint8_t *buf, size_t len, verity_save_check_result 
 size_t verity_location_name(uint8_t generation, uint16_t id, uint16_t *out, size_t cap);
 
 /** Field edits; mask: 1 held item, 2 moves (PP reset), 4 IVs, 8 EVs, 16 level, 32 friendship,
-    64 PID (only with a verity_closest_ivs result). */
+    64 PID (only with a verity_closest_ivs result), 128 ball, 256 met location/level/date,
+    512 contest stats, 1024 ribbons, 2048 nickname, 4096 reset nickname to the species name. */
 typedef struct verity_edit {
     uint32_t mask;
     uint16_t held_item;
@@ -207,7 +212,36 @@ typedef struct verity_edit {
     uint8_t level;
     uint8_t friendship;
     uint32_t pid;
+    uint16_t met_location;
+    uint8_t ball;
+    uint8_t met_level;
+    uint8_t met_date[3];
+    uint8_t contest[6];
+    uint8_t ribbons[12];
+    uint16_t nickname[11]; /* UTF-16, 0-terminated */
 } verity_edit;
+
+/** Whether a character can be stored in a name in this generation. */
+uint8_t verity_char_encodable(uint8_t generation, uint16_t c);
+
+/** Species an egg can be of in this game; returns how many were written. */
+size_t verity_egg_species(uint8_t version, uint16_t *out, size_t cap);
+
+/** Request for verity_egg_insert. 0xFF means any. */
+typedef struct verity_egg_request {
+    uint8_t version;
+    uint8_t nature;
+    uint16_t species;
+    uint8_t gender;
+    uint8_t shiny;
+    uint8_t hatched;  /* 0 an egg, 1 already hatched */
+    uint8_t date[3];  /* years since 2000, month, day */
+    uint32_t seed;
+} verity_egg_request;
+
+/** Builds a legal bred egg for the save's trainer and writes it to loc. Returns 0 OK, else a code
+    for verity_gen_status_text. The save is not finalised. */
+uint8_t verity_egg_insert(uint8_t *buf, size_t len, const verity_egg_request *req, verity_loc loc);
 
 /** The legal IV spread closest to the requested one, and the PID that goes with it. */
 typedef struct verity_iv_fix {

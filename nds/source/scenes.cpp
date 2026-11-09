@@ -707,6 +707,14 @@ public:
             ui::bar(0, list_.bar_y(), true);
             if (in.down & KEY_B)
                 return false;
+            if (in.down & KEY_Y)
+            {
+                egg_ = !egg_;
+                load_species();
+                list_ = ListView();
+                draw();
+                return true;
+            }
             if ((in.down & KEY_SELECT) && other_game())
             {
                 version_ = other_game();
@@ -718,6 +726,14 @@ public:
             if (a >= 0)
             {
                 species_ix_ = a;
+                if (egg_)
+                {
+                    step_ = 2;
+                    opt_ = 0;
+                    draw();
+                    ui::bar(0, 2 * 8, true);
+                    return true;
+                }
                 enc_count_ = (int)verity_wild_encounters(version_, species_[a], enc_, 64);
                 step_ = 1;
                 enc_list_ = ListView();
@@ -752,32 +768,33 @@ public:
         {
             if (in.down & KEY_B)
             {
-                step_ = 1;
+                step_ = egg_ ? 0 : 1;
                 draw();
                 return true;
             }
             int before = opt_;
+            int opts = egg_ ? kEggOpts : kOpts;
             if (in.rep & KEY_UP)
-                opt_ = (opt_ + kOpts - 1) % kOpts;
+                opt_ = (opt_ + opts - 1) % opts;
             if (in.rep & KEY_DOWN)
-                opt_ = (opt_ + 1) % kOpts;
+                opt_ = (opt_ + 1) % opts;
             int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
             if (in.tapped)
             {
                 int row = in.tap_y / 8 - 2;
-                if (row >= 0 && row < kOpts)
+                if (row >= 0 && row < opts)
                 {
-                    if (row == opt_ && row < kOpts - 1)
+                    if (row == opt_ && row < opts - 1)
                         dir = 1;
                     opt_ = row;
                 }
             }
             if (dir)
-                change(dir);
-            bool go = (opt_ == kOpts - 1 &&
-                       ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == kOpts - 1))) ||
+                egg_ ? change_egg(dir) : change(dir);
+            bool go = (opt_ == opts - 1 &&
+                       ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == opts - 1))) ||
                       (in.down & KEY_START);
-            if (go && generate())
+            if (go && (egg_ ? generate_egg() : generate()))
                 return false;
             if (dir || opt_ != before)
                 draw_options();
@@ -802,11 +819,17 @@ private:
     int lead_ = 0;     // 0 none, 1 Synchronize, 2 Cute Charm, 3 Poke Radar chain
     int ball_ = 0;     // 0 default, else a ball ID from kBalls
     static constexpr int kOpts = 7;
+    static constexpr int kEggOpts = 5;
+    bool egg_ = false, hatched_ = false;
     static constexpr uint8_t kBalls[] = {4, 3, 2, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     char status_[48] = "";
     ListView list_, enc_list_;
 
-    void load_species() { species_count_ = (int)verity_wild_species(version_, species_, 494); }
+    void load_species()
+    {
+        species_count_ = egg_ ? (int)verity_egg_species(version_, species_, 494)
+                              : (int)verity_wild_species(version_, species_, 494);
+    }
 
     /// The other game of a pair that shares a save type (the save doesn't record which it is).
     uint8_t other_game() const
@@ -864,6 +887,48 @@ private:
             int n = (int)(sizeof(kBalls) / sizeof(kBalls[0])) + 1;
             ball_ = (ball_ + dir + n) % n;
         }
+    }
+
+    void change_egg(int dir)
+    {
+        if (opt_ == 0)
+            nature_ = (nature_ + 1 + dir + 26) % 26 - 1;
+        else if (opt_ == 1)
+            gender_ = (gender_ + 1 + dir + 3) % 3 - 1;
+        else if (opt_ == 2)
+            shiny_ = !shiny_;
+        else if (opt_ == 3)
+            hatched_ = !hatched_;
+    }
+
+    bool generate_egg()
+    {
+        time_t now = time(nullptr);
+        struct tm* t = localtime(&now);
+        static uint32_t counter = 0;
+        verity_egg_request r;
+        memset(&r, 0, sizeof(r));
+        r.version = version_;
+        r.species = species_[species_ix_];
+        r.nature = nature_ < 0 ? 0xFF : (uint8_t)nature_;
+        r.gender = gender_ < 0 ? 0xFF : (uint8_t)gender_;
+        r.shiny = shiny_;
+        r.hatched = hatched_;
+        r.date[0] = t ? (uint8_t)(t->tm_year - 100) : 26;
+        r.date[1] = t ? (uint8_t)(t->tm_mon + 1) : 1;
+        r.date[2] = t ? (uint8_t)t->tm_mday : 1;
+        r.seed = (uint32_t)now * 2654435761u + ++counter;
+        uint8_t code = verity_egg_insert(core::doc().buf, core::doc().len, &r,
+                                         verity_loc{box_, slot_});
+        if (code == 0)
+        {
+            core::doc().dirty = true;
+            verity_save_probe(core::doc().buf, core::doc().len, &core::doc().info);
+            return true;
+        }
+        snprintf(status_, sizeof(status_), "%s", verity_gen_status_text(code));
+        draw_options();
+        return false;
     }
 
     static const char* lead_name(int l)
@@ -938,13 +1003,15 @@ private:
             at(bottom(), 0, 0, " B: back");
             return;
         }
-        at(top(), 0, 0, "Add Pokemon  (legal, %s)", game_name(version_));
+        at(top(), 0, 0, "Add %s  (legal, %s)", egg_ ? "Egg" : "Pokemon", game_name(version_));
         at(top(), 0, 1, "to %s %u", box_ == 0xFF ? "party slot" : "box slot",
            (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
         if (step_ == 0)
         {
-            at(top(), 0, 3, "1. Species (%d with wild slots)", species_count_);
+            at(top(), 0, 3, egg_ ? "1. Egg species (%d)" : "1. Species (%d with wild slots)",
+               species_count_);
             at(top(), 0, 5, "%s", other_game() ? "Select: switch game" : "");
+            at(top(), 0, 6, "Y: %s", egg_ ? "wild encounter instead" : "bred egg instead");
             draw_list();
         }
         else if (step_ == 1)
@@ -999,8 +1066,24 @@ private:
         }
     }
 
+    void draw_egg_options()
+    {
+        at(bottom(), 0, 0, " Options");
+        at(bottom(), 0, 2, " Nature   < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        at(bottom(), 0, 3, " Gender   < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+        at(bottom(), 0, 4, " Shiny    < %s >", shiny_ ? "Yes" : "No");
+        at(bottom(), 0, 5, " Hatched  < %s >", hatched_ ? "Yes" : "No");
+        at(bottom(), 0, 6, " Generate and place");
+        at(bottom(), 0, 8, " %s", status_);
+    }
+
     void draw_options()
     {
+        if (egg_)
+        {
+            draw_egg_options();
+            return;
+        }
         at(bottom(), 0, 0, " Options");
         at(bottom(), 0, 2, " Nature  < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
         at(bottom(), 0, 3, " Shiny   < %s >", shiny_ ? "Yes" : "No");
@@ -1039,6 +1122,7 @@ public:
             memcpy(e_.evs, orig_.evs, 6);
             e_.level = orig_.level ? orig_.level : 1;
             e_.friendship = orig_.friendship;
+            load_fields();
             gen4_ = core::doc().info.generation == 4;
             items_ = count(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5);
             moves_ = count(VERITY_NAME_MOVES);
@@ -1056,6 +1140,10 @@ public:
             return update_picker(in);
         if (showing_fix_)
             return update_fix(in);
+        if (typing_)
+            return update_keyboard(in);
+        if (ribbon_list_)
+            return update_ribbons(in);
         if (in.down & KEY_B)
             return false;
         if (tab_ == 1 && gen4_ && (in.down & KEY_X))
@@ -1067,9 +1155,9 @@ public:
         int before_row = row_, before_tab = tab_;
         bool changed = false;
         if (in.down & KEY_L)
-            tab_ = (tab_ + 2) % 3;
+            tab_ = (tab_ + kTabs - 1) % kTabs;
         if (in.down & KEY_R)
-            tab_ = (tab_ + 1) % 3;
+            tab_ = (tab_ + 1) % kTabs;
         if (in.down & KEY_SELECT)
         {
             legal_mode_ = !legal_mode_;
@@ -1088,7 +1176,7 @@ public:
         {
             if (in.tap_y < 16)
             {
-                tab_ = in.tap_x * 3 / 256;
+                tab_ = in.tap_x * kTabs / 256;
                 row_ = 0;
             }
             else if (in.tap_y / 8 - 3 >= 0 && in.tap_y / 8 - 3 < rows)
@@ -1125,6 +1213,10 @@ private:
     int picking_ = 0;  // 0 none, 1 item, 2..5 move slot
     bool showing_fix_ = false;
     verity_iv_fix fix_;
+    bool typing_ = false, ribbon_list_ = false;
+    uint16_t name_[11];
+    int name_len_ = 0, key_row_ = 0, key_col_ = 0, key_page_ = 0;
+    ListView ribbons_;
     ListView pick_;
     char status_[48] = "";
 
@@ -1143,7 +1235,22 @@ private:
         return lo;
     }
 
-    int tab_rows() const { return tab_ == 0 ? 3 : tab_ == 1 ? 12 : 4; }
+    static constexpr int kTabs = 5;
+    int tab_rows() const
+    {
+        static constexpr int kRows[kTabs] = {3, 12, 4, 6, 8};
+        return kRows[tab_];
+    }
+
+    void load_fields()
+    {
+        e_.ball = orig_.ball;
+        e_.met_location = orig_.met_location;
+        e_.met_level = orig_.met_level;
+        memcpy(e_.met_date, orig_.met_date, 3);
+        memcpy(e_.contest, orig_.contest, 6);
+        memcpy(e_.ribbons, orig_.ribbons, 12);
+    }
 
     static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -1181,12 +1288,296 @@ private:
                 e_.mask |= 8;
             }
         }
-        else
+        else if (tab_ == 2)
         {
             e_.moves[row_] = (uint16_t)((e_.moves[row_] + dir + moves_) % moves_);
             e_.mask |= 2;
         }
+        else if (tab_ == 3)
+        {
+            if (row_ == 0)
+            {
+                e_.ball = (uint8_t)clampi(e_.ball + (dir > 0 ? 1 : -1), 1, gen4_ ? 24 : 25);
+                e_.mask |= 128;
+                return true;
+            }
+            if (row_ == 1)
+                e_.met_location = (uint16_t)(e_.met_location + dir);
+            else if (row_ == 2)
+                e_.met_level = (uint8_t)clampi(e_.met_level + dir, 0, 100);
+            else if (row_ == 3)
+                e_.met_date[0] = (uint8_t)clampi(e_.met_date[0] + dir, 0, 99);
+            else if (row_ == 4)
+                e_.met_date[1] = (uint8_t)clampi(e_.met_date[1] + dir, 1, 12);
+            else
+                e_.met_date[2] = (uint8_t)clampi(e_.met_date[2] + dir, 1, 31);
+            e_.mask |= 256;
+        }
+        else
+        {
+            if (row_ < 1 || row_ > 6)
+                return false;
+            e_.contest[row_ - 1] = (uint8_t)clampi(e_.contest[row_ - 1] + dir, 0, 255);
+            e_.mask |= 512;
+        }
         return true;
+    }
+
+    // ---- nickname keyboard -----------------------------------------------------------------
+
+    static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 5;
+
+    static const char* page_row(int page, int row)
+    {
+        static const char* kPages[3][kKeyRows] = {
+            {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ .,-", "0123456789"},
+            {"abcdefghij", "klmnopqrst", "uvwxyz .,-", "0123456789"},
+            {"!?/:'&()+=", "*%@#~;_<>^", "        .,", "0123456789"},
+        };
+        return kPages[page][row];
+    }
+
+    int max_name() const { return orig_.language == 1 || orig_.language == 8 ? 5 : 10; }
+
+    bool key_ok(char c) const
+    {
+        return c != ' ' ? verity_char_encodable(core::doc().info.generation, (uint8_t)c) != 0 : true;
+    }
+
+    bool open_keyboard()
+    {
+        if (orig_.language == 1 || orig_.language == 8)
+        {
+            snprintf(status_, sizeof(status_), "Keyboard: Latin names only");
+            return false;
+        }
+        typing_ = true;
+        if (e_.mask & 2048)
+            memcpy(name_, e_.nickname, sizeof(name_));
+        else
+        {
+            memset(name_, 0, sizeof(name_));
+            memcpy(name_, orig_.nickname, 20);
+        }
+        name_len_ = 0;
+        while (name_len_ < 10 && name_[name_len_])
+            name_len_++;
+        ui::clear(bottom());
+        draw_keyboard();
+        return true;
+    }
+
+    void press_key(int page_row_i, int col)
+    {
+        char c = page_row(key_page_, page_row_i)[col];
+        if (name_len_ < max_name() && key_ok(c))
+        {
+            name_[name_len_++] = (uint8_t)c;
+            name_[name_len_] = 0;
+        }
+    }
+
+    bool update_keyboard(const ui::Input& in)
+    {
+        bool redraw = false;
+        if (in.rep & KEY_UP)
+            key_row_ = (key_row_ + kKeyRows - 1) % kKeyRows, redraw = true;
+        if (in.rep & KEY_DOWN)
+            key_row_ = (key_row_ + 1) % kKeyRows, redraw = true;
+        if (in.rep & KEY_LEFT)
+            key_col_ = (key_col_ + kKeyCols - 1) % kKeyCols, redraw = true;
+        if (in.rep & KEY_RIGHT)
+            key_col_ = (key_col_ + 1) % kKeyCols, redraw = true;
+        if (in.down & KEY_A)
+            press_key(key_row_, key_col_), redraw = true;
+        if (in.tapped)
+        {
+            int r = (in.tap_y / 8 - kKeyTop) / 2;
+            int c = (in.tap_x - 16) / 24;
+            if (in.tap_y / 8 >= kKeyTop && r < kKeyRows && c >= 0 && c < kKeyCols)
+            {
+                key_row_ = r;
+                key_col_ = c;
+                press_key(r, c);
+                redraw = true;
+            }
+        }
+        if (in.down & KEY_B)
+        {
+            if (name_len_ > 0)
+            {
+                name_[--name_len_] = 0;
+                redraw = true;
+            }
+            else
+            {
+                typing_ = false;
+                ui::clear(bottom());
+                draw();
+                return true;
+            }
+        }
+        if (in.down & KEY_Y)
+            key_page_ = (key_page_ + 1) % 3, redraw = true;
+        if (in.down & KEY_X)
+        {
+            // Back to the species name, which also clears the nicknamed flag.
+            e_.mask = (e_.mask & ~2048u) | 4096;
+            typing_ = false;
+            ui::clear(bottom());
+            preview();
+            draw();
+            return true;
+        }
+        if (in.down & KEY_START)
+        {
+            if (name_len_ == 0)
+            {
+                at(bottom(), 0, 3, " A name can't be empty");
+                return true;
+            }
+            memset(e_.nickname, 0, sizeof(e_.nickname));
+            memcpy(e_.nickname, name_, sizeof(uint16_t) * (size_t)name_len_);
+            e_.mask = (e_.mask & ~4096u) | 2048;
+            typing_ = false;
+            ui::clear(bottom());
+            preview();
+            draw();
+            return true;
+        }
+        if (redraw)
+            draw_keyboard();
+        return true;
+    }
+
+    void draw_keyboard()
+    {
+        char text[12];
+        ui::utf16_to_ascii(name_, text, sizeof(text));
+        at(bottom(), 0, 0, " Nickname (%d/%d)", name_len_, max_name());
+        at(bottom(), 0, 2, " %s_", text);
+        at(bottom(), 0, 3, "%s", "");
+        for (int r = 0; r < kKeyRows; r++)
+        {
+            char line[33];
+            memset(line, ' ', 32);
+            line[32] = 0;
+            const char* keys = page_row(key_page_, r);
+            for (int c = 0; c < kKeyCols; c++)
+            {
+                int x = 2 + c * 3;
+                line[x + 1] = key_ok(keys[c]) ? keys[c] : ' ';
+                if (r == key_row_ && c == key_col_)
+                {
+                    line[x] = '[';
+                    line[x + 2] = ']';
+                }
+            }
+            at(bottom(), 0, kKeyTop + r * 2, "%s", line);
+        }
+        at(bottom(), 0, 14, " A key  B erase  Y next page");
+        at(bottom(), 0, 15, " X species name  Start done");
+    }
+
+    // ---- ribbons ---------------------------------------------------------------------------
+
+    static constexpr int kRibbons = 80;
+
+    /// Byte and bit (in verity_edit.ribbons) of a ribbon, by list position.
+    static void ribbon_pos(int i, int* byte, int* bit)
+    {
+        // Sinnoh set: 28 bits from byte 0; Hoenn set: 32 bits from byte 4; contest: 20 from byte 8.
+        int base = i < 28 ? 0 : i < 60 ? 32 : 64;
+        int off = base + (i < 28 ? i : i < 60 ? i - 28 : i - 60);
+        *byte = off / 8;
+        *bit = off % 8;
+    }
+
+    static const char* ribbon_name(int i)
+    {
+        static const char* kNames[kRibbons] = {
+            "Champion Sinnoh", "Ability", "Great Ability", "Double Ability", "Multi Ability",
+            "Pair Ability", "World Ability", "Alert", "Shock", "Downcast", "Careless", "Relax",
+            "Snooze", "Smile", "Gorgeous", "Royal", "Gorgeous Royal", "Footprint", "Record",
+            "Event", "Legend", "Champion World", "Birthday", "Special", "Souvenir", "Wishing",
+            "Classic", "Premier",
+            "Cool (G3)", "Cool Super", "Cool Hyper", "Cool Master", "Beauty (G3)", "Beauty Super",
+            "Beauty Hyper", "Beauty Master", "Cute (G3)", "Cute Super", "Cute Hyper", "Cute Master",
+            "Smart (G3)", "Smart Super", "Smart Hyper", "Smart Master", "Tough (G3)", "Tough Super",
+            "Tough Hyper", "Tough Master", "Champion G3", "Winning", "Victory", "Artist", "Effort",
+            "Battle Champion", "Regional Champion", "National Champion", "Country", "National",
+            "Earth", "World",
+            "Cool (G4)", "Cool Great", "Cool Ultra", "Cool Master", "Beauty (G4)", "Beauty Great",
+            "Beauty Ultra", "Beauty Master", "Cute (G4)", "Cute Great", "Cute Ultra", "Cute Master",
+            "Smart (G4)", "Smart Great", "Smart Ultra", "Smart Master", "Tough (G4)", "Tough Great",
+            "Tough Ultra", "Tough Master",
+        };
+        return kNames[i];
+    }
+
+    bool ribbon_on(int i) const
+    {
+        int b, n;
+        ribbon_pos(i, &b, &n);
+        return e_.ribbons[b] & (1 << n);
+    }
+
+    int ribbon_count() const
+    {
+        int n = 0;
+        for (int i = 0; i < kRibbons; i++)
+            n += ribbon_on(i);
+        return n;
+    }
+
+    bool update_ribbons(const ui::Input& in)
+    {
+        bool changed;
+        int a = ribbons_.update(in, &changed);
+        ui::bar(0, ribbons_.bar_y(), true);
+        if (in.down & KEY_B)
+        {
+            ribbon_list_ = false;
+            ui::clear(bottom());
+            preview();
+            draw();
+            return true;
+        }
+        if (a >= 0)
+        {
+            int b, n;
+            ribbon_pos(a, &b, &n);
+            e_.ribbons[b] ^= (uint8_t)(1 << n);
+            e_.mask |= 1024;
+            changed = true;
+        }
+        if (changed)
+            draw_ribbons();
+        return true;
+    }
+
+    void draw_ribbons()
+    {
+        at(bottom(), 0, 0, " Ribbons (%d set)  A toggle", ribbon_count());
+        for (int r = 0; r < ribbons_.rows; r++)
+        {
+            int i = ribbons_.scroll + r;
+            at(bottom(), 0, 2 + r, " [%c] %s", ribbon_on(i) ? 'x' : ' ', ribbon_name(i));
+        }
+    }
+
+    const char* ball_name(uint8_t b) const
+    {
+        static const char* kApricorn[] = {"Fast", "Level", "Lure", "Heavy", "Love", "Friend", "Moon", "Sport"};
+        static char buf[20];
+        if (b >= 17 && b <= 24)
+        {
+            snprintf(buf, sizeof(buf), "%s Ball", kApricorn[b - 17]);
+            return buf;
+        }
+        if (b == 25)
+            return "Dream Ball";
+        return ui::name(VERITY_NAME_ITEMS4, b);
     }
 
     void find_closest()
@@ -1240,6 +1631,21 @@ private:
 
     bool open_picker()
     {
+        if (tab_ == 4 && row_ == 0)
+        {
+            if (!open_keyboard())
+                draw();
+            return true;
+        }
+        if (tab_ == 4 && row_ == 7)
+        {
+            ribbon_list_ = true;
+            ribbons_ = ListView();
+            ribbons_.count = kRibbons;
+            ui::clear(bottom());
+            draw_ribbons();
+            return true;
+        }
         if (tab_ == 0 && row_ == 0)
         {
             picking_ = 1;
@@ -1320,6 +1726,7 @@ private:
             core::doc().dirty = true;
             orig_ = core::slot(box_, slot_);
             e_.mask = 0;
+            load_fields();
             snprintf(status_, sizeof(status_), "applied (save from the menu)");
         }
         else
@@ -1370,17 +1777,16 @@ private:
         at(top(), 0, 7, "%s%s", e_.mask ? "* edited, not applied" : "", "");
         at(top(), 0, 22, "%s", status_);
 
-        static const char* tabs[3] = {"Main", "Stats", "Moves"};
-        char head[40] = "";
-        for (int t = 0; t < 3; t++)
+        static const char* tabs[kTabs] = {"Main", "Stats", "Moves", "Met", "Misc"};
+        char head[48] = "";
+        for (int t = 0; t < kTabs; t++)
         {
             char one[14];
             snprintf(one, sizeof(one), t == tab_ ? "[%s]" : " %s ", tabs[t]);
             strcat(head, one);
-            strcat(head, "  ");
         }
-        at(bottom(), 0, 0, " %s", head);
-        for (int r = 0; r < 12; r++)
+        at(bottom(), 0, 0, "%s", head);
+        for (int r = 0; r < 14; r++)
             at(bottom(), 0, 3 + r, "%s", "");
         uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
         if (tab_ == 0)
@@ -1402,11 +1808,36 @@ private:
             }
             at(bottom(), 0, 16, " EV total %d / 510", total);
         }
-        else
+        else if (tab_ == 2)
         {
             for (int m = 0; m < 4; m++)
                 at(bottom(), 0, 3 + m, " Move %d  < %s >", m + 1,
                    e_.moves[m] ? ui::name(VERITY_NAME_MOVES, e_.moves[m]) : "-");
+        }
+        else if (tab_ == 3)
+        {
+            at(bottom(), 0, 3, " Ball     < %s >", ball_name(e_.ball));
+            at(bottom(), 0, 4, " Location < %s >", ui::location(gen4_ ? 4 : 5, e_.met_location));
+            at(bottom(), 0, 5, " Met lv   < %u >", e_.met_level);
+            at(bottom(), 0, 6, " Year     < %u >", 2000 + e_.met_date[0]);
+            at(bottom(), 0, 7, " Month    < %u >", e_.met_date[1]);
+            at(bottom(), 0, 8, " Day      < %u >", e_.met_date[2]);
+            at(bottom(), 0, 10, " OT ID %05u / %05u", orig_.tid, orig_.sid);
+        }
+        else
+        {
+            static const char* cs[6] = {"Cool", "Beauty", "Cute", "Smart", "Tough", "Sheen"};
+            char nick2[16];
+            if (e_.mask & 2048)
+                ui::utf16_to_ascii(e_.nickname, nick2, sizeof(nick2));
+            else if (e_.mask & 4096)
+                snprintf(nick2, sizeof(nick2), "%s", ui::name(VERITY_NAME_SPECIES, orig_.species));
+            else
+                ui::utf16_to_ascii(orig_.nickname, nick2, sizeof(nick2));
+            at(bottom(), 0, 3, " Nickname   %s  (A)", nick2);
+            for (int i = 0; i < 6; i++)
+                at(bottom(), 0, 4 + i, " %-6s     < %3u >", cs[i], e_.contest[i]);
+            at(bottom(), 0, 10, " Ribbons    %d set  (A)", ribbon_count());
         }
         at(bottom(), 0, 23, " %s", "[ Apply ]");
     }
