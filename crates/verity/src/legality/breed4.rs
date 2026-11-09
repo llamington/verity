@@ -44,7 +44,7 @@ pub fn base_egg_moves(data: &GameData, index: usize, level: u8) -> ([u16; 4], us
 }
 
 /// `Breeding.GetCanInheritMoves`: a species with no female line takes no level-up moves.
-fn can_inherit(data: &GameData, species: u16) -> bool {
+pub(super) fn can_inherit(data: &GameData, species: u16) -> bool {
     let ratio = data.personal(species as usize).gender_ratio();
     (ratio != 0 && ratio != 255) || matches!(species, 29 | 32 | 313 | 314)
 }

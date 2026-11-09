@@ -5,6 +5,7 @@ pub mod analysis3;
 pub mod analysis4;
 #[cfg(feature = "alloc")]
 pub mod breed4;
+pub mod contest;
 pub mod enc4;
 #[cfg(feature = "alloc")]
 pub mod evo;

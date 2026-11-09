@@ -599,7 +599,8 @@ fn apply_egg_moves(ctx: &Context4, pk: &Pkm, egg: u16, moves: &mut [MoveResult; 
         let mv = current[i];
         if learn.egg_moves(idx).iter().any(|m| m == mv) {
             moves[i] = MoveResult::Initial;
-        } else if learn.levelup(idx).any(|(_, m)| m == mv) {
+        } else if super::breed4::can_inherit(learn, egg) && learn.levelup(idx).any(|(_, m)| m == mv)
+        {
             moves[i] = MoveResult::InheritLevelUp;
         } else if mv == VOLT_TACKLE && egg == PICHU {
             moves[i] = MoveResult::Initial;
@@ -1156,7 +1157,7 @@ fn verify_common_inner(
                         report.flag(CheckId::Form);
                     }
                 }
-                479 if pk.is_egg() && form != 0 => report.flag(CheckId::Egg),
+                479 if pk.is_egg() && form != 0 => report.flag(CheckId::Form),
                 // FormInfo.IsBattleOnlyForm: Castform and Cherrim forms only exist in battle.
                 351 | 421 if form != 0 => report.flag(CheckId::Form),
                 _ => {}
@@ -1222,6 +1223,16 @@ fn verify_common_inner(
     };
     if !tile_ok {
         report.flag(CheckId::Encounter);
+    }
+
+    // ContestStatVerifier: Sheen has to fit the stats (PKHeX reports this as Memory).
+    let initial_contest = match (&gift, data.and_then(|e| e.template())) {
+        (Some((_, t)), _) => t.contest(),
+        (None, Some(t)) => t.contest(),
+        _ => [0; 6],
+    };
+    if !super::contest::sheen_valid(&pk.contest(), pk.nature(), &initial_contest, gen3) {
+        report.flag(CheckId::Memory);
     }
 
     // ItemVerifier
@@ -1368,6 +1379,23 @@ fn verify_common_inner(
     }
 
     // NicknameVerifier (Gen 4 format)
+    // EncounterGift3Colo.IsTrainerMatch (the OT is cut to the Gen 3 length).
+    if let (Some(e), Some(o)) = (
+        gift3.filter(|e| e.kind() == Some(crate::data::encounters::EncounterKind::Gift3Colo)),
+        origin,
+    ) {
+        let max = if pk.language() == 1 { 5 } else { 7 };
+        let matches =
+            o.g3.enc
+                .trade_names(e, pk.language())
+                .is_some_and(|(_, name)| {
+                    let n = name.len().min(max);
+                    n == ot.len() && name.iter().take(n).zip(ot.iter()).all(|(a, b)| a == *b)
+                });
+        if !matches {
+            report.flag(CheckId::Trainer);
+        }
+    }
     if let (Some(t), Some(o)) = (trade3, origin) {
         verify_trade3(o, pk, t, ot, report);
     } else if let Some(t) = trade {
@@ -1503,7 +1531,7 @@ fn verify_trade3(o: &Origin3, pk: &Pkm, e: &Encounter, ot: &[u16], report: &mut 
     let nn = crate::text::decode4(&pk.nickname_raw(), &mut nbuf);
     let nick = &nbuf[..nn];
     let mut lang = pk.language();
-    if e.species() == 124 && pk.version() == 5 && lang == 5 {
+    if e.species() == 124 && pk.version() == 5 && lang == 4 {
         lang = 2;
     }
     let eq = |a: &[u16], b: crate::data::blob::U16s| {

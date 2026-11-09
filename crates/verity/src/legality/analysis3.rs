@@ -703,8 +703,17 @@ fn choose3<'a>(
     if !encounter_ok(pk, &c.encounter) || pk.met_location() != PAL_PARK {
         report.flag(CheckId::Encounter);
     }
-    // PIDVerifier.VerifyEggGender8000: gender from PID bit 15 on Nidoran/Volbeat/Illumise eggs.
-    if let Enc4::Egg3 { species, .. } = c.encounter {
+    // PIDVerifier.VerifyEggPID, including VerifyEggGender8000 (gender from PID bit 15).
+    if let Enc4::Egg3 { species, version } = c.encounter {
+        // Daycare3.IsValidProcPID: the Day Care never stores a zero PID half (R/S/FR/LG) or PID.
+        let pid_ok = if version == VERSION_E {
+            pk.pid() != 0
+        } else {
+            pk.pid() & 0xFFFF != 0
+        };
+        if !pid_ok {
+            report.flag(CheckId::EC);
+        }
         if matches!(species, 29 | 32 | 313 | 314) {
             let bit = ((pk.pid() >> 15) & 1) as u8;
             let inherited = report.moves.contains(&MoveResult::InheritLevelUp);
