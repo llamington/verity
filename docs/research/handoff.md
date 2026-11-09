@@ -131,7 +131,11 @@ statics and trades (only a queued slot ends the search), and `VerifyFixedAbility
 Legality perf: the slot scan was the cost, not Unown. `EncounterData::slots_at` reads only area
 indexes; Ruins of Alph Unown went from 107 ms to 15 ms on the DS.
 
-1. Remaining M4: Pal Park (Gen 3 origins), egg generation.
+Egg generation is done in the core: `gen/egg4.rs` (bred eggs, unhatched or hatched, chosen moves put
+in game order). `p6_eggs_random_requests_1e4`: 12,582 eggs, all PKHeX-legal. There is no DS screen
+for it yet (P9.1).
+
+1. Remaining M4: Pal Park (Gen 3 origins).
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
