@@ -125,8 +125,12 @@ Nidoran/Volbeat). Oracle `gen-egg4` builds bred, gift-egg and Ranger eggs; `p5_p
 matches 10,000/10,000. The DS shows verdicts for eggs (`ui-egg.json`, 8 ms on Manaphy Pearl).
 
 Order from here:
-1. Remaining M4: Pal Park (Gen 3 origins), D Ranch gifts, egg generation; Ruins of Alph Unown
-   legality perf (107 ms on DS, budget 50).
+D Ranch gifts are done: `legality/ranch4.rs` (table generated from PKHeX), oracle `gen-ranch4`,
+`p5_parity_ranch_1e4` 10,000/10,000. Fixed along the way: a deferred encounter now follows yielded
+statics and trades (only a queued slot ends the search), and `VerifyFixedAbility` for statics.
+
+1. Remaining M4: Pal Park (Gen 3 origins), egg generation; Ruins of Alph Unown legality perf
+   (107 ms on DS, budget 50).
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,

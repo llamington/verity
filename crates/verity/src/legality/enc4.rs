@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use super::evo::EvoCriteria;
+use super::ranch4::{self, RanchGift, RANCH_GIFTS};
 use crate::data::encounters::{Encounter, EncounterData};
 use crate::gift::pcd::Gift4;
 use crate::rng::finder::{AnalyzeInput, PidIv, PidType};
@@ -54,6 +55,8 @@ pub enum Enc4<'a> {
     Data(Encounter<'a>),
     Gift(Gift4<'a>),
     Ranger,
+    /// A My Pokémon Ranch gift (D only).
+    Ranch(&'static RanchGift),
 }
 
 impl<'a> Enc4<'a> {
@@ -524,6 +527,14 @@ pub fn wild_slots<'a>(
             }
         }
     };
+    // TradeRanch: Diamond's Ranch gifts are the first trades tried.
+    if pk.analyze.version == 10 {
+        for g in &RANCH_GIFTS {
+            if evo_of(g.species).is_some_and(|evo| ranch4::is_match_exact(g, pk, evo)) {
+                seq.push((Enc4::Ranch(g), false));
+            }
+        }
+    }
     // Trades come before captures (TradeStart state), with no partial ratings.
     for g in trade_groups(pk.analyze.version)
         .iter()
@@ -574,6 +585,26 @@ pub fn wild_slots<'a>(
                 continue;
             }
             Enc4::Ranger => continue,
+            Enc4::Ranch(_) => {
+                // Not an IGroundTypeTile or IRandomCorrelation, like the in-game trades.
+                let safari_sport = pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT;
+                if pk.ground_tile != 0 {
+                    defer(Deferral::Tile, enc);
+                } else if pidiv.kind != PidType::None {
+                    defer(Deferral::PidIv, enc);
+                } else if safari_sport {
+                    // IsBallCompatible fails on a Poké Ball gift; on a Safari Ball gift the
+                    // non-slot Safari/Sport deferral applies. Either way, Ball.
+                    defer(Deferral::Ball, enc);
+                } else {
+                    direct.push(SlotMatch {
+                        encounter: enc,
+                        lead: LeadSeed::default(),
+                        partial: false,
+                    });
+                }
+                continue;
+            }
         };
         if is_trade(&e) {
             // Not an IGroundTypeTile: the tile must be 0; not an IRandomCorrelation: no PID-IV.
@@ -656,9 +687,12 @@ pub fn wild_slots<'a>(
             .unwrap_or(queue.len());
         queue.insert(at, item);
     }
+    // GetEncounters: the deferred encounter still follows statics and trades that were yielded;
+    // only a queued slot ends the search before it.
+    let queued = !queue.is_empty();
     direct.extend(queue);
     WildMatches {
-        fallback: if direct.is_empty() { fallback } else { None },
+        fallback: if queued { None } else { fallback },
         candidates: direct,
     }
 }
