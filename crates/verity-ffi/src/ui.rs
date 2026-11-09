@@ -489,7 +489,7 @@ pub(crate) mod legal {
     }
 
     /// The Gen 5 legality context, built once from attached blobs.
-    fn context5() -> Option<&'static Context5<'static>> {
+    pub(crate) fn context5() -> Option<&'static Context5<'static>> {
         if let Some(c) = CTX5.0.get() {
             return Some(c);
         }

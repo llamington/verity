@@ -688,7 +688,7 @@ public:
         {
             loaded_ = true;
             version_ = core::wizard_version();
-            supported_ = core::doc().info.generation == 4 && core::ensure_gen4_data();
+            supported_ = core::ensure_save_data();
             if (supported_)
                 load_species();
         }
@@ -707,7 +707,7 @@ public:
             ui::bar(0, list_.bar_y(), true);
             if (in.down & KEY_B)
                 return false;
-            if (in.down & KEY_Y)
+            if ((in.down & KEY_Y) && !gen5())
             {
                 egg_ = !egg_;
                 load_species();
@@ -778,6 +778,9 @@ public:
                 opt_ = (opt_ + opts - 1) % opts;
             if (in.rep & KEY_DOWN)
                 opt_ = (opt_ + 1) % opts;
+            // Gen 5 PIDs aren't tied to a lead, so that row is skipped.
+            if (!egg_ && gen5() && opt_ == 4)
+                opt_ = (in.rep & KEY_UP) ? 3 : 5;
             int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
             if (in.tapped)
             {
@@ -807,7 +810,7 @@ private:
     uint8_t box_, slot_;
     bool loaded_ = false, supported_ = false;
     uint8_t version_ = 12;
-    uint16_t species_[494];
+    uint16_t species_[649];
     int species_count_ = 0, species_ix_ = 0;
     verity_encounter enc_[64];
     int enc_count_ = 0, enc_ix_ = -1;
@@ -827,9 +830,11 @@ private:
 
     void load_species()
     {
-        species_count_ = egg_ ? (int)verity_egg_species(version_, species_, 494)
-                              : (int)verity_wild_species(version_, species_, 494);
+        species_count_ = egg_ ? (int)verity_egg_species(version_, species_, 649)
+                              : (int)verity_wild_species(version_, species_, 649);
     }
+
+    bool gen5() const { return version_ >= 20 && version_ <= 23; }
 
     /// The other game of a pair that shares a save type (the save doesn't record which it is).
     uint8_t other_game() const
@@ -840,6 +845,10 @@ private:
             case 11: return 10;
             case 7: return 8;
             case 8: return 7;
+            case 20: return 21;
+            case 21: return 20;
+            case 22: return 23;
+            case 23: return 22;
             default: return 0;
         }
     }
@@ -852,6 +861,10 @@ private:
             case 11: return "Pearl";
             case 7: return "HeartGold";
             case 8: return "SoulSilver";
+            case 20: return "White";
+            case 21: return "Black";
+            case 22: return "White 2";
+            case 23: return "Black 2";
             default: return "Platinum";
         }
     }
@@ -862,6 +875,12 @@ private:
                                       "Rock",    "Headbutt", "Headbutt", "Contest", "Honey",
                                       "Safari",  "Safari",   "Saf rod", "Saf rod", "Saf rod"};
         return t < 15 ? names[t] : "?";
+    }
+
+    static const char* slot_type5(uint8_t t)
+    {
+        static const char* names[] = {"Standard", "Grass", "Surf", "Super Rod", "Swarm", "Grotto"};
+        return t < 6 ? names[t] : "?";
     }
 
     void change(int dir)
@@ -880,7 +899,7 @@ private:
         }
         else if (opt_ == 3)
             gender_ = (gender_ + 1 + dir + 3) % 3 - 1;
-        else if (opt_ == 4)
+        else if (opt_ == 4 && !gen5())
             lead_ = (lead_ + dir + 4) % 4;
         else if (opt_ == 5)
         {
@@ -1011,7 +1030,7 @@ private:
             at(top(), 0, 3, egg_ ? "1. Egg species (%d)" : "1. Species (%d with wild slots)",
                species_count_);
             at(top(), 0, 5, "%s", other_game() ? "Select: switch game" : "");
-            at(top(), 0, 6, "Y: %s", egg_ ? "wild encounter instead" : "bred egg instead");
+            at(top(), 0, 6, "%s", gen5() ? "" : egg_ ? "Y: wild encounter instead" : "Y: bred egg instead");
             draw_list();
         }
         else if (step_ == 1)
@@ -1057,8 +1076,9 @@ private:
                         snprintf(lv, sizeof(lv), "%u", e.level_min);
                     else
                         snprintf(lv, sizeof(lv), "%u-%u", e.level_min, e.level_max);
-                    at(bottom(), 0, 2 + r, " %-15.15s %-8.8s %s", ui::location(4, e.location),
-                       slot_type(e.slot_type), lv);
+                    at(bottom(), 0, 2 + r, " %-15.15s %-8.8s %s",
+                       ui::location(gen5() ? 5 : 4, e.location),
+                       gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type), lv);
                 }
                 else
                     at(bottom(), 0, 2 + r, "%s", "");
@@ -1092,7 +1112,7 @@ private:
         else
             at(bottom(), 0, 4, " Level   < Any >");
         at(bottom(), 0, 5, " Gender  < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
-        at(bottom(), 0, 6, " Lead    < %s >", lead_name(lead_));
+        at(bottom(), 0, 6, gen5() ? " Lead    Not used in Gen 5" : " Lead    < %s >", lead_name(lead_));
         at(bottom(), 0, 7, " Ball    < %s >",
            ball_ ? ui::name(VERITY_NAME_ITEMS4, kBalls[ball_ - 1]) : "Default");
         at(bottom(), 0, 8, " Generate and place");
