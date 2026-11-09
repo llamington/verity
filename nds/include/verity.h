@@ -43,6 +43,7 @@ typedef enum verity_blob_kind {
     VERITY_BLOB_ENC_B2W2 = 16,
     VERITY_BLOB_ENC_DR = 17,
     VERITY_BLOB_NAMES5 = 18,
+    VERITY_BLOB_GIFTS5 = 19, /* Gen 5 event database (gifts5.bin); optional */
 } verity_blob_kind;
 
 /** Name categories for verity_name (string_table in the strings blob). */

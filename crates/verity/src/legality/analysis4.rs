@@ -127,6 +127,10 @@ pub enum Matched<'a> {
     },
     /// The Pokémon Ranger Manaphy egg (PKHeX `EncounterGenerator4.RangerManaphy`).
     RangerManaphy,
+    /// A Gen 5 Wonder Card.
+    Gift5 {
+        species: u16,
+    },
     /// A My Pokémon Ranch gift.
     Ranch {
         gift: &'static RanchGift,
