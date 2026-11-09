@@ -135,7 +135,10 @@ Egg generation is done in the core: `gen/egg4.rs` (bred eggs, unhatched or hatch
 in game order). `p6_eggs_random_requests_1e4`: 12,582 eggs, all PKHeX-legal. There is no DS screen
 for it yet (P9.1).
 
-1. Remaining M4: Pal Park (Gen 3 origins).
+1. Remaining M4: Pal Park (Gen 3 origins). The real saves hold 102 Gen 3-origin PK4: 37 wild slots,
+   19 statics, 12 gifts, 3 eggs and 28 Colosseum/XD, plus 3 PKHeX can't match. Suggested order:
+   R/S/E/FR/LG slots with Method H, then statics, trades and eggs, then WC3 events, then Colosseum/XD
+   (shadow locks are the hard part). Needs the `g3_origin.bin` blob and Gen 3 to 4 move rules.
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
