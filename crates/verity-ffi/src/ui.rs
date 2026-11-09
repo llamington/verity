@@ -162,6 +162,13 @@ pub struct VerityPkmView {
     /// Primary and secondary type (0xFF when the personal data is not attached).
     pub types: [u8; 2],
     pub friendship: u8,
+    pub is_nicknamed: u8,
+    /// Years since 2000, month, day.
+    pub met_date: [u8; 3],
+    /// Cool, Beauty, Cute, Smart, Tough, Sheen.
+    pub contest: [u8; 6],
+    /// Bytes 0x24..0x28, 0x3C..0x40, 0x60..0x64.
+    pub ribbons: [u8; 12],
 }
 
 fn decode(gen4: bool, raw: &[u16], out: &mut [u16]) {
@@ -196,6 +203,10 @@ fn view(kind: SaveKind, pk: &Pkm) -> VerityPkmView {
         met_location: pk.met_location(),
         pid: pk.pid(),
         exp: pk.exp(),
+        is_nicknamed: pk.is_nicknamed() as u8,
+        met_date: pk.met_date(),
+        contest: pk.contest(),
+        ribbons: pk.ribbons(),
         nickname: [0; 13],
         ot_name: [0; 9],
         form: pk.form(),

@@ -251,7 +251,7 @@ fn ball_allowed(e: &Encounter, ball: u8, version: u8) -> bool {
     matches!(ball, 1..=4 | 6..=15) || (matches!(version, 7 | 8) && (17..=23).contains(&ball))
 }
 
-fn trainer_of(save: &Save) -> Trainer4 {
+pub fn trainer_of(save: &Save) -> Trainer4 {
     let t = save.trainer();
     Trainer4 {
         name_raw: t.name_raw,

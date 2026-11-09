@@ -390,6 +390,14 @@ pub struct VerityEdit {
     pub friendship: u8,
     /// With `EDIT_PID`: the PID that goes with a closest-legal IV spread.
     pub pid: u32,
+    pub met_location: u16,
+    pub ball: u8,
+    pub met_level: u8,
+    pub met_date: [u8; 3],
+    pub contest: [u8; 6],
+    pub ribbons: [u8; 12],
+    /// UTF-16, 0-terminated.
+    pub nickname: [u16; 11],
 }
 
 pub const EDIT_ITEM: u32 = 1;
@@ -399,6 +407,12 @@ pub const EDIT_EVS: u32 = 8;
 pub const EDIT_LEVEL: u32 = 16;
 pub const EDIT_FRIENDSHIP: u32 = 32;
 pub const EDIT_PID: u32 = 64;
+pub const EDIT_BALL: u32 = 128;
+pub const EDIT_MET: u32 = 256;
+pub const EDIT_CONTEST: u32 = 512;
+pub const EDIT_RIBBONS: u32 = 1024;
+pub const EDIT_NICKNAME: u32 = 2048;
+pub const EDIT_NICKNAME_RESET: u32 = 4096;
 
 fn game_rules(kind: SaveKind) -> Option<safety::Rules<'static>> {
     use crate::ui::{blob, BlobKind};
@@ -467,6 +481,41 @@ fn edited(
     }
     if e.mask & EDIT_FRIENDSHIP != 0 {
         pk.set_friendship(e.friendship);
+    }
+    if e.mask & EDIT_BALL != 0 {
+        pk.set_ball(e.ball);
+    }
+    if e.mask & EDIT_MET != 0 {
+        pk.set_met_location(e.met_location);
+        pk.set_met_level(e.met_level);
+        pk.set_met_date(e.met_date);
+    }
+    if e.mask & EDIT_CONTEST != 0 {
+        pk.set_contest(e.contest);
+    }
+    if e.mask & EDIT_RIBBONS != 0 {
+        pk.set_ribbons(e.ribbons);
+    }
+    if e.mask & EDIT_NICKNAME != 0 {
+        let n = e
+            .nickname
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(10)
+            .min(10);
+        pk.set_nickname(&e.nickname[..n]);
+        pk.set_is_nicknamed(true);
+    } else if e.mask & EDIT_NICKNAME_RESET != 0 {
+        let ctx = legal::context()?;
+        let name = ctx.names4.get(pk.language() as u16, pk.species() as usize);
+        let mut buf = [0u16; 11];
+        let mut n = 0;
+        for c in name.iter().take(10) {
+            buf[n] = c;
+            n += 1;
+        }
+        pk.set_nickname(&buf[..n]);
+        pk.set_is_nicknamed(false);
     }
     if pk.is_party_format() {
         pk.reset_party_stats(&pi.base_info());
@@ -551,6 +600,103 @@ pub unsafe extern "C" fn verity_edit_apply(
         Ok(()) => 0,
         Err(safety::WriteError::Pkm(i)) => 1 + i as u8,
         Err(_) => 200,
+    }
+}
+
+/// C ABI: whether a character can be stored in a name (always true for Gen 5's UTF-16).
+#[no_mangle]
+pub extern "C" fn verity_char_encodable(generation: u8, c: u16) -> u8 {
+    (generation != 4 || verity::text::is_encodable_g4(&[c])) as u8
+}
+
+/// Request for `verity_egg_insert`. 0xFF means any.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct VerityEggRequest {
+    pub version: u8,
+    pub nature: u8,
+    pub species: u16,
+    pub gender: u8,
+    pub shiny: u8,
+    pub hatched: u8,
+    pub date: [u8; 3],
+    pub seed: u32,
+}
+
+/// C ABI: species an egg can be of in `version`. Returns how many were written.
+///
+/// # Safety
+///
+/// `out` must point to `cap` writable `u16`s.
+#[no_mangle]
+pub unsafe extern "C" fn verity_egg_species(version: u8, out: *mut u16, cap: usize) -> usize {
+    let (Some(_), Some(ctx)) = (group(version), legal::context()) else {
+        return 0;
+    };
+    if out.is_null() {
+        return 0;
+    }
+    let out = slice::from_raw_parts_mut(out, cap);
+    let mut n = 0;
+    for sp in 1..=493u16 {
+        if n < cap && verity::legality::analysis4::can_be_egg(ctx, sp) {
+            out[n] = sp;
+            n += 1;
+        }
+    }
+    n
+}
+
+/// C ABI: builds a legal bred egg for the save's trainer and writes it to `loc`. Returns a
+/// `verity_gen_status_text` code. The save is not finalised.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes; `req` must be readable.
+#[no_mangle]
+pub unsafe extern "C" fn verity_egg_insert(
+    buf: *mut u8,
+    len: usize,
+    req: *const VerityEggRequest,
+    loc: VerityLoc,
+) -> u8 {
+    if req.is_null() {
+        return GenStatus::Internal as u8;
+    }
+    let r = *req;
+    let Some(mut save) = open(buf, len) else {
+        return GenStatus::Internal as u8;
+    };
+    let Some(ctx) = legal::context() else {
+        return GenStatus::Unsupported as u8;
+    };
+    if !matches!(save.kind(), SaveKind::DP | SaveKind::Pt | SaveKind::HGSS) {
+        return GenStatus::Unsupported as u8;
+    }
+    let opt = |v: u8| (v != 0xFF).then_some(v);
+    let e = verity::gen::egg4::EggRequest {
+        version: r.version,
+        species: r.species,
+        nature: opt(r.nature),
+        gender: opt(r.gender),
+        ability: None,
+        shiny: r.shiny != 0,
+        ivs: IvRequest::Random,
+        moves: None,
+        hatched: r.hatched != 0,
+        hatch_location: None,
+        egg_date: r.date,
+        met_date: r.date,
+        seed: r.seed as u64 | 1,
+        budget: 20_000,
+    };
+    let built = match verity::gen::egg4::generate(ctx, &api4::trainer_of(&save), &e) {
+        Ok(p) => p,
+        Err(err) => return status(err) as u8,
+    };
+    match api4::insert(ctx, &mut save, slot_of(loc), &built) {
+        Ok(()) => GenStatus::Ok as u8,
+        Err(err) => status(err) as u8,
     }
 }
 

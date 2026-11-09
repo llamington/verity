@@ -32,6 +32,10 @@ impl core::fmt::Debug for Pkm {
     }
 }
 
+const RIBBON_OFS: [usize; 12] = [
+    0x24, 0x25, 0x26, 0x27, 0x3C, 0x3D, 0x3E, 0x3F, 0x60, 0x61, 0x62, 0x63,
+];
+
 impl Pkm {
     /// Builds from decrypted bytes (stored or party length).
     pub fn from_decrypted(format: Format, bytes: &[u8]) -> Option<Self> {
@@ -189,6 +193,21 @@ impl Pkm {
     /// Cool, Beauty, Cute, Smart, Tough, Sheen.
     pub fn contest(&self) -> [u8; 6] {
         core::array::from_fn(|i| self.u8(0x1E + i))
+    }
+
+    /// Cool, Beauty, Cute, Smart, Tough, Sheen.
+    pub fn set_contest(&mut self, v: [u8; 6]) {
+        self.data[0x1E..0x24].copy_from_slice(&v);
+    }
+
+    /// The ribbon bytes (0x24..0x28, 0x3C..0x40, 0x60..0x64).
+    pub fn ribbons(&self) -> [u8; 12] {
+        core::array::from_fn(|i| self.u8(RIBBON_OFS[i]))
+    }
+    pub fn set_ribbons(&mut self, v: [u8; 12]) {
+        for (i, b) in v.iter().enumerate() {
+            self.set_u8(RIBBON_OFS[i], *b);
+        }
     }
 
     pub fn moves(&self) -> [u16; 4] {
@@ -397,6 +416,44 @@ impl Pkm {
 
     /// PKHeX `G4PKM.Ball` setter: D/P/Pt byte clamped to Cherish, HG/SS byte only for HG/SS
     /// non-event origins (clamped to Sport). Gen 5 writes the byte directly.
+    /// PKHeX `G4PKM.MetLocation` setter in Gen 4 (locations D/P can't store go to Faraway Place).
+    pub fn set_met_location(&mut self, v: u16) {
+        match self.format {
+            Format::Pk4 => {
+                let pt_hgss_only = (v > 111 && v < 2000) || (v > 2010 && v < 3000);
+                let (dp, extended) = if v == 0 {
+                    (0, 0)
+                } else if pt_hgss_only {
+                    (3002, v)
+                } else {
+                    (
+                        v,
+                        if matches!(self.version(), 7 | 8 | 12) {
+                            v
+                        } else {
+                            0
+                        },
+                    )
+                };
+                self.set_u16(0x80, dp);
+                self.set_u16(0x46, extended);
+            }
+            Format::Pk5 => self.set_u16(0x80, v),
+        }
+    }
+
+    pub fn set_met_level(&mut self, v: u8) {
+        let top = self.u8(0x84) & 0x80;
+        self.set_u8(0x84, top | (v & 0x7F));
+    }
+
+    /// (year since 2000, month, day)
+    pub fn set_met_date(&mut self, d: [u8; 3]) {
+        for (i, v) in d.iter().enumerate() {
+            self.set_u8(0x7B + i, *v);
+        }
+    }
+
     pub fn set_ball(&mut self, ball: u8) {
         match self.format {
             Format::Pk4 => {

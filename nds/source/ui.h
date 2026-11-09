@@ -48,11 +48,18 @@ void run();
 
 // ---- text ----------------------------------------------------------------------------------
 
-PrintConsole* top();
-PrintConsole* bottom();
-void clear(PrintConsole* c);
-// printf at (col, row) on a console; clears to end of line.
-void at(PrintConsole* c, int col, int row, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// A screen's text layer: proportional text drawn into its own tiles.
+struct Surface
+{
+    uint16_t* tiles = nullptr;
+};
+
+Surface* top();
+Surface* bottom();
+void clear(Surface* c);
+// printf at the 8x8 cell (col, row); clears to the end of the line. Runs of two or more spaces
+// are table gaps and line the next text up with the cell grid.
+void at(Surface* c, int col, int row, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
 // UTF-16 to the console font (ASCII; common accented letters folded, others '?').
 void utf16_to_ascii(const uint16_t* s, char* out, int cap);
 // A name from the strings blob as ASCII ("?" when unknown).
