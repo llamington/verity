@@ -135,10 +135,10 @@ Egg generation is done in the core: `gen/egg4.rs` (bred eggs, unhatched or hatch
 in game order). `p6_eggs_random_requests_1e4`: 12,582 eggs, all PKHeX-legal. There is no DS screen
 for it yet (P9.1).
 
-1. Remaining M4: Colosseum/XD origins (version 15), which still show "not checked". The R/S/E/FR/LG
-   side of Pal Park is done (`analysis3.rs`, `gift3.rs`): slots, statics, trades, eggs and every
-   event table, matching PKHeX on `p5_parity_origin3_1e4` (9,599 / 9,865 / 9,833 / 4,387). Port
-   `EncounterGenerator3GC`, `EncounterEnumerator3GC` and the XD shadow locks (the hard part).
+1. M4 is done apart from Colosseum/XD origins (version 15), deferred by the user on 2026-11-09. They
+   stay "not checked yet" on the DS. R/S/E/FR/LG Pal Park is complete (`analysis3.rs`, `gift3.rs`,
+   `contest.rs`). If picked up later: port `EncounterGenerator3GC`, `EncounterEnumerator3GC`,
+   `TeamLockResult` (shadow locks), `MethodPokeSpot` and `VerifyTrainerID_CXD`.
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
