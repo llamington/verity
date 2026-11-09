@@ -48,6 +48,10 @@ pub enum EncounterKind {
     Static5N = 14,
     Trade5BW = 15,
     Trade5B2W2 = 16,
+    Gift3 = 17,
+    Gift3NY = 18,
+    Gift3JPN = 19,
+    Gift3Colo = 20,
 }
 
 impl EncounterKind {
@@ -70,6 +74,10 @@ impl EncounterKind {
             14 => Static5N,
             15 => Trade5BW,
             16 => Trade5B2W2,
+            17 => Gift3,
+            18 => Gift3NY,
+            19 => Gift3JPN,
+            20 => Gift3Colo,
             _ => return None,
         })
     }
@@ -86,6 +94,10 @@ impl EncounterKind {
             "EncounterSlot3Swarm" => Slot3Swarm,
             "EncounterStatic3" => Static3,
             "EncounterTrade3" => Trade3,
+            "EncounterGift3" => Gift3,
+            "EncounterGift3NY" => Gift3NY,
+            "EncounterGift3JPN" => Gift3JPN,
+            "EncounterGift3Colo" => Gift3Colo,
             "EncounterSlot5" => Slot5,
             "EncounterStatic5" => Static5,
             "EncounterStatic5Entree" => Entree5,
@@ -112,6 +124,8 @@ pub mod flag {
     pub const HAS_IVS: u16 = 1 << 10;
     pub const HAS_PID: u16 = 1 << 11;
     pub const CORONET_FEEBAS: u16 = 1 << 12;
+    pub const RIBBON_NATIONAL: u16 = 1 << 13;
+    pub const JAPANESE_BONUS_DISK: u16 = 1 << 14;
 }
 
 #[derive(Clone, Copy)]
@@ -203,6 +217,22 @@ impl Template<'_> {
     /// Cool, Beauty, Cute, Smart, Tough, Sheen.
     pub fn contest(&self) -> [u8; 6] {
         core::array::from_fn(|i| self.0[50 + i])
+    }
+    /// Gen 3 event templates: bit `v - 1` set when version `v` can hold it.
+    pub fn version_mask(&self) -> u8 {
+        self.0[66]
+    }
+    /// Gen 3 event: PKHeX `PIDType` of the `Method` it was generated with.
+    pub fn gift_method(&self) -> u8 {
+        self.0[67]
+    }
+    /// Gen 3 event: fixed language, or 0.
+    pub fn gift_language(&self) -> u8 {
+        self.0[58]
+    }
+    /// `Distribution3NY` / `Distribution3JPN`.
+    pub fn distribution(&self) -> u8 {
+        self.0[59]
     }
     pub fn course(&self) -> u8 {
         self.0[56]
