@@ -89,7 +89,7 @@ fn gift3_exact(
             }
         }
     }
-    if evo.form != 0 {
+    if !form_ok(t, evo) {
         return false;
     }
     let lang = t.gift_language();
@@ -105,6 +105,11 @@ fn gift3_exact(
         && !pk.is_egg()
         && t.level_min() <= pk.met_level()
         && pk.egg_location() == 0
+}
+
+/// Events have form 0; Deoxys can change form later (`FormInfo.IsFormChangeable`).
+fn form_ok(t: &Template, evo: &EvoCriteria) -> bool {
+    evo.form == 0 || t.species() == 386
 }
 
 fn gender_specific(t: u8, value: u8) -> bool {
@@ -124,7 +129,7 @@ fn ny_exact(t: &Template, pk: &Pkm, evo: &EvoCriteria) -> bool {
         && (1..3000).contains(&pk.tid())
         && n > 4
         && ny_name_ok(t.distribution(), &buf[..n])
-        && evo.form == 0
+        && form_ok(t, evo)
         && pk.language() != JAPANESE
         && pk.ball() == BALL_POKE
         && t.level_min() <= pk.met_level()
@@ -160,7 +165,7 @@ fn jpn_exact(t: &Template, pk: &Pkm, evo: &EvoCriteria) -> bool {
         && dist < PCJP_TIDS.len()
         && pk.tid() == PCJP_TIDS[dist]
         && name_ok
-        && evo.form == 0
+        && form_ok(t, evo)
         && pk.language() == JAPANESE
         && pk.ball() == BALL_POKE
         && t.level_min() <= pk.met_level()
@@ -171,7 +176,7 @@ fn colo_exact(t: &Template, pk: &Pkm, evo: &EvoCriteria) -> bool {
     pk.version() == t.version()
         && pk.egg_location() == 0
         && evo.level_max >= t.level_min()
-        && evo.form == 0
+        && form_ok(t, evo)
 }
 
 /// `IsMatchExact` for any of the event kinds.

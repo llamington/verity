@@ -94,7 +94,8 @@ pub fn build_legal(n: usize, dir: &Path, seed: u64) {
     fs::remove_file(req).unwrap();
 }
 
-pub const MUTATIONS: [&str; 19] = [
+pub const MUTATIONS: [&str; 20] = [
+    "contest",
     "ivs",
     "evs",
     "level_exp",
@@ -168,6 +169,33 @@ pub fn mutate(pk: &mut Pkm, kind: &str, r: &mut Rand) {
         "form" => pk.set_fateful_gender_form(pk.fateful(), pk.gender(), (r.next_u32() % 4) as u8),
         "fateful" => pk.set_fateful_gender_form(!pk.fateful(), pk.gender(), pk.form()),
         "tid" => pk.set_ids(r.next_u32() as u16, pk.sid()),
+        "contest" => {
+            // Fully random, Sheen alone, stats alone, or stats with a plausible Sheen near each limit.
+            let mut d = pk.decrypted().to_vec();
+            let mut stats: [u8; 6] = core::array::from_fn(|_| (r.next_u32() % 256) as u8);
+            match r.next_u32() % 6 {
+                0 => {}
+                1 => stats[..5].fill(0),
+                2 => stats[5] = 0,
+                3 => {
+                    stats[..5]
+                        .iter_mut()
+                        .for_each(|s| *s = (r.next_u32() % 12) as u8);
+                    stats[5] = (r.next_u32() % 70) as u8;
+                }
+                4 => {
+                    let sum: u32 = stats[..5].iter().map(|&s| s as u32).sum();
+                    let delta = r.next_u32() % 9;
+                    stats[5] = (sum.div_ceil(5) + delta).saturating_sub(4).min(255) as u8;
+                }
+                _ => {
+                    stats[(r.next_u32() % 5) as usize] = 255;
+                    stats[5] = (r.next_u32() % 256) as u8;
+                }
+            }
+            d[0x1E..0x24].copy_from_slice(&stats);
+            *pk = Pkm::from_decrypted(Format::Pk4, &d).unwrap();
+        }
         "ribbon" => {
             // Any ribbon bit (PK4 ribbon bytes 0x24-0x27, 0x3C-0x3F, 0x60-0x63).
             let mut d = pk.decrypted().to_vec();
@@ -328,7 +356,8 @@ fn build_legal_gifts(n: usize, dir: &Path, seed: u64) {
     ]);
 }
 
-const GIFT_MUTATIONS: [&str; 20] = [
+const GIFT_MUTATIONS: [&str; 21] = [
+    "contest",
     "ivs",
     "evs",
     "level_exp",
@@ -387,19 +416,12 @@ fn parity_with_muts(
     let mut bad = Vec::new();
     let mut per_id: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     let mut checked = 0;
+    let mut flagged_memory = 0;
     for (f, pk) in &files {
         if !matches!(pk.version(), 1..=5 | 7 | 8 | 10..=12) {
             continue;
         }
         let v = &pkhex[f];
-        // Gen 3 event gifts aren't modelled yet.
-        if v["enc_kind"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("EncounterGift3")
-        {
-            continue;
-        }
         // PKHeX's word filter is not ported (docs/discrepancies.md).
         if v["report"]
             .as_str()
@@ -427,6 +449,9 @@ fn parity_with_muts(
             .iter()
             .map(|x| x.as_bool().unwrap())
             .collect();
+        if theirs.contains("Memory") {
+            flagged_memory += 1;
+        }
         for id in theirs.difference(&ours) {
             per_id.entry(id.clone()).or_default().0 += 1;
         }
@@ -459,6 +484,9 @@ fn parity_with_muts(
             ));
         }
         checked += 1;
+    }
+    if muts == ["contest"] {
+        eprintln!("PKHeX flagged contest stats on {flagged_memory} of {checked}");
     }
     if std::env::var_os("VERITY_KEEP_FUZZ").is_some() {
         eprintln!("kept {}", tmp.display());
@@ -523,6 +551,48 @@ fn p5_parity_fuzz_static3() {
 #[test]
 fn p5_parity_fuzz_trade3() {
     check_origin3(build_legal_trade3, 300, 321, 3);
+}
+
+fn check_contest(build: fn(usize, &Path, u64), n: usize, seed: u64) {
+    if !root().join("data/blobs/g3_origin.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with_muts(n, seed, 2, build, &["contest"]);
+    eprintln!("seed {seed}: checked {checked}");
+    for b in bad.iter().take(20) {
+        eprintln!("{b}");
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+const CONTEST_BUILDERS: [fn(usize, &Path, u64); 7] = [
+    build_legal,
+    build_legal_hgss,
+    build_legal_gifts,
+    build_legal_slot3,
+    build_legal_trade3,
+    build_legal_egg3,
+    build_legal_gift3,
+];
+
+#[test]
+fn p5_parity_fuzz_contest() {
+    for (i, b) in CONTEST_BUILDERS.iter().enumerate() {
+        check_contest(*b, 200, 500 + i as u64);
+    }
+}
+
+#[test]
+#[ignore]
+fn p5_parity_contest_1e4() {
+    for (i, b) in CONTEST_BUILDERS.iter().enumerate() {
+        check_contest(*b, 10_000, 5000 + i as u64);
+    }
 }
 
 #[test]

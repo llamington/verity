@@ -544,7 +544,9 @@ impl Learn3<'_> {
             let mv = current[i];
             if eggs.iter().any(|m| m == mv) {
                 result[i] = MoveResult::Initial;
-            } else if self.level_in(table, species, mv).is_some() {
+            } else if super::breed4::can_inherit(&self.data, species)
+                && self.level_in(table, species, mv).is_some()
+            {
                 result[i] = MoveResult::InheritLevelUp;
             } else if mv == 344 && species == 172 && version == 3 {
                 result[i] = MoveResult::Initial;

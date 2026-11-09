@@ -138,8 +138,7 @@ for it yet (P9.1).
 1. Remaining M4: Colosseum/XD origins (version 15), which still show "not checked". The R/S/E/FR/LG
    side of Pal Park is done (`analysis3.rs`, `gift3.rs`): slots, statics, trades, eggs and every
    event table, matching PKHeX on `p5_parity_origin3_1e4` (9,599 / 9,865 / 9,833 / 4,387). Port
-   `EncounterGenerator3GC`, `EncounterEnumerator3GC` and the XD shadow locks (the hard part). PKHeX's
-   `ContestStatVerifier` is not ported for any origin yet, so bad contest stats go unflagged.
+   `EncounterGenerator3GC`, `EncounterEnumerator3GC` and the XD shadow locks (the hard part).
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
