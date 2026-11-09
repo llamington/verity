@@ -53,7 +53,9 @@ pub fn ribbons_invalid(a: &RibbonArgs) -> bool {
             || a.sinnoh[2] & !0xE8 != 0
             || a.hoenn[..3] != [0, 0, 0]
             || a.hoenn[3] & 0x01 != 0
-            || a.contest4 != [0, 0, 0];
+            || a.contest4[0] != 0
+            || a.contest4[1] != 0
+            || a.contest4[2] & 0x0F != 0;
     }
     // Event3 + Event4: as the encounter had them (Earth and National included: never for Gen 4).
     if event != a.event {

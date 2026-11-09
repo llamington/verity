@@ -119,9 +119,14 @@ Platinum and HeartGold. `tests/p8_events.rs` covers the rest. Open: D, P and SS 
 they have not been collected in-game. The `ConvertToPKM` port was dropped, since the deliveryman
 generates the Pokémon himself. Gen 5 PGF delivery waits on M5.
 
+Unhatched eggs are done: `legality/breed4.rs` ports `MoveBreed4` (move order, expected moves), and
+`analysis4` applies PKHeX's egg rules (hatch counter, PP, contest stats, name, gender bit for
+Nidoran/Volbeat). Oracle `gen-egg4` builds bred, gift-egg and Ranger eggs; `p5_parity_eggs_1e4`
+matches 10,000/10,000. The DS shows verdicts for eggs (`ui-egg.json`, 8 ms on Manaphy Pearl).
+
 Order from here:
-1. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
-   of Alph Unown legality perf (107 ms on DS, budget 50).
+1. Remaining M4: Pal Park (Gen 3 origins), D Ranch gifts, egg generation; Ruins of Alph Unown
+   legality perf (107 ms on DS, budget 50).
 2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,

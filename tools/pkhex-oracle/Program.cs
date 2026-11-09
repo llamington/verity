@@ -43,6 +43,7 @@ public static class Program
                 "check-wild4" => HandleCheckWild4(args),
                 "gen-wild4" => HandleGenWild4(args),
                 "gen-gift4" => HandleGenGift4(args),
+                "gen-egg4" => HandleGenEgg4(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -65,6 +66,7 @@ public static class Program
         Console.WriteLine("  legality-batch <dir-path>");
         Console.WriteLine("  generate-synthetic <out-dir>");
         Console.WriteLine("  sav-dump <sav-path> <out-dir>");
+        Console.WriteLine("  gen-egg4 <count> <seed> <out-dir>");
         Console.WriteLine("  sav-apply <sav-path> <ops.json> <out-path>");
         Console.WriteLine("  version");
     }
@@ -1004,6 +1006,88 @@ public static class Program
 
     /// M6: `gen-gift4 <count> <seed> <out-dir>`: PKHeX-generated legal Gen 4 gift PK4s (random
     /// Wonder Cards from `MGDB_G4`, plus Ranger Manaphy eggs) via `ConvertToPKM`.
+    /// Unhatched Gen 4 eggs: bred (random legal moves from MoveBreed), gift eggs and Ranger Manaphy.
+    private static int HandleGenEgg4(string[] args)
+    {
+        int count = int.Parse(args[1]);
+        var rng = new Random(int.Parse(args[2]));
+        Directory.CreateDirectory(args[3]);
+        const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var ranger = (PGT)typeof(EncounterGenerator4).GetField("RangerManaphy", all)!.GetValue(null)!;
+        GameVersion[] versions = [GameVersion.D, GameVersion.P, GameVersion.Pt, GameVersion.HG, GameVersion.SS];
+        var core = typeof(EncounterGenerator4).Assembly;
+        EncounterStatic4[] Table(string type, string field) => (EncounterStatic4[])core.GetType("PKHeX.Core." + type)!.GetField(field, all)!.GetValue(null)!;
+        var statics = Table("Encounters4DPPt", "StaticDP").Concat(Table("Encounters4DPPt", "StaticPt")).Concat(Table("Encounters4HGSS", "Encounter_HGSS")).Where(e => e.IsEgg).ToArray();
+        int made = 0, tried = 0, statsBred = 0, statsGift = 0, statsRanger = 0;
+        while (made < count && tried < count * 40)
+        {
+            tried++;
+            var v = versions[rng.Next(versions.Length)];
+            var tr = Sav(v);
+            tr.TID16 = (ushort)rng.Next(65536);
+            tr.SID16 = (ushort)rng.Next(65536);
+            PK4 pk;
+            int kind = rng.Next(10);
+            try
+            {
+                if (kind == 0)
+                {
+                    pk = (PK4)ranger.ConvertToPKM(tr);
+                    if (!pk.IsEgg) continue;
+                    pk.MetDate = pk.MetLocation == 0 ? null : new DateOnly(2010, 3, 5);
+                }
+                else if (kind <= 2)
+                {
+                    pk = statics[rng.Next(statics.Length)].ConvertToPKM(tr);
+                    pk.IsEgg = true;
+                    MakeUnhatched(pk, tr, rng, pk.EggLocation);
+                }
+                else
+                {
+                    var species = (ushort)rng.Next(1, 491);
+                    if (!Breeding.CanHatchAsEgg(species) || !PersonalTable.HGSS.IsPresentInGame(species, 0))
+                        continue;
+                    if (EvolutionTree.Evolves4.GetBaseSpeciesForm(species, 0).Species != species && !Breeding.IsSplitBreedNotBabySpecies4(species))
+                        continue;
+                    var egg = new EncounterEgg4(species, v);
+                    pk = egg.ConvertToPKM(tr);
+                    pk.IsEgg = true;
+                    MakeUnhatched(pk, tr, rng, Locations.Daycare4);
+                    var learn = GameData.GetLearnSource(v).GetLearnset(species, 0);
+                    var eggMoves = egg.Learn.GetEggMoves(species, 0);
+                    var wanted = learn.GetBaseEggMoves(1).ToArray().ToList();
+                    wanted.AddRange(eggMoves.ToArray().OrderBy(_ => rng.Next()).Take(rng.Next(0, 3)));
+                    var request = wanted.TakeLast(4).Concat(Enumerable.Repeat((ushort)0, 4)).Take(4).ToArray();
+                    var expected = new ushort[4];
+                    MoveBreed.GetExpectedMoves(request, egg, expected);
+                    pk.SetMoves(new Moveset(expected[0], expected[1], expected[2], expected[3]));
+                    pk.HealPP();
+                }
+            }
+            catch { continue; }
+            pk.RefreshChecksum();
+            if (!new LegalityAnalysis(pk).Valid)
+                continue;
+            if (kind == 0) statsRanger++; else if (kind <= 2) statsGift++; else statsBred++;
+            File.WriteAllBytes(Path.Combine(args[3], $"{made:D6}.pk4"), pk.DecryptedBoxData);
+            made++;
+        }
+        Console.WriteLine(JsonSerializer.Serialize(new { made, tried, bred = statsBred, gift = statsGift, ranger = statsRanger }));
+        return made > 0 ? 0 : 1;
+    }
+
+    private static void MakeUnhatched(PK4 pk, ITrainerInfo tr, Random rng, ushort eggLocation)
+    {
+        pk.IsNicknamed = false;
+        pk.Nickname = SpeciesName.GetEggName(pk.Language, 4);
+        pk.OriginalTrainerFriendship = (byte)rng.Next(pk.PersonalInfo.HatchCycles + 1);
+        pk.EggLocation = eggLocation;
+        pk.EggMetDate = new DateOnly(2010, 3, 4);
+        pk.MetLevel = 0;
+        pk.MetDate = null;
+        pk.MetLocation = 0;
+    }
+
     private static int HandleGenGift4(string[] args)
     {
         int count = int.Parse(args[1]);

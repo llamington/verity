@@ -491,6 +491,51 @@ fn p5_parity_fuzz_hgss() {
     );
 }
 
+fn build_legal_eggs(n: usize, dir: &Path, seed: u64) {
+    oracle(&[
+        "gen-egg4".as_ref(),
+        n.to_string().as_ref(),
+        seed.to_string().as_ref(),
+        dir.as_os_str(),
+    ]);
+}
+
+#[test]
+fn p5_parity_fuzz_unhatched_eggs() {
+    if !root().join("data/blobs/gifts4.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let (checked, bad, per_id) = parity_with_muts(600, 71, 3, build_legal_eggs, &GIFT_MUTATIONS);
+    eprintln!("eggs checked {checked}");
+    for b in bad.iter().take(15) {
+        eprintln!("{b}");
+    }
+    assert!(checked > 0);
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
+/// M4 scale run: `cargo test --release -- --ignored p5_parity_eggs_1e4`.
+#[test]
+#[ignore]
+fn p5_parity_eggs_1e4() {
+    let (checked, bad, per_id) =
+        parity_with_muts(10_000, 7171, 4, build_legal_eggs, &GIFT_MUTATIONS);
+    for b in bad.iter().take(10) {
+        eprintln!("{b}");
+    }
+    eprintln!("eggs checked {checked}");
+    assert!(
+        bad.is_empty(),
+        "{} of {checked} mismatched: {per_id:?}",
+        bad.len()
+    );
+}
+
 #[test]
 fn p5_parity_fuzz_gifts() {
     if !root().join("data/blobs/gifts4.bin").exists() {
