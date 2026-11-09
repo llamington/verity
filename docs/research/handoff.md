@@ -112,13 +112,17 @@ to SD (validator, rotating `.bak1..3`, temp+rename, read-back), box view with le
 editor (Main/Stats/Moves, Legal/Game-safe mode), add-Pokémon wizard (D/P/Pt/HG wild, nature/
 shiny/level/gender/lead/ball). Details: `docs/research/ui-stack.md`, `emu-harness.md`.
 
+M6 P8 delivery (Gen 4) is done: `gift/inject4.rs`, the Mystery gifts screen, `data/events4.tsv`
+(language/region/games per card; regenerate with `scripts/gen-events4-manifest.py`), research in
+`docs/research/events-region.md`. In-game: `tools/emu-harness/collect_gifts4.py`, 21 of 21 on retail
+Platinum and HeartGold. `tests/p8_events.rs` covers the rest. Open: D, P and SS have no ROM here, so
+they have not been collected in-game. The `ConvertToPKM` port was dropped, since the deliveryman
+generates the Pokémon himself. Gen 5 PGF delivery waits on M5.
+
 Order from here:
-1. **M6 P8 injection**: R3 region research, R4 unlock flags, pending-gift slots, duplicate
-   prevention, harness collection test; generation of gift Pokémon (`ConvertToPKM` port:
-   random-PID gifts, Ranger Manaphy egg) for the wizard.
-2. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
+1. Remaining M4: Pal Park (Gen 3 origins), unhatched eggs, D Ranch gifts, egg generation; Ruins
    of Alph Unown legality perf (107 ms on DS, budget 50).
-3. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
+2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
    proportional font, HG vs SS choice in the wizard.
-4. M5 Gen 5 (BW/B2W2 legality + generation), M7 two-instance harness + P10 Memory Link,
+3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.

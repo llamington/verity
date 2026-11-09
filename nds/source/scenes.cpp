@@ -250,10 +250,16 @@ public:
             at(top(), 0, 12, "%s %s", d.dirty ? "*" : "-", message_);
         ui::clear(bottom());
         at(bottom(), 0, 0, " Save%s", d.dirty ? " *" : "");
-        for (int r = 0; r < 3; r++)
-            at(bottom(), 0, list_.first_row + r, " %s", kItems[r]);
-        list_.count = 3;
-        list_.rows = 3;
+        count_ = 0;
+        items_[count_++] = kBoxes;
+        if (i.generation == 4)
+            items_[count_++] = kGifts;
+        items_[count_++] = kSave;
+        items_[count_++] = kClose;
+        for (int r = 0; r < count_; r++)
+            at(bottom(), 0, list_.first_row + r, " %s", kItems[items_[r]]);
+        list_.count = count_;
+        list_.rows = count_;
     }
 
     bool update(const ui::Input& in) override
@@ -263,27 +269,185 @@ public:
         ui::bar(0, list_.bar_y(), true);
         if (in.down & KEY_B)
             return false;
-        if (a == 0)
+        int item = a >= 0 ? items_[a] : -1;
+        if (item == kBoxes)
         {
             message_[0] = 0;
             ui::push(box_view());
         }
-        if (a == 1)
+        if (item == kGifts)
+        {
+            message_[0] = 0;
+            ui::push(gifts());
+        }
+        if (item == kSave)
         {
             const char* m = "";
             core::save_to_disk(&m);
             snprintf(message_, sizeof(message_), "%s", m);
             enter();
         }
-        if (a == 2)
+        if (item == kClose)
             return false;
         return true;
     }
 
 private:
-    static constexpr const char* kItems[3] = {"Boxes and party", "Save to SD card", "Close"};
+    enum { kBoxes, kGifts, kSave, kClose };
+    static constexpr const char* kItems[4] = {"Boxes and party", "Mystery gifts", "Save to SD card",
+                                              "Close"};
+    int items_[4];
+    int count_ = 0;
     ListView list_;
     char message_[48] = "";
+};
+
+// ---- Mystery Gifts --------------------------------------------------------------------------
+
+class Gifts : public ui::Scene
+{
+public:
+    void enter() override
+    {
+        ui::clear(bottom());
+        at(bottom(), 0, 0, " Mystery gifts");
+        if (!core::ensure_events_data())
+        {
+            ui::clear(top());
+            at(top(), 0, 0, "Gift data is missing.");
+            at(top(), 0, 21, "B: back");
+            return;
+        }
+        refresh();
+        draw_list();
+        draw_top();
+    }
+
+    bool update(const ui::Input& in) override
+    {
+        if (in.down & KEY_B)
+            return false;
+        bool changed;
+        int a = list_.update(in, &changed);
+        if (changed)
+        {
+            message_[0] = 0;
+            draw_list();
+            draw_top();
+        }
+        ui::bar(0, list_.bar_y(), count_ > 0);
+        if (a >= 0)
+            deliver(a);
+        return true;
+    }
+
+private:
+    static constexpr int kMaxEvents = 200;
+    verity_event_view events_[kMaxEvents];
+    int count_ = 0;
+    ListView list_;
+    char message_[40] = "";
+
+    void refresh()
+    {
+        auto& d = core::doc();
+        count_ = (int)verity_events_list(d.buf, d.len, events_, kMaxEvents);
+        list_.count = count_;
+        list_.clamp();
+    }
+
+    void deliver(int i)
+    {
+        auto& d = core::doc();
+        const auto& e = events_[i];
+        // The card stores the date it was received, as days since 2000-01-01.
+        time_t now = time(nullptr);
+        uint16_t days = now > 946684800 ? (uint16_t)((now - 946684800) / 86400) : 0;
+        uint8_t r = verity_event_inject(d.buf, d.len, e.blob, e.record, days);
+        if (r == 0)
+        {
+            d.dirty = true;
+            snprintf(message_, sizeof(message_), "Delivered. Save, visit a Mart.");
+        }
+        else
+            snprintf(message_, sizeof(message_), "%s", verity_event_status_text(r));
+        refresh();
+        draw_list();
+        draw_top();
+    }
+
+    void title_of(const verity_event_view& e, char* out, int cap)
+    {
+        if (e.ranger)
+            snprintf(out, cap, "Ranger Manaphy Egg");
+        else
+            ui::utf16_to_ascii(e.title, out, cap);
+    }
+
+    void draw_list()
+    {
+        for (int r = 0; r < list_.rows; r++)
+        {
+            int i = list_.scroll + r;
+            if (i < count_)
+            {
+                char t[37];
+                title_of(events_[i], t, sizeof(t));
+                at(bottom(), 0, list_.first_row + r, "%c%.30s", events_[i].status ? '-' : ' ', t);
+            }
+            else
+                at(bottom(), 0, list_.first_row + r, "%s", "");
+        }
+    }
+
+    static const char* kind_name(uint8_t t)
+    {
+        switch (t)
+        {
+            case 1: return "Pokemon";
+            case 3: return "Item";
+            case 5: return "Decoration";
+            case 7: return "Pokemon Egg";
+            case 8: return "Member Card";
+            case 9: return "Oak's Letter";
+            case 11: return "Poketch app";
+            case 12: return "Secret Key";
+            case 14: return "Pokewalker course";
+            default: return "Gift";
+        }
+    }
+
+    void draw_top()
+    {
+        ui::clear(top());
+        at(top(), 0, 0, "Mystery gifts for this save");
+        at(top(), 0, 1, "%d available to this game", count_);
+        if (count_ == 0)
+        {
+            at(top(), 0, 3, "None for this language.");
+            at(top(), 0, 21, "B: back");
+            return;
+        }
+        const auto& e = events_[list_.selected];
+        char t[37];
+        title_of(e, t, sizeof(t));
+        at(top(), 0, 3, "%.32s", t);
+        at(top(), 0, 5, "Type     %s", kind_name(e.gift_type));
+        if (e.species)
+            at(top(), 0, 6, "Pokemon  %s", ui::name(VERITY_NAME_SPECIES, e.species));
+        static const char* regions[] = {"", "North America", "United Kingdom", "Australia",
+                                        "Europe"};
+        if (e.region >= 1 && e.region <= 4)
+            at(top(), 0, 7, "Region   %s", regions[e.region]);
+        if (e.card_id)
+            at(top(), 0, 8, "Card     %u", e.card_id);
+        at(top(), 0, 10, "Status   %s", verity_event_status_text(e.status));
+        if (message_[0])
+            at(top(), 0, 12, "> %s", message_);
+        at(top(), 0, 19, "Collect in-game from the");
+        at(top(), 0, 20, "deliveryman in any Poke Mart.");
+        at(top(), 0, 22, "A: deliver   B: back");
+    }
 };
 
 // ---- box view ------------------------------------------------------------------------------
@@ -1159,5 +1323,6 @@ ui::Scene* overview() { return new Overview(); }
 ui::Scene* box_view() { return new BoxView(); }
 ui::Scene* add_wizard(uint8_t b, uint8_t s) { return new AddWizard(b, s); }
 ui::Scene* editor(uint8_t b, uint8_t s) { return new Editor(b, s); }
+ui::Scene* gifts() { return new Gifts(); }
 
 }  // namespace scenes

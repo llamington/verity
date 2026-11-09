@@ -12,5 +12,7 @@ ui::Scene* box_view();
 ui::Scene* add_wizard(uint8_t box_index, uint8_t slot);
 // Pokémon editor for the occupied slot (box_index, slot).
 ui::Scene* editor(uint8_t box_index, uint8_t slot);
+// Gen 4 Mystery Gifts for the open save.
+ui::Scene* gifts();
 
 }  // namespace scenes

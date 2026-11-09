@@ -83,3 +83,11 @@ PKHeX 25.12.21 `MethodK.TryGetMatch`, Synchronize branch: `IsSlotValidRegular(ct
 reuses `seed` as its out parameter, so the following `Recurse4x` call (HG/SS Safari Zone and
 Bug-Catching Contest re-rolls) starts from the slot seed, or 0 when no slot matched, instead of
 the frame's seed. `rng::method_k` mirrors this. Report upstream.
+
+## Mystery Gift card link on Platinum (P8)
+
+PKHeX `MysteryBlock4.UpdateSlotPGT` says a pending gift's link to its Wonder Card counts from 1 on
+D/P/Pt (no card = 4) and from 0 on HG/SS (no card = 3). The Platinum decompilation writes the
+0-based slot into a 2-bit field (`MysteryGift_TrySavePgt`), so `4` could not be stored. verity
+follows the decompilation on Platinum and PKHeX on D/P. Retail Platinum collected 11 of 11 gifts
+this way. See `docs/research/events-region.md`.

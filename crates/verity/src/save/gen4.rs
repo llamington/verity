@@ -210,6 +210,16 @@ impl Layout4 {
         self.general
     }
 
+    /// Start of the Mystery Gift block (PKHeX `SAV4*.OffsetMystery`).
+    pub fn mystery_offset(&self) -> usize {
+        self.general
+            + match self.kind {
+                SaveKind::DP => 0xA6D0,
+                SaveKind::Pt => 0xB4C0,
+                _ => 0x9D3C,
+            }
+    }
+
     pub fn ot_offset(&self) -> usize {
         self.general + self.trainer
     }

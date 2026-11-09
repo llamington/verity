@@ -224,6 +224,15 @@ bool ensure_gen4_data()
     return ok;
 }
 
+bool ensure_events_data()
+{
+    if (!g_nitro_tried)
+        load_data_for(g_doc.info.kind);
+    bool ok = attach(VERITY_BLOB_GIFTS4, "gifts4.bin");
+    ok &= attach(VERITY_BLOB_EVENTS4, "events4.bin");
+    return ok;
+}
+
 uint8_t wizard_version()
 {
     // D/P saves get Diamond slots, Pt saves Platinum, HG/SS saves HeartGold (the save does not
@@ -255,6 +264,9 @@ bool save_to_disk(const char** message)
         *message = "no save open";
         return false;
     }
+    // The validator reads the Gen 4 data, which no earlier screen may have needed.
+    if (g_doc.info.generation == 4)
+        ensure_gen4_data();
     verity_save_finalize(g_doc.buf, g_doc.len);
     verity_save_check_result c;
     if (verity_save_check(g_doc.buf, g_doc.len, &c) != VERITY_OK || c.issue != 0)

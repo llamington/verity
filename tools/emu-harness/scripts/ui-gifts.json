@@ -1,0 +1,40 @@
+// P8: picker -> overview -> Mystery gifts on the real Platinum save: list, deliver one (which
+// fills the album, so the other gifts then show why they cannot be delivered), save to SD.
+{
+  "rom": "../../../nds/verity.nds",
+  "sd_dir": "../../../build/emu/sd",
+  "sd_image": "../../../build/emu/sd.img",
+  "steps": [
+    {"wait": 90},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 60},
+    {"screenshot": "00-overview.png"},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 90},
+    {"screenshot": "01-list.png"},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"wait": 5},
+    {"screenshot": "02-selected.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 30},
+    {"screenshot": "03-delivered.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 30},
+    {"screenshot": "04-duplicate.png"},
+    {"press": ["B"], "frames": 2},
+    {"wait": 30},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 240},
+    {"screenshot": "05-saved.png"}
+  ]
+}
