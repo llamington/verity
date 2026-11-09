@@ -167,6 +167,7 @@ pub enum GenStatus {
     SlotUnavailable = 16,
     Unsafe = 17,
     Internal = 18,
+    NotWild = 19,
 }
 
 fn status(e: Error) -> GenStatus {
@@ -192,6 +193,7 @@ fn status(e: Error) -> GenStatus {
         Error::PartyGap | Error::Save(_) | Error::WrongFormat => S::SlotUnavailable,
         Error::Unsafe(_) => S::Unsafe,
         Error::Illegal(_) => S::Internal,
+        Error::NotWild => S::NotWild,
     }
 }
 
@@ -217,6 +219,7 @@ pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
         15 => b"Moves not legal\0",
         16 => b"Slot not available\0",
         17 => b"Rejected by the game-safe check\0",
+        19 => b"Only for Gen 4 wild catches\0",
         _ => b"Internal error\0",
     };
     s.as_ptr()
@@ -385,6 +388,8 @@ pub struct VerityEdit {
     pub evs: [u8; 6],
     pub level: u8,
     pub friendship: u8,
+    /// With `EDIT_PID`: the PID that goes with a closest-legal IV spread.
+    pub pid: u32,
 }
 
 pub const EDIT_ITEM: u32 = 1;
@@ -393,6 +398,7 @@ pub const EDIT_IVS: u32 = 4;
 pub const EDIT_EVS: u32 = 8;
 pub const EDIT_LEVEL: u32 = 16;
 pub const EDIT_FRIENDSHIP: u32 = 32;
+pub const EDIT_PID: u32 = 64;
 
 fn game_rules(kind: SaveKind) -> Option<safety::Rules<'static>> {
     use crate::ui::{blob, BlobKind};
@@ -443,6 +449,9 @@ fn edited(
     if e.mask & EDIT_MOVES != 0 {
         pk.set_moves_with_pp(e.moves, &rules.moves);
         pk.set_pp_ups([0; 4]);
+    }
+    if e.mask & EDIT_PID != 0 {
+        pk.set_pid(e.pid);
     }
     if e.mask & EDIT_IVS != 0 {
         pk.set_ivs(e.ivs);
@@ -542,6 +551,63 @@ pub unsafe extern "C" fn verity_edit_apply(
         Ok(()) => 0,
         Err(safety::WriteError::Pkm(i)) => 1 + i as u8,
         Err(_) => 200,
+    }
+}
+
+/// Result of `verity_closest_ivs`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct VerityIvFix {
+    pub ivs: [u8; 6],
+    pub distance: u16,
+    pub pid: u32,
+}
+
+/// Spreads tested per lead. A shiny Caterpie needing 6 points took 0.7-1.7 s on the DS; a search
+/// that runs out of budget is longer and has not been timed.
+const CLOSEST_IV_BUDGET: u32 = 30_000;
+
+/// C ABI: the legal IV spread closest to `target` (6 bytes, HP Atk Def Spe SpA SpD) for the Gen 4
+/// wild catch at `loc`. Nothing is written. Returns 0 and fills `out`, else a
+/// `verity_gen_status_text` code.
+///
+/// # Safety
+///
+/// `buf` must point to `len` writable bytes, `target` to 6 readable bytes, `out` must be valid.
+#[no_mangle]
+pub unsafe extern "C" fn verity_closest_ivs(
+    buf: *mut u8,
+    len: usize,
+    loc: VerityLoc,
+    target: *const u8,
+    out: *mut VerityIvFix,
+) -> u8 {
+    if target.is_null() || out.is_null() {
+        return GenStatus::Internal as u8;
+    }
+    let Some(save) = open(buf, len) else {
+        return GenStatus::Internal as u8;
+    };
+    let Some(ctx) = legal::context() else {
+        return GenStatus::Unsupported as u8;
+    };
+    let Ok(pk) = save.pkm(slot_of(loc)) else {
+        return GenStatus::SlotUnavailable as u8;
+    };
+    if pk.species() == 0 {
+        return GenStatus::SlotUnavailable as u8;
+    }
+    let goal: [u8; 6] = core::array::from_fn(|i| *target.add(i));
+    match api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
+        Ok(f) => {
+            *out = VerityIvFix {
+                ivs: f.ivs,
+                distance: f.distance as u16,
+                pid: f.pid,
+            };
+            0
+        }
+        Err(e) => status(e) as u8,
     }
 }
 

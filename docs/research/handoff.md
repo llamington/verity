@@ -139,7 +139,9 @@ for it yet (P9.1).
    stay "not checked yet" on the DS. R/S/E/FR/LG Pal Park is complete (`analysis3.rs`, `gift3.rs`,
    `contest.rs`). If picked up later: port `EncounterGenerator3GC`, `EncounterEnumerator3GC`,
    `TeamLockResult` (shadow locks), `MethodPokeSpot` and `VerifyTrainerID_CXD`.
-2. P9.1 polish: IV "closest legal" in the editor, nickname keyboard, Met/Misc tabs,
-   proportional font, HG vs SS choice in the wizard.
+2. P9.1 polish: nickname keyboard, Met/Misc tabs, proportional font, egg generation screen. Done:
+   closest-legal IVs in the editor (X on the Stats tab, Gen 4 wild catches only) and the D/P and
+   HG/SS game choice in the wizard (Select). The IV search blocks the UI; a search that runs out of
+   budget is untimed on the DS, so slice it if it proves slow.
 3. M5 Gen 5 (BW/B2W2 legality + generation, then PGF delivery), M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.

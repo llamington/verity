@@ -196,7 +196,8 @@ verity_err verity_save_check(uint8_t *buf, size_t len, verity_save_check_result 
 /** Met/egg location name (generation 4 or 5); returns its length (0 if unknown). */
 size_t verity_location_name(uint8_t generation, uint16_t id, uint16_t *out, size_t cap);
 
-/** Field edits; mask: 1 held item, 2 moves (PP reset), 4 IVs, 8 EVs, 16 level, 32 friendship. */
+/** Field edits; mask: 1 held item, 2 moves (PP reset), 4 IVs, 8 EVs, 16 level, 32 friendship,
+    64 PID (only with a verity_closest_ivs result). */
 typedef struct verity_edit {
     uint32_t mask;
     uint16_t held_item;
@@ -205,7 +206,21 @@ typedef struct verity_edit {
     uint8_t evs[6];
     uint8_t level;
     uint8_t friendship;
+    uint32_t pid;
 } verity_edit;
+
+/** The legal IV spread closest to the requested one, and the PID that goes with it. */
+typedef struct verity_iv_fix {
+    uint8_t ivs[6];
+    uint16_t distance;
+    uint32_t pid;
+} verity_iv_fix;
+
+/** Finds the legal IVs closest to target (HP Atk Def Spe SpA SpD) for the Gen 4 wild catch at loc,
+    keeping nature, gender, ability and shininess. Writes nothing. Returns 0 OK, else a code for
+    verity_gen_status_text. */
+uint8_t verity_closest_ivs(uint8_t *buf, size_t len, verity_loc loc, const uint8_t *target,
+                           verity_iv_fix *out);
 
 /** Previews an edit: game-safe issue (0 safe) and legality, without writing. */
 verity_err verity_edit_preview(uint8_t *buf, size_t len, verity_loc loc, const verity_edit *edit,

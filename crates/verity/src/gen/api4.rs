@@ -9,8 +9,8 @@ use alloc::vec::Vec;
 
 use super::build4::{build_wild4, BuildData, Trainer4};
 use super::wild4::{self, GenError, IvProposal, Lead, Rand, Request};
-use crate::data::encounters::Encounter;
-use crate::legality::analysis4::{analyze4, CheckId, Context4};
+use crate::data::encounters::{Encounter, EncounterKind};
+use crate::legality::analysis4::{analyze4, CheckId, Context4, Matched};
 use crate::pkm::Pkm;
 use crate::rng::method_j::Slot4;
 use crate::save::{Save, SaveError, SaveKind, Slot};
@@ -93,6 +93,8 @@ pub enum Error {
     WrongFormat,
     /// The game-safe validator (P7) rejected the write.
     Unsafe(crate::safety::WriteError),
+    /// The operation needs a Pokémon that matched a Gen 4 wild slot.
+    NotWild,
 }
 
 impl From<GenError> for Error {
@@ -113,6 +115,89 @@ pub struct Generated4 {
     pub frame: wild4::Generated,
     /// Set for [`IvRequest::Nearest`]: the spread used and its change from the request.
     pub iv_proposal: Option<IvProposal>,
+}
+
+/// A replacement PID and IV spread from [`closest_ivs_for`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IvFix {
+    pub pid: u32,
+    /// HP, Atk, Def, Spe, SpA, SpD.
+    pub ivs: [u8; 6],
+    /// Total IV points away from the request.
+    pub distance: u32,
+}
+
+/// The legal IV spread closest to `target` for a Pokémon already caught in a Gen 4 wild slot,
+/// keeping its encounter, level, nature, gender, ability slot and shininess. In Gen 4 the IVs and
+/// PID come from the same RNG, so the PID changes with them. `budget` caps spreads tested per lead.
+pub fn closest_ivs_for(
+    ctx: &Context4,
+    pk: &Pkm,
+    target: [u8; 6],
+    budget: u32,
+) -> Result<IvFix, Error> {
+    let report = analyze4(ctx, pk);
+    let Matched::Slot { encounter: e, .. } = report.matched else {
+        return Err(Error::NotWild);
+    };
+    if !matches!(e.kind(), Some(EncounterKind::Slot4)) {
+        return Err(Error::NotWild);
+    }
+    let Some(slot) = Slot4::from_encounter(&e) else {
+        return Err(Error::NotWild);
+    };
+    let ratio = |s: u16| ctx.ratio(s);
+    let pid = pk.pid();
+    let enc_ratio = ratio(e.species());
+    let shiny = pk.is_shiny();
+    let mut request = wild4::Request {
+        slot,
+        tid: pk.tid(),
+        sid: pk.sid(),
+        species: e.species(),
+        gender_ratio: enc_ratio,
+        met_level: Some(pk.met_level()),
+        nature: Some((pid % 25) as u8),
+        gender: Some(crate::pkm::derived::gender_from_pid(pid, enc_ratio)),
+        ability_bit: Some((pid & 1) as u8),
+        shiny,
+        lead: Lead::None,
+        hidden_power_type: None,
+        location: e.location(),
+        form: pk.form(),
+        version: pk.version(),
+    };
+    // A Synchronize lead reaches spreads no-lead frames can't, at the same nature.
+    let mut best: Option<wild4::IvProposal> = None;
+    let mut last = GenError::BudgetExhausted;
+    for lead in [Lead::None, Lead::Synchronize((pid % 25) as u8)] {
+        request.lead = lead;
+        match wild4::closest_legal_ivs(&request, target, budget, ratio) {
+            Ok(p) if best.as_ref().is_none_or(|b| p.distance < b.distance) => best = Some(p),
+            Ok(_) => {}
+            Err(err) => last = err,
+        }
+    }
+    let Some(p) = best else {
+        return Err(Error::Gen(last));
+    };
+    let fix = IvFix {
+        pid: p.generated.pid,
+        ivs: p.ivs,
+        distance: p.distance,
+    };
+    // Never hand back a spread that would break the encounter match.
+    let mut check = pk.clone();
+    check.set_pid(fix.pid);
+    check.set_ivs(fix.ivs);
+    check.refresh_checksum();
+    let after = analyze4(ctx, &check);
+    for id in [CheckId::PID, CheckId::Encounter] {
+        if after.invalid.contains(&id) && !report.invalid.contains(&id) {
+            return Err(Error::Illegal(id));
+        }
+    }
+    Ok(fix)
 }
 
 fn group(version: u8) -> Result<&'static [u8], Error> {
