@@ -690,7 +690,7 @@ public:
             version_ = core::wizard_version();
             supported_ = core::doc().info.generation == 4 && core::ensure_gen4_data();
             if (supported_)
-                species_count_ = (int)verity_wild_species(version_, species_, 494);
+                load_species();
         }
         draw();
     }
@@ -707,6 +707,14 @@ public:
             ui::bar(0, list_.bar_y(), true);
             if (in.down & KEY_B)
                 return false;
+            if ((in.down & KEY_SELECT) && other_game())
+            {
+                version_ = other_game();
+                load_species();
+                list_ = ListView();
+                draw();
+                return true;
+            }
             if (a >= 0)
             {
                 species_ix_ = a;
@@ -797,6 +805,33 @@ private:
     static constexpr uint8_t kBalls[] = {4, 3, 2, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     char status_[48] = "";
     ListView list_, enc_list_;
+
+    void load_species() { species_count_ = (int)verity_wild_species(version_, species_, 494); }
+
+    /// The other game of a pair that shares a save type (the save doesn't record which it is).
+    uint8_t other_game() const
+    {
+        switch (version_)
+        {
+            case 10: return 11;
+            case 11: return 10;
+            case 7: return 8;
+            case 8: return 7;
+            default: return 0;
+        }
+    }
+
+    static const char* game_name(uint8_t v)
+    {
+        switch (v)
+        {
+            case 10: return "Diamond";
+            case 11: return "Pearl";
+            case 7: return "HeartGold";
+            case 8: return "SoulSilver";
+            default: return "Platinum";
+        }
+    }
 
     static const char* slot_type(uint8_t t)
     {
@@ -903,13 +938,13 @@ private:
             at(bottom(), 0, 0, " B: back");
             return;
         }
-        at(top(), 0, 0, "Add Pokemon  (legal, %s)",
-           version_ == 10 ? "Diamond" : version_ == 7 ? "HeartGold" : "Platinum");
+        at(top(), 0, 0, "Add Pokemon  (legal, %s)", game_name(version_));
         at(top(), 0, 1, "to %s %u", box_ == 0xFF ? "party slot" : "box slot",
            (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
         if (step_ == 0)
         {
             at(top(), 0, 3, "1. Species (%d with wild slots)", species_count_);
+            at(top(), 0, 5, "%s", other_game() ? "Select: switch game" : "");
             draw_list();
         }
         else if (step_ == 1)
@@ -1019,8 +1054,15 @@ public:
     {
         if (picking_)
             return update_picker(in);
+        if (showing_fix_)
+            return update_fix(in);
         if (in.down & KEY_B)
             return false;
+        if (tab_ == 1 && gen4_ && (in.down & KEY_X))
+        {
+            find_closest();
+            return true;
+        }
         int rows = tab_rows();
         int before_row = row_, before_tab = tab_;
         bool changed = false;
@@ -1081,6 +1123,8 @@ private:
     int tab_ = 0, row_ = 0;
     int items_ = 0, moves_ = 0;
     int picking_ = 0;  // 0 none, 1 item, 2..5 move slot
+    bool showing_fix_ = false;
+    verity_iv_fix fix_;
     ListView pick_;
     char status_[48] = "";
 
@@ -1129,6 +1173,7 @@ private:
             {
                 e_.ivs[row_] = (uint8_t)clampi(e_.ivs[row_] + dir, 0, 31);
                 e_.mask |= 4;
+                e_.mask &= ~64u;  // a hand-set spread no longer goes with the proposed PID
             }
             else
             {
@@ -1140,6 +1185,55 @@ private:
         {
             e_.moves[row_] = (uint16_t)((e_.moves[row_] + dir + moves_) % moves_);
             e_.mask |= 2;
+        }
+        return true;
+    }
+
+    void find_closest()
+    {
+        at(top(), 0, 7, "Searching for legal IVs...");
+        uint8_t code = verity_closest_ivs(core::doc().buf, core::doc().len, verity_loc{box_, slot_},
+                                          e_.ivs, &fix_);
+        at(top(), 0, 7, "%s", "");
+        if (code != 0)
+        {
+            snprintf(status_, sizeof(status_), "%s",
+                     code == 12 ? "No legal IVs found nearby" : verity_gen_status_text(code));
+            draw();
+            return;
+        }
+        showing_fix_ = true;
+        draw_fix();
+    }
+
+    void draw_fix()
+    {
+        static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
+        ui::clear(bottom());
+        at(bottom(), 0, 0, " Closest legal IVs");
+        at(bottom(), 0, 1, " %u point%s away", fix_.distance, fix_.distance == 1 ? "" : "s");
+        for (int i = 0; i < 6; i++)
+            at(bottom(), 0, 3 + i, " %-3s %2u -> %2u%s", st[i], e_.ivs[i], fix_.ivs[i],
+               e_.ivs[i] == fix_.ivs[i] ? "" : "  *");
+        at(bottom(), 0, 11, " Its PID changes too; nature,");
+        at(bottom(), 0, 12, " gender and ability stay.");
+        at(bottom(), 0, 14, " A: use these   B: keep mine");
+    }
+
+    bool update_fix(const ui::Input& in)
+    {
+        if (in.down & (KEY_A | KEY_B))
+        {
+            if (in.down & KEY_A)
+            {
+                memcpy(e_.ivs, fix_.ivs, 6);
+                e_.pid = fix_.pid;
+                e_.mask |= 4 | 64;
+            }
+            showing_fix_ = false;
+            ui::clear(bottom());
+            preview();
+            draw();
         }
         return true;
     }
@@ -1272,6 +1366,7 @@ private:
         at(top(), 0, 3, "L/R tab  Left/Right change");
         at(top(), 0, 4, "Y+Left/Right x10  A pick list");
         at(top(), 0, 5, "Start/tap bottom: apply  B: back");
+        at(top(), 0, 6, "%s", tab_ == 1 && gen4_ ? "X: closest legal IVs" : "");
         at(top(), 0, 7, "%s%s", e_.mask ? "* edited, not applied" : "", "");
         at(top(), 0, 22, "%s", status_);
 

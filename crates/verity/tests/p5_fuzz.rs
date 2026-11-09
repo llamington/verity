@@ -580,6 +580,61 @@ const CONTEST_BUILDERS: [fn(usize, &Path, u64); 7] = [
     build_legal_gift3,
 ];
 
+/// Closest-legal IVs on PKHeX-built wild catches: PKHeX must accept every proposal, and a target
+/// the Pokémon already has must come straight back.
+fn closest_ivs(build: fn(usize, &Path, u64), n: usize, seed: u64) -> (usize, usize) {
+    let ctx = Box::leak(Box::new(context()));
+    let tmp = std::env::temp_dir().join(format!("verity-iv-{}-{seed}", std::process::id()));
+    let (legal, fixed) = (tmp.join("legal"), tmp.join("fixed"));
+    fs::create_dir_all(&legal).unwrap();
+    fs::create_dir_all(&fixed).unwrap();
+    build(n, &legal, seed);
+    let mut r = Rand::new(seed);
+    let (mut proposed, mut refused) = (0, 0);
+    for e in fs::read_dir(&legal).unwrap().flatten() {
+        let mut pk = Pkm::from_decrypted(Format::Pk4, &fs::read(e.path()).unwrap()).unwrap();
+        let same = pk.ivs().map(|v| v as u8);
+        // Frames needing an exotic lead (a failed Cute Charm, say) aren't searched, so the
+        // Pokémon's own spread isn't always offered back. When it is, nothing should change.
+        if let Ok(kept) = verity::gen::api4::closest_ivs_for(ctx, &pk, same, 30_000) {
+            if kept.distance == 0 {
+                assert_eq!(kept.ivs, same);
+            }
+        }
+        let target: [u8; 6] = core::array::from_fn(|_| (r.next_u32() % 32) as u8);
+        let Ok(f) = verity::gen::api4::closest_ivs_for(ctx, &pk, target, 30_000) else {
+            refused += 1;
+            continue;
+        };
+        let (nature, shiny) = (pk.nature(), pk.is_shiny());
+        pk.set_pid(f.pid);
+        pk.set_ivs(f.ivs);
+        pk.refresh_checksum();
+        assert_eq!((pk.nature(), pk.is_shiny()), (nature, shiny));
+        let name = format!("{proposed:05}.pk4");
+        fs::write(fixed.join(name), &pk.decrypted()[..136]).unwrap();
+        proposed += 1;
+    }
+    let out = oracle(&["legality-batch".as_ref(), fixed.as_os_str()]);
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        assert!(v["valid"].as_bool().unwrap(), "{v}");
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    (proposed, refused)
+}
+
+#[test]
+fn p6_closest_ivs_legal() {
+    if !root().join("data/blobs/enc_dppt.bin").exists() {
+        return;
+    }
+    let pt = closest_ivs(build_legal, 100, 41);
+    let hgss = closest_ivs(build_legal_hgss, 100, 42);
+    eprintln!("proposed/refused: Pt {pt:?}, HG/SS {hgss:?}");
+    assert!(pt.0 > 0 && hgss.0 > 0);
+}
+
 #[test]
 fn p5_parity_fuzz_contest() {
     for (i, b) in CONTEST_BUILDERS.iter().enumerate() {
