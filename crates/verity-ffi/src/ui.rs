@@ -34,6 +34,7 @@ pub enum BlobKind {
     EncB2w2 = 16,
     EncDr = 17,
     Names5 = 18,
+    Gifts5 = 19,
 }
 
 const SLOTS: usize = 24;
@@ -82,6 +83,7 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         16 => EncB2w2,
         17 => EncDr,
         18 => Names5,
+        19 => Gifts5,
         _ => return None,
     })
 }
@@ -108,6 +110,7 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
             | BlobKind::EncB2w2
             | BlobKind::EncDr => verity::data::encounters::EncounterData::load(data).is_ok(),
             BlobKind::Names4 | BlobKind::Names5 => Strings::load(data).is_ok(),
+            BlobKind::Gifts5 => verity::gift::pgf::Gifts5::load(data).is_ok(),
             BlobKind::Gifts4 | BlobKind::Events4 => verity::gift::pcd::Gifts4::load(data).is_ok(),
             BlobKind::G3Origin => verity::legality::analysis3::Context3::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),
@@ -502,6 +505,10 @@ pub(crate) mod legal {
             enc_dr: enc(BlobKind::EncDr)?,
             evo: Evo4::new(bw, b2w2),
             names: Strings::load(blob(BlobKind::Names5)?).ok()?,
+            // Optional: without it Wonder Card Pokémon are not matched.
+            gifts: blob(BlobKind::Gifts5)
+                .and_then(|b| verity::gift::pgf::Gifts5::load(b).ok())
+                .unwrap_or(verity::gift::pgf::Gifts5::empty()),
         };
         let leaked: &'static Context5<'static> =
             alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
@@ -535,12 +542,6 @@ pub(crate) mod legal {
         let r = analyze5(ctx, pk);
         if matches!(r.matched, Matched::Invalid) {
             out.unsupported = 6;
-            return;
-        }
-        // Wonder Card events aren't modelled yet, and every one is fateful: a fateful Pokémon
-        // that fails might just be an event.
-        if pk.fateful() && !r.valid() {
-            out.unsupported = 2;
             return;
         }
         fill(&r, out);

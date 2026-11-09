@@ -11,8 +11,10 @@ use super::evo::{Evo4, EvoCriteria, EvoPkm};
 use super::moves4::{finalize, MoveResult};
 use crate::data::encounters::{flag, Encounter, EncounterData, EncounterKind};
 use crate::data::{move_table as mt, GameData, MoveData, Strings};
+use crate::gift::pgf::{Gifts5, Pgf};
 use crate::pkm::derived::{exp_for_level, gender_from_pid};
 use crate::pkm::Pkm;
+use crate::rng::finder::{analyze, AnalyzeInput, PidType};
 
 const VERSION_W: u8 = 20;
 const VERSION_B: u8 = 21;
@@ -52,6 +54,8 @@ pub struct Context5<'a> {
     pub evo: Evo4<'a>,
     /// Gen 5 species names by language ID (`names5.bin`); index 0 is the Egg name.
     pub names: Strings<'a>,
+    /// PKHeX's Gen 5 event database; `Gifts5::empty()` disables gifts.
+    pub gifts: Gifts5<'a>,
 }
 
 /// Whether a version value is one of the four Gen 5 games.
@@ -72,6 +76,7 @@ enum Rating {
 enum Enc5<'a> {
     Data(Encounter<'a>),
     Egg { species: u16, form: u8 },
+    Gift(Pgf<'a>),
 }
 
 fn hidden(pk: &Pkm) -> bool {
@@ -294,6 +299,78 @@ impl<'a> Search<'a, '_> {
     }
 }
 
+/// `PGF.IsMatchExact`.
+fn gift_exact(g: &Pgf, pk: &Pkm, evo: &EvoCriteria) -> bool {
+    if !g.is_egg() {
+        let (mut a, mut b) = ([0u16; 8], [0u16; 8]);
+        let na = crate::text::decode5(&g.ot_raw(), &mut a);
+        let nb = crate::text::decode5(&pk.ot_name_raw(), &mut b);
+        if g.sid() != pk.sid()
+            || g.tid() != pk.tid()
+            || a[..na] != b[..nb]
+            || (g.ot_gender() < 3 && g.ot_gender() != pk.ot_gender())
+            || (g.pid() != 0 && g.pid() != pk.pid())
+            || (g.pid_type() == 0 && pk.is_shiny())
+            || (g.pid_type() == 2 && !pk.is_shiny())
+            || (g.origin_game() != 0 && g.origin_game() != pk.version())
+            || (g.language() != 0 && g.language() != pk.language())
+            || pk.egg_location() != 0
+            || g.location() != pk.met_location()
+        {
+            return false;
+        }
+    } else if g.egg_location() != pk.egg_location() {
+        if pk.is_egg() || !matches!(pk.egg_location(), LINK_TRADE5 | LINK_TRADE5_NPC) {
+            return false;
+        }
+    } else if g.pid_type() == 0 && pk.is_shiny() {
+        return false;
+    }
+    (g.form() == evo.form || form_changeable(g.species()))
+        && g.level() == pk.met_level()
+        && g.ball() == pk.ball()
+        && (g.nature() == 0xFF || g.nature() == pk.nature())
+        && (g.gender() == 2 || g.gender() == pk.gender())
+        && pk
+            .contest()
+            .iter()
+            .zip(g.contest().iter())
+            .all(|(a, b)| a >= b)
+}
+
+/// `PGF.IsMatchPartial` with PKHeX's database cards, which set no language or game limits.
+fn gift_partial(g: &Pgf, pk: &Pkm) -> bool {
+    if g.origin_game() != 0 {
+        g.origin_game() != pk.version()
+    } else {
+        !is_gen5_version(pk.version())
+    }
+}
+
+/// `EncounterEnumerator5` Event states.
+fn scan_gifts<'a>(ctx: &Context5<'a>, s: &mut Search<'a, '_>) {
+    for g in ctx.gifts.iter() {
+        if g.card_type() != 1 {
+            continue;
+        }
+        let Some(evo) = s.chain.iter().find(|c| c.species == g.species()) else {
+            continue;
+        };
+        if !gift_exact(&g, s.pk, evo) {
+            continue;
+        }
+        if gift_partial(&g, s.pk) {
+            if Rating::Partial < s.best {
+                s.deferred = Some((Enc5::Gift(g), Rating::Partial));
+                s.best = Rating::Partial;
+            }
+        } else {
+            s.out.push(Enc5::Gift(g));
+            s.yielded = true;
+        }
+    }
+}
+
 fn split_breed(species: u16) -> bool {
     matches!(species, 183 | 202 | 113 | 122 | 143 | 185 | 226 | 315 | 358)
 }
@@ -377,11 +454,19 @@ fn enumerate<'a>(ctx: &Context5<'a>, pk: &Pkm, chain: &[EvoCriteria]) -> Vec<Enc
         if s.yielded {
             return finish(s);
         }
-    } else if matches!(pk.egg_location(), DAYCARE5 | LINK_TRADE5 | LINK_TRADE5_NPC)
-        && add_eggs(ctx, &mut s)
-        && pk.egg_location() == DAYCARE5
-    {
-        return s.out;
+    } else {
+        if pk.fateful() {
+            scan_gifts(ctx, &mut s);
+            if s.yielded {
+                return s.out; // the enumerator stops here, dropping anything deferred
+            }
+        }
+        if matches!(pk.egg_location(), DAYCARE5 | LINK_TRADE5 | LINK_TRADE5_NPC)
+            && add_eggs(ctx, &mut s)
+            && pk.egg_location() == DAYCARE5
+        {
+            return s.out;
+        }
     }
     captures(ctx, ed, version, bw, &mut s);
     finish(s)
@@ -718,6 +803,7 @@ fn enc_species(e: &Enc5) -> u16 {
     match e {
         Enc5::Data(d) => d.species(),
         Enc5::Egg { species, .. } => *species,
+        Enc5::Gift(g) => g.species(),
     }
 }
 
@@ -725,6 +811,7 @@ fn enc_level_min(e: &Enc5) -> u8 {
     match e {
         Enc5::Data(d) => d.level_min(),
         Enc5::Egg { .. } => 1,
+        Enc5::Gift(g) => g.level(),
     }
 }
 
@@ -732,7 +819,18 @@ fn moves_for(ctx: &Context5, pk: &Pkm, e: &Enc5, history: &[EvoCriteria]) -> [Mo
     if pk.is_egg() {
         return match e {
             Enc5::Egg { species, .. } => egg_moves_unhatched(ctx, pk, *species),
-            Enc5::Data(d) => base_initial(ctx, pk, d),
+            Enc5::Data(d) => {
+                let fixed = d
+                    .template()
+                    .filter(|t| t.has(flag::HAS_MOVES))
+                    .map(|t| t.moves());
+                base_initial(ctx, pk, d.species(), d.form(), d.level_min(), fixed)
+            }
+            Enc5::Gift(g) => {
+                let m = g.moves();
+                let fixed = (m[0] != 0).then_some(m);
+                base_initial(ctx, pk, g.species(), g.form(), g.level(), fixed)
+            }
         };
     }
     match e {
@@ -746,19 +844,26 @@ fn moves_for(ctx: &Context5, pk: &Pkm, e: &Enc5, history: &[EvoCriteria]) -> [Mo
                 .map(|t| t.moves());
             ctx.verify_moves(pk, d.species(), history, initial, None)
         }
+        Enc5::Gift(g) => {
+            let m = g.moves();
+            ctx.verify_moves(pk, g.species(), history, (m[0] != 0).then_some(m), None)
+        }
     }
 }
 
 /// `LearnVerifierEgg` for a gift egg: exactly its fixed or base moves, in order.
-fn base_initial(ctx: &Context5, pk: &Pkm, d: &Encounter) -> [MoveResult; 4] {
+fn base_initial(
+    ctx: &Context5,
+    pk: &Pkm,
+    species: u16,
+    form: u8,
+    level: u8,
+    fixed: Option<[u16; 4]>,
+) -> [MoveResult; 4] {
     let current = pk.moves();
-    let fixed = d
-        .template()
-        .filter(|t| t.has(flag::HAS_MOVES))
-        .map(|t| t.moves());
     let expected = fixed.unwrap_or_else(|| {
         let t = ctx.egg_table(pk.version());
-        let (b, n) = breed4::base_egg_moves(t, t.form_index(d.species(), d.form()), d.level_min());
+        let (b, n) = breed4::base_egg_moves(t, t.form_index(species, form), level);
         let mut out = [0u16; 4];
         out[..n].copy_from_slice(&b[..n]);
         out
@@ -810,6 +915,9 @@ fn evolution_ok(
 }
 
 fn is_partial(e: &Enc5, pk: &Pkm) -> bool {
+    if let Enc5::Gift(g) = e {
+        return gift_partial(g, pk);
+    }
     let Enc5::Data(d) = e else {
         return false;
     };
@@ -861,6 +969,7 @@ fn encounter_ok(ctx: &Context5, pk: &Pkm, e: &Enc5) -> bool {
         Enc5::Data(d) if d.has(flag::EGG) && !d.is_slot() => {
             !pk.is_egg() && egg_encounter_ok(ctx, pk) || pk.is_egg()
         }
+        Enc5::Gift(g) if g.is_egg() => pk.is_egg() || egg_encounter_ok(ctx, pk),
         _ => true,
     }
 }
@@ -923,6 +1032,11 @@ pub fn analyze5<'a>(ctx: &'a Context5<'a>, pk: &Pkm) -> Report<'a> {
             }
         }
         Enc5::Egg { species, .. } => report.matched = Matched::Egg { species },
+        Enc5::Gift(g) => {
+            report.matched = Matched::Gift5 {
+                species: g.species(),
+            }
+        }
     }
     if is_partial(&e, pk) || !encounter_ok(ctx, pk, &e) {
         report.flag(CheckId::Encounter);
@@ -936,7 +1050,10 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
         Some(Enc5::Data(d)) => Some(d),
         _ => None,
     };
-    let egg_enc = matches!(enc, Some(Enc5::Egg { .. }));
+    let gift = match enc {
+        Some(Enc5::Gift(g)) => Some(*g),
+        _ => None,
+    };
     let kind = data.and_then(|d| d.kind());
     let e_species = enc.map_or(pk.species(), enc_species);
     let pi = ctx.b2w2.species_form(pk.species(), pk.form());
@@ -989,6 +1106,37 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
         }
     }
 
+    if let Some(g) = gift {
+        match g.pid_type() {
+            0 if !g.is_egg() && pk.is_shiny() => report.flag(CheckId::Shiny),
+            2 if !g.is_egg() && !pk.is_shiny() => report.flag(CheckId::Shiny),
+            _ => {}
+        }
+        // VerifyFatefulMysteryGift: a shiny card's PID must come from its shiny method.
+        if g.pid_type() == 2 {
+            let ratio = |s: u16| ctx.b2w2.personal(s as usize).gender_ratio();
+            if analyze(&AnalyzeInput::from_pkm(pk), ratio).kind != PidType::G5MgShiny {
+                let loc = if pk.is_egg() {
+                    pk.met_location()
+                } else {
+                    pk.egg_location()
+                };
+                if !matches!(loc, LINK_TRADE5 | LINK_TRADE5_NPC) {
+                    report.flag(CheckId::PID);
+                }
+            }
+        }
+        // IndividualValueVerifier.VerifyIVsMystery.
+        let ok = pk
+            .ivs()
+            .iter()
+            .zip(g.ivs().iter())
+            .all(|(&a, &b)| b > 31 || a == b as u16);
+        if !ok {
+            report.flag(CheckId::IVs);
+        }
+    }
+
     // LevelVerifier.
     if pk.is_egg() {
         let lmin = enc.map_or(pk.met_level(), enc_level_min);
@@ -1021,6 +1169,7 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
     let ball = pk.ball();
     let ball_ok = match enc {
         Some(Enc5::Egg { .. }) => ball == BALL_POKE,
+        Some(Enc5::Gift(g)) => ball == g.ball(),
         Some(Enc5::Data(d)) if d.ball() != 0 => ball == d.ball(),
         Some(Enc5::Data(_)) => {
             const BALLS5: u64 = (1 << 1)
@@ -1065,7 +1214,7 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
     } else if (ey, em, ed) != (0, 0, 0) {
         report.flag(CheckId::Memory);
     }
-    let fateful_expected = data.is_some_and(|d| d.has(flag::FATEFUL));
+    let fateful_expected = gift.is_some() || data.is_some_and(|d| d.has(flag::FATEFUL));
     if pk.fateful() != fateful_expected {
         report.flag(CheckId::Fateful);
     }
@@ -1146,7 +1295,7 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
         hoenn: [raw[0x3C], raw[0x3D], raw[0x3E], raw[0x3F]],
         contest4: [raw[0x60], raw[0x61], raw[0x62]],
         is_egg: pk.is_egg(),
-        event: [0; 3],
+        event: gift.map_or([0; 3], |g| g.event_ribbons()),
         gen4: false,
         species: pk.species(),
         form: pk.form(),
@@ -1181,10 +1330,6 @@ fn verify_common(ctx: &Context5, pk: &Pkm, lvl: u8, enc: Option<&Enc5>, report: 
             report.flag(CheckId::Gender);
         }
     }
-
-    if egg_enc {
-        // PIDVerifier.VerifyEggPID has no Gen 5 branch; nothing further.
-    }
 }
 
 fn verify_ability(ctx: &Context5, pk: &Pkm, enc: Option<&Enc5>, report: &mut Report) {
@@ -1209,6 +1354,18 @@ fn verify_ability(ctx: &Context5, pk: &Pkm, enc: Option<&Enc5>, report: &mut Rep
     } else {
         1 << ((pk.pid() >> 16) & 1)
     };
+    if let Some(Enc5::Gift(g)) = enc {
+        // VerifyAbilityMG.
+        let ok = match g.ability_type() {
+            3 => number != 4,
+            t @ 0..=2 => number == 1 << t,
+            _ => true,
+        };
+        if !ok {
+            report.flag(CheckId::Ability);
+        }
+        return;
+    }
     let (permission, is_egg_enc, e_species) = match enc {
         Some(Enc5::Egg { species, .. }) => (
             if hidden_possible(*species) {
@@ -1220,6 +1377,7 @@ fn verify_ability(ctx: &Context5, pk: &Pkm, enc: Option<&Enc5>, report: &mut Rep
             *species,
         ),
         Some(Enc5::Data(d)) => (d.ability(), false, d.species()),
+        Some(Enc5::Gift(_)) => return,
         None => (ABILITY_ANY12, false, pk.species()),
     };
     let from_number = [a1, a2, ah][(number >> 1) as usize] == ability;
@@ -1336,12 +1494,16 @@ fn verify_names(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, re
     let is_n = kind == Some(EncounterKind::Static5N);
     let lang = pk.language();
 
+    let gift = match enc {
+        Some(Enc5::Gift(g)) => Some(*g),
+        _ => None,
+    };
     if is_n {
         let expect: &[u16] = if lang == 1 { &[0xFF2E] } else { &[0x4E] };
         if ot != expect {
             report.flag(CheckId::Trainer);
         }
-    } else if !trade {
+    } else if !trade && gift.is_none() {
         if on == 0 || ot.contains(&0xFFFF) {
             report.flag(CheckId::Trainer);
         }
@@ -1407,12 +1569,18 @@ fn verify_names(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, re
         !name.is_empty() && eq16(nick, name)
     };
     if pk.is_egg() {
-        if pk.is_nicknamed() || !name_is(lang, 0) {
+        // EggStateLegality.IsNicknameFlagSet: Gen 5 eggs have the flag set, unlike Gen 4's.
+        if !pk.is_nicknamed() || !name_is(lang, 0) {
             report.flag(CheckId::Egg);
         }
         return;
     }
     let species = pk.species();
+    if let Some(g) = gift {
+        if pk.is_nicknamed() && !g.is_egg() && !g.is_nicknamed() {
+            report.flag(CheckId::Nickname);
+        }
+    }
     if pk.is_nicknamed() {
         if nick.iter().any(|&c| (0x4E00..=0x9FFF).contains(&c)) {
             report.flag(CheckId::Nickname);
@@ -1432,7 +1600,8 @@ fn verify_names(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, re
     }
     let traded_egg = pk.egg_location() == LINK_TRADE5;
     let any_lang = [1u8, 2, 3, 4, 5, 7, 8].iter().any(|&l| name_is(l, species));
-    if !((e_species != species || traded_egg) && any_lang) {
+    let fixed_language = gift.is_some_and(|g| g.language() != 0 && !g.is_nicknamed());
+    if !((e_species != species || traded_egg || fixed_language) && any_lang) {
         report.flag(CheckId::Nickname);
     }
 }

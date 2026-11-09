@@ -654,6 +654,7 @@ fn context5() -> verity::legality::analysis5::Context5<'static> {
         enc_dr: EncounterData::load(load("enc_dr.bin")).unwrap(),
         evo: Evo4::new(bw, b2w2),
         names: verity::data::Strings::load(load("names5.bin")).unwrap(),
+        gifts: verity::gift::pgf::Gifts5::load(load("gifts5.bin")).unwrap(),
     }
 }
 
@@ -745,7 +746,7 @@ fn compare5(
 
 /// Kinds verity doesn't model for a Gen 5 origin yet.
 fn gen5_unmodelled(kind: &str) -> bool {
-    matches!(kind, "PGF" | "WC5" | "EncounterInvalid")
+    matches!(kind, "EncounterInvalid")
 }
 
 fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
@@ -810,9 +811,19 @@ fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
 
 #[test]
 fn p5_parity_fuzz_gen5() {
-    for (i, mode) in ["slot", "static", "entree", "radar", "n", "trade", "egg"]
-        .iter()
-        .enumerate()
+    for (i, mode) in [
+        "slot",
+        "static",
+        "entree",
+        "radar",
+        "n",
+        "trade",
+        "egg",
+        "unhatched",
+        "gift",
+    ]
+    .iter()
+    .enumerate()
     {
         parity5(mode, 150, 900 + i as u64, 3);
     }
@@ -821,9 +832,19 @@ fn p5_parity_fuzz_gen5() {
 #[test]
 #[ignore]
 fn p5_parity_gen5_1e4() {
-    for (i, mode) in ["slot", "static", "entree", "radar", "n", "trade", "egg"]
-        .iter()
-        .enumerate()
+    for (i, mode) in [
+        "slot",
+        "static",
+        "entree",
+        "radar",
+        "n",
+        "trade",
+        "egg",
+        "unhatched",
+        "gift",
+    ]
+    .iter()
+    .enumerate()
     {
         parity5(mode, 10_000, 9000 + i as u64, 4);
     }

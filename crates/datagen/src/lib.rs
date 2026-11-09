@@ -745,6 +745,21 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
         "names5.bin".into(),
         build_names4(&load(&exports.join("names5.json"))),
     );
+    let gifts5: Vec<u8> = load(&exports.join("gifts5.json"))
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|h| {
+            let h = h.as_str().unwrap();
+            (0..h.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+                .collect::<Vec<u8>>()
+        })
+        .collect();
+    let mut w5 = BlobWriter::new(5, BlobKind::Gifts);
+    w5.table(1, verity::gift::pgf::PGF_SIZE as u16, gifts5);
+    put("gifts5.bin".into(), w5.finish());
     let gifts = load(&exports.join("gifts4.json"));
     let events4 = fs::read_to_string(exports.parent().unwrap().join("events4.tsv")).unwrap();
     put("gifts4.bin".into(), build_gifts4(&gifts, &events4, true));

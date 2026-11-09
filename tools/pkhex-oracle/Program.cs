@@ -47,6 +47,7 @@ public static class Program
                 "gen-ranch4" => HandleGenRanch4(args),
                 "gen-slot3" => HandleGenSlot3(args),
                 "gen-origin5" => HandleGenOrigin5(args),
+                "export-gifts5" => HandleExportGifts5(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -1119,6 +1120,15 @@ public static class Program
         };
     }
 
+    /// The Gen 5 event database as hex records (`PGF` is 0xCC bytes).
+    private static int HandleExportGifts5(string[] args)
+    {
+        var list = EncounterEvent.MGDB_G5.Select(g => Convert.ToHexString(g.Data)).ToArray();
+        File.WriteAllText(args[1], JsonSerializer.Serialize(list));
+        Console.WriteLine(list.Length);
+        return 0;
+    }
+
     /// PKHeX-legal Pokémon from a Gen 5 game: random trainer, encounter, language and level gain.
     private static int HandleGenOrigin5(string[] args)
     {
@@ -1144,13 +1154,15 @@ public static class Program
                 "radar" => isBw ? Array.Empty<IEncounterConvertible>() : Field(dr, "Encounter_DreamRadar"),
                 "n" => isBw ? Array.Empty<IEncounterConvertible>() : Field(b2, "Encounter_B2W2_N"),
                 "trade" => Field(cls, "TradeGift_" + v).Concat(Field(cls, isBw ? "TradeGift_BW" : "TradeGift_B2W2")),
-                "egg" => Eggs(v),
+                "egg" or "unhatched" => Eggs(v),
+                "gift" => EncounterEvent.MGDB_G5.Where(g => g.IsEntity).Cast<IEncounterConvertible>(),
                 _ => Areas(cls, "Slots" + v),
             };
             return (v, list.ToArray());
         }
         var games = new[] { GameVersion.W, GameVersion.B, GameVersion.W2, GameVersion.B2 }.Select(Game).Where(g => g.L.Length > 0).ToArray();
         int[] languages = [1, 2, 3, 4, 5, 7, 8];
+        var giftEggs = EncounterEvent.MGDB_G5.Where(g => g.IsEntity && g.IsEgg).Cast<IEncounterConvertible>().ToArray();
         int made = 0, tried = 0;
         while (made < count && tried < count * 20)
         {
@@ -1161,9 +1173,34 @@ public static class Program
             tr.Language = languages[rng.Next(languages.Length)];
             tr.TID16 = (ushort)rng.Next(65536);
             tr.SID16 = (ushort)rng.Next(65536);
+            if (mode == "unhatched")
+                enc = rng.Next(5) == 0 && giftEggs.Length != 0 ? giftEggs[rng.Next(giftEggs.Length)] : enc;
             if (enc.ConvertToPKM(tr) is not PK5 pk)
                 continue;
-            if (!pk.IsEgg)
+            if (mode == "unhatched")
+            {
+                pk.IsEgg = true;
+                pk.IsNicknamed = true;
+                pk.Nickname = SpeciesName.GetEggName(pk.Language, 5);
+                pk.OriginalTrainerFriendship = (byte)rng.Next(pk.PersonalInfo.HatchCycles + 1);
+                pk.EggLocation = enc is PGF g5 ? g5.EggLocation : Locations.Daycare5;
+                pk.EggMetDate = new DateOnly(2012, 3, 4);
+                pk.MetLevel = 1;
+                pk.MetDate = null;
+                pk.MetLocation = 0;
+                if (enc is EncounterEgg5 egg5)
+                {
+                    var learn = GameData.GetLearnSource(v).GetLearnset(egg5.Species, 0);
+                    var wanted = learn.GetBaseEggMoves(1).ToArray().ToList();
+                    wanted.AddRange(LearnSource5BW.Instance.GetEggMoves(egg5.Species, 0).ToArray().OrderBy(_ => rng.Next()).Take(rng.Next(0, 3)));
+                    var request = wanted.TakeLast(4).Concat(Enumerable.Repeat((ushort)0, 4)).Take(4).ToArray();
+                    var expected = new ushort[4];
+                    MoveBreed.GetExpectedMoves(request, egg5, expected);
+                    pk.SetMoves(new Moveset(expected[0], expected[1], expected[2], expected[3]));
+                    pk.HealPP();
+                }
+            }
+            else if (!pk.IsEgg)
                 pk.CurrentLevel = (byte)Math.Min(100, pk.CurrentLevel + rng.Next(3) * rng.Next(20));
             pk.RefreshChecksum();
             if (!new LegalityAnalysis(pk).Valid)
