@@ -368,6 +368,15 @@ fn static_rating(e: &Encounter, pk: &MatchPkm) -> u8 {
     }
 }
 
+/// Whether PKHeX would rate this encounter `PartialMatch` (`EncounterFinder` then reports it).
+pub fn data_is_partial(e: &Encounter, pk: &MatchPkm) -> bool {
+    if e.is_slot() {
+        rating(e, pk) != Rating::Match
+    } else {
+        static_rating(e, pk) == 2
+    }
+}
+
 pub fn is_trade(e: &Encounter) -> bool {
     e.kind() == Some(crate::data::encounters::EncounterKind::Trade4Pid)
 }
@@ -460,15 +469,7 @@ pub fn wild_slots<'a>(
             fallback = Some((e, d));
         }
     };
-    let none = WildMatches {
-        candidates: Vec::new(),
-        fallback: None,
-    };
-    // Unhatched eggs are not modelled (callers report "not checked"). Bred eggs are handled
-    // by the caller; any other egg location can only be a gift-egg static.
-    if pk.is_egg {
-        return none;
-    }
+    // Bred eggs are handled by the caller; any other egg location can only be a gift-egg static.
     let gift_egg_only = pk.egg_location != 0;
     let evo_of = |sp: u16| chain.iter().find(|c| c.species == sp);
     let must_be_slot = pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT;

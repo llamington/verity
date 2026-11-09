@@ -12,10 +12,14 @@ pub enum MoveResult {
     EmptyInvalid,
     Duplicate,
     Unobtainable,
-    LevelUp { level: u8 },
+    LevelUp {
+        level: u8,
+    },
     Machine,
     Tutor,
     Initial,
+    /// A level-up move inherited from both parents (PKHeX `LearnMethod.InheritLevelUp`).
+    InheritLevelUp,
     Sketch,
 }
 
@@ -297,7 +301,7 @@ const NINCADA: u16 = 290;
 const NINJASK: u16 = 291;
 const SHEDINJA: u16 = 292;
 
-fn finalize(result: &mut [MoveResult; 4], current: &[u16; 4]) {
+pub(crate) fn finalize(result: &mut [MoveResult; 4], current: &[u16; 4]) {
     let mut empty = false;
     for i in 0..4 {
         let mv = current[i];

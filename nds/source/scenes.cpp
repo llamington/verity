@@ -617,6 +617,7 @@ private:
         {
             at(top(), 0, 0, "Egg (%s)", sp);
             at(top(), 0, 2, "OT %s  %05u/%05u", ot, v.tid, v.sid);
+            legality_line();
             return;
         }
         at(top(), 0, 0, "%s%s", nick, v.is_shiny ? " *" : "");
