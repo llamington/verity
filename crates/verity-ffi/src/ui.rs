@@ -29,6 +29,7 @@ pub enum BlobKind {
     EncHgss = 11,
     Gifts4 = 12,
     Events4 = 13,
+    G3Origin = 14,
 }
 
 const SLOTS: usize = 16;
@@ -72,6 +73,7 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         11 => EncHgss,
         12 => Gifts4,
         13 => Events4,
+        14 => G3Origin,
         _ => return None,
     })
 }
@@ -97,6 +99,7 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
             }
             BlobKind::Names4 => Strings::load(data).is_ok(),
             BlobKind::Gifts4 | BlobKind::Events4 => verity::gift::pcd::Gifts4::load(data).is_ok(),
+            BlobKind::G3Origin => verity::legality::analysis3::Context3::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),
         };
         if !ok {
@@ -441,7 +444,10 @@ pub(crate) mod legal {
             enc_hgss: EncounterData::load(blob(BlobKind::EncHgss)?).ok()?,
             gen5,
             names4: Strings::load(blob(BlobKind::Names4)?).ok()?,
+            // Optional: without it Pal Park Pokémon stay unchecked.
             // Optional: without the event database gifts are not matched.
+            g3: blob(BlobKind::G3Origin)
+                .and_then(|b| verity::legality::analysis3::Context3::load(b).ok()),
             gifts: blob(BlobKind::Gifts4)
                 .and_then(|b| verity::gift::pcd::Gifts4::load(b).ok())
                 .unwrap_or(verity::gift::pcd::Gifts4::empty()),
@@ -457,7 +463,8 @@ pub(crate) mod legal {
             out.unsupported = 4;
             return;
         }
-        if !matches!(pk.version(), 7 | 8 | 10..=12) {
+        let gba = verity::legality::analysis3::is_gba_version(pk.version());
+        if !gba && !matches!(pk.version(), 7 | 8 | 10..=12) {
             out.unsupported = 2;
             return;
         }
@@ -465,7 +472,17 @@ pub(crate) mod legal {
             out.unsupported = 3;
             return;
         };
+        if gba && ctx.g3.is_none() {
+            out.unsupported = 2;
+            return;
+        }
         let r = analyze4(ctx, pk);
+        // Gen 3 event gifts aren't modelled yet, so a Gen 3 origin that fails might be one of
+        // those: only a pass is a verdict.
+        if gba && !r.valid() {
+            out.unsupported = 2;
+            return;
+        }
         // Only wild slots are modelled; without a slot match the origin is something verity
         // cannot judge yet, so it says nothing rather than a false "illegal".
         if matches!(r.matched, Matched::Invalid) {

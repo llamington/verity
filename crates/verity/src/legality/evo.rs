@@ -244,10 +244,18 @@ impl<'a> Evo4<'a> {
         })
     }
 
-    /// PKHeX `PersonalTable4.IsPresentInGame` (HG/SS table).
+    /// PKHeX `PersonalTable4.IsPresentInGame` (HG/SS table; `PersonalTable3` for a Gen 3 tree).
     pub fn is_present(&self, species: u16, form: u8) -> bool {
         if species > self.presence.max_species() {
             return false;
+        }
+        if self.presence.generation() == 3 {
+            return form == 0
+                || match species {
+                    201 => form < 28,
+                    351 | 386 => form < 4,
+                    _ => false,
+                };
         }
         if form == 0 {
             return true;
@@ -402,6 +410,122 @@ impl<'a> Evo4<'a> {
             }
         }
         self.set_history(&chain)
+    }
+
+    /// `GetOriginChain` (span overload) for a Gen 3 origin in the Gen 4 format: `self` is the
+    /// Gen 4 tree, walked first, then `g3` (`EvolutionGroup3.Devolve` caps levels at the met
+    /// level, which for a PK4 is the level when it left Pal Park).
+    fn origin_chain3(
+        &self,
+        g3: &Evo4<'a>,
+        pk: &EvoPkm,
+        level_min: u8,
+        level_max: u8,
+        enc_species: u16,
+        discard: bool,
+    ) -> Vec<EvoCriteria> {
+        let mut result = [EvoCriteria::default(); MAX_EVOLUTIONS];
+        if pk.is_egg {
+            result[0] = EvoCriteria {
+                species: pk.species,
+                form: pk.form,
+                level_max,
+                level_min: level_max,
+                ..Default::default()
+            };
+            return result[..1].to_vec();
+        }
+        result[0] = EvoCriteria {
+            species: pk.species,
+            form: pk.form,
+            level_max,
+            ..Default::default()
+        };
+        self.devolve(&mut result, pk, level_min, false);
+        for e in result.iter_mut() {
+            if e.species == 0 {
+                break;
+            }
+            e.level_max = e.level_max.min(pk.met_level);
+        }
+        g3.devolve(&mut result, pk, 1, false);
+        if discard {
+            g3.discard(&mut result);
+        }
+        let count = if enc_species != 0 {
+            result
+                .iter()
+                .position(|e| e.species == enc_species)
+                .map_or(0, |i| i + 1)
+        } else {
+            result.iter().take_while(|e| e.species != 0).count()
+        };
+        let mut chain = result[..count].to_vec();
+        clean_devolve(&mut chain, level_min);
+        chain
+    }
+
+    /// `EncounterOrigin.GetOriginChain(pk, 3, Gen3)` for a PK4 (the original met level is lost).
+    pub fn encounter_origin_chain3(&self, g3: &Evo4<'a>, pk: &EvoPkm) -> Vec<EvoCriteria> {
+        const MIN_WILD_LEVEL: u8 = 2;
+        let mut chain = self.origin_chain3(g3, pk, MIN_WILD_LEVEL, pk.current_level, 0, true);
+        // EvolutionUtil.ConditionEncounterNoMet
+        for i in 0..chain.len().saturating_sub(1) {
+            if is_level_up_required(chain[i].method) {
+                chain[i].level_min = chain[i + 1].level_min + chain[i].level_up_required;
+            }
+        }
+        chain
+    }
+
+    /// `EvolutionChain.GetEvolutionChainsAllGens` for a Gen 3 encounter in the Gen 4 format:
+    /// the chain while in Gen 3, then while in Gen 4.
+    pub fn chain_for_encounter3(
+        &self,
+        g3: &Evo4<'a>,
+        pk: &EvoPkm,
+        enc_species: u16,
+        enc_level_min: u8,
+    ) -> (Vec<EvoCriteria>, Vec<EvoCriteria>) {
+        let mut chain =
+            self.origin_chain3(g3, pk, enc_level_min, pk.current_level, enc_species, false);
+        if chain.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+        for e in chain.iter_mut() {
+            if e.species == enc_species {
+                break;
+            }
+            e.method = SENTINEL_NOT_REACHED;
+        }
+        g3.evolve_stage(&mut chain, pk, pk.met_level);
+        let gen3 = g3.set_history(&chain);
+        // EvolutionGroup4.Evolve, EvolutionUtil.UpdateFloor
+        chain[0].level_max = pk.current_level;
+        for e in chain.iter_mut() {
+            e.level_min = e.level_min.max(pk.met_level);
+        }
+        self.evolve_stage(&mut chain, pk, pk.current_level);
+        (gen3, self.set_history(&chain))
+    }
+
+    /// The loop shared by `EvolutionGroup3.Evolve` and `EvolutionGroup4.Evolve`.
+    fn evolve_stage(&self, chain: &mut [EvoCriteria], pk: &EvoPkm, max: u8) {
+        for i in (1..chain.len()).rev() {
+            let (dest, devolved) = (chain[i - 1], chain[i]);
+            match self.try_evolve(&devolved, &dest, pk, max, devolved.level_min, false) {
+                Some(evo) => {
+                    if evo.is_better_evolution(&dest) {
+                        chain[i - 1] = evo;
+                    }
+                }
+                None => {
+                    if dest.method == SENTINEL_NOT_REACHED {
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /// `EvolutionUtil.SetHistory` with the HG/SS table.

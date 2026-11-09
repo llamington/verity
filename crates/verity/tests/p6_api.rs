@@ -2,6 +2,10 @@
 //! forms, constraint mixes) either fail with a specific error or give a Pokémon that PKHeX
 //! finds legal; generated Pokémon inserted into real saves dump as legal with valid checksums
 //! and correct party stats.
+fn root_for_g3() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -69,6 +73,12 @@ fn context() -> &'static Context4<'static> {
         enc_hgss: EncounterData::load(load("enc_hgss.bin")).unwrap(),
         gen5: GameData::load(load("b2w2.bin")).unwrap(),
         names4: Strings::load(load("names4.bin")).unwrap(),
+        g3: std::fs::read(root_for_g3().join("data/blobs/g3_origin.bin"))
+            .ok()
+            .map(|b| {
+                verity::legality::analysis3::Context3::load(Box::leak(b.into_boxed_slice()))
+                    .unwrap()
+            }),
         gifts: verity::gift::pcd::Gifts4::load(load("gifts4.bin")).unwrap(),
     }))
 }

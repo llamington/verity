@@ -1,6 +1,7 @@
 //! Legality checks (PKHeX `LegalityAnalysis` port).
 
 #[cfg(feature = "alloc")]
+pub mod analysis3;
 pub mod analysis4;
 #[cfg(feature = "alloc")]
 pub mod breed4;

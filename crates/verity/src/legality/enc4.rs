@@ -35,6 +35,7 @@ pub struct MatchPkm {
     pub met_location: u16,
     pub egg_location: u16,
     pub is_egg: bool,
+    pub fateful: bool,
     pub ball: u8,
     pub ground_tile: u8,
     pub is_shiny: bool,
@@ -60,6 +61,11 @@ pub enum Enc4<'a> {
     Ranger,
     /// A My Pokémon Ranch gift (D only).
     Ranch(&'static RanchGift),
+    /// A Gen 3 bred egg (PKHeX `EncounterEgg3`).
+    Egg3 {
+        species: u16,
+        version: u8,
+    },
 }
 
 impl<'a> Enc4<'a> {
@@ -576,7 +582,7 @@ pub fn wild_slots<'a>(
                 }
                 continue;
             }
-            Enc4::Ranger => continue,
+            Enc4::Ranger | Enc4::Egg3 { .. } => continue,
             Enc4::Ranch(_) => {
                 // Not an IGroundTypeTile or IRandomCorrelation, like the in-game trades.
                 let safari_sport = pk.ball == BALL_SAFARI || pk.ball == BALL_SPORT;

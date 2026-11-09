@@ -97,6 +97,8 @@ pub struct Context4<'a> {
     pub names4: crate::data::Strings<'a>,
     /// PKHeX's Gen 4 event database (`gifts4.bin`); `Gifts4::empty()` disables gifts.
     pub gifts: Gifts4<'a>,
+    /// Gen 3 origin data (`g3_origin.bin`); without it Pal Park Pokémon are not judged.
+    pub g3: Option<super::analysis3::Context3<'a>>,
 }
 
 impl Context4<'_> {
@@ -143,22 +145,22 @@ impl Report<'_> {
         self.invalid.is_empty() && self.moves.iter().all(|m| m.valid())
     }
 
-    fn flag(&mut self, id: CheckId) {
+    pub(super) fn flag(&mut self, id: CheckId) {
         if !self.invalid.contains(&id) {
             self.invalid.push(id);
         }
     }
 }
 
-struct Inputs {
-    pk: Pkm,
-    level: u8,
-    evo: EvoPkm,
-    analyze: AnalyzeInput,
-    matcher: MatchPkm,
+pub(super) struct Inputs {
+    pub(super) pk: Pkm,
+    pub(super) level: u8,
+    pub(super) evo: EvoPkm,
+    pub(super) analyze: AnalyzeInput,
+    pub(super) matcher: MatchPkm,
 }
 
-fn inputs(ctx: &Context4, pk: &Pkm) -> Inputs {
+pub(super) fn inputs(ctx: &Context4, pk: &Pkm) -> Inputs {
     let pi = ctx.hgss.species_form(pk.species(), pk.form());
     let level = pk.level(&pi.base_info());
     let analyze = AnalyzeInput::from_pkm(pk);
@@ -182,6 +184,7 @@ fn inputs(ctx: &Context4, pk: &Pkm) -> Inputs {
             met_location: pk.met_location(),
             egg_location: pk.egg_location(),
             is_egg: pk.is_egg(),
+            fateful: pk.fateful(),
             ball: pk.ball(),
             ground_tile: pk.ground_tile(),
             is_shiny: pk.is_shiny(),
@@ -213,6 +216,10 @@ const EVO_MOVE: [(u16, u16); 7] = [
 ];
 
 /// PKHeX `EvolutionRestrictions.GetSpeciesEvolutionMove` (Gen 4 species).
+pub(super) fn evolution_move_of(species: u16) -> Option<u16> {
+    evolution_move(species)
+}
+
 fn evolution_move(species: u16) -> Option<u16> {
     EVO_MOVE
         .iter()
@@ -256,6 +263,11 @@ fn evolution_valid(
 /// Analyses a PK4 whose origin is D/P/Pt or HG/SS (versions 7, 8, 10..=12) in the Gen 4
 /// format: wild slots, statics, trades, Pokéwalker, hatched eggs and Mystery Gifts.
 pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
+    if super::analysis3::is_gba_version(pk.version()) {
+        if let Some(g3) = &ctx.g3 {
+            return super::analysis3::analyze3(ctx, g3, pk);
+        }
+    }
     let inp = inputs(ctx, pk);
     let ratio = |s: u16| ctx.ratio(s);
     let mut report = Report {
@@ -356,6 +368,7 @@ fn species_of(e: &Enc4) -> u16 {
         Enc4::Gift(g) => g.species(),
         Enc4::Ranger => 490,
         Enc4::Ranch(g) => g.species,
+        Enc4::Egg3 { species, .. } => *species,
     }
 }
 
@@ -366,6 +379,7 @@ fn enc_level_min(e: &Enc4) -> u8 {
         Enc4::Gift(g) => g.pk().met_level(),
         Enc4::Ranger => 1,
         Enc4::Ranch(g) => g.level,
+        Enc4::Egg3 { .. } => 5,
     }
 }
 
@@ -379,6 +393,7 @@ fn enc_moves(e: &Enc4) -> Option<[u16; 4]> {
         }
         Enc4::Ranger => None,
         Enc4::Ranch(g) => Some(g.moves),
+        Enc4::Egg3 { .. } => None,
     }
 }
 
@@ -426,7 +441,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
             partial_chosen = match &e {
                 Enc4::Data(d) => super::enc4::data_is_partial(d, &inp.matcher),
                 Enc4::Gift(g) => gift4::is_partial(&g.pk(), pk),
-                Enc4::Ranger | Enc4::Ranch(_) => false,
+                Enc4::Ranger | Enc4::Ranch(_) | Enc4::Egg3 { .. } => false,
             };
             chosen = Some((e, lead, d));
             break;
@@ -444,6 +459,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
         Enc4::Gift(gift) => Matched::Gift { gift },
         Enc4::Ranger => Matched::RangerManaphy,
         Enc4::Ranch(gift) => Matched::Ranch { gift },
+        Enc4::Egg3 { species, .. } => Matched::Egg { species },
     };
     // EncounterFinder adds EncInvalid when the chosen encounter is only a partial match.
     if partial_chosen {
@@ -463,7 +479,7 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
         Enc4::Data(e) => !pk.is_egg() && e.template().is_some_and(|t| t.egg_location() != 0),
         Enc4::Gift(g) => g.is_egg() && !pk.is_egg(),
         Enc4::Ranger => !pk.is_egg(),
-        Enc4::Ranch(_) => false,
+        Enc4::Ranch(_) | Enc4::Egg3 { .. } => false,
     };
     if hatched_gift {
         verify_hatched4(pk, report);
@@ -663,6 +679,7 @@ fn enc_egg_moves(ctx: &Context4, pk: &Pkm, e: &Enc4) -> [MoveResult; 4] {
         // PGT.Version is Gen4 for the Ranger egg; GetLearnSource maps that to HG/SS.
         Enc4::Ranger => 7,
         Enc4::Ranch(_) => 10,
+        Enc4::Egg3 { version, .. } => *version,
     };
     if version == 0 {
         // PKHeX has no learnset for version Any/Gen4 and leaves the moves unparsed.
@@ -801,11 +818,50 @@ fn static_moves(e: &Encounter) -> Option<[u16; 4]> {
 }
 
 fn verify_common(ctx: &Context4, inp: &Inputs, enc: Option<&Enc4>, report: &mut Report) {
-    verify_common_inner(ctx, inp, enc, None, report);
+    verify_common_inner(ctx, inp, enc, None, None, report);
 }
 
 fn verify_common_egg(ctx: &Context4, inp: &Inputs, egg: u16, report: &mut Report) {
-    verify_common_inner(ctx, inp, None, Some(egg), report);
+    verify_common_inner(ctx, inp, None, Some(egg), None, report);
+}
+
+/// What the verifiers need to know about a Gen 3 origin.
+pub(super) struct Origin3<'h> {
+    pub(super) g3: &'h super::analysis3::Context3<'h>,
+    /// `EvolutionHistory.Gen3` and `.Gen4`.
+    pub(super) gen3: &'h [EvoCriteria],
+    pub(super) gen4: &'h [EvoCriteria],
+}
+
+pub(super) fn verify_common_origin3(
+    ctx: &Context4,
+    inp: &Inputs,
+    enc: Option<&Enc4>,
+    egg: Option<u16>,
+    origin: Option<&Origin3>,
+    report: &mut Report,
+) {
+    verify_common_inner(ctx, inp, enc, egg, origin, report);
+}
+
+/// Moves when no Gen 3 encounter matched (`EncounterInvalid`: the current species, no Gen 3).
+pub(super) fn invalid_moves3(
+    ctx: &Context4,
+    g3: &super::analysis3::Context3,
+    inp: &Inputs,
+) -> [MoveResult; 4] {
+    let pk = &inp.pk;
+    let history = ctx
+        .evo
+        .chain_for_encounter(&inp.evo, pk.species(), pk.met_level());
+    ctx.learn.verify3(
+        &g3.learn,
+        pk.moves(),
+        pk.form(),
+        pk.species(),
+        (&history, &[]),
+        super::moves4::Start3::Wild,
+    )
 }
 
 fn verify_common_inner(
@@ -813,9 +869,11 @@ fn verify_common_inner(
     inp: &Inputs,
     enc: Option<&Enc4>,
     egg: Option<u16>,
+    origin: Option<&Origin3>,
     report: &mut Report,
 ) {
     let pk = &inp.pk;
+    let gen3 = origin.is_some() || super::analysis3::is_gba_version(pk.version());
     let enc_species = egg.unwrap_or_else(|| enc.map_or(pk.species(), species_of));
     // Blob templates (slots, statics, trades) vs Mystery Gifts (template PK4, Ranger Manaphy).
     let data = enc.and_then(|e| e.data());
@@ -856,7 +914,13 @@ fn verify_common_inner(
     if level_done {
     } else if pk.is_egg() {
         let lmin = match (egg, enc) {
-            (Some(_), _) => 1,
+            (Some(_), _) => {
+                if gen3 {
+                    5
+                } else {
+                    1
+                }
+            }
             (None, Some(e)) => enc_level_min(e),
             (None, None) => pk.met_level(),
         };
@@ -886,7 +950,7 @@ fn verify_common_inner(
         if evs.iter().any(|&e| e > 100) {
             // EncounterInvalid uses the current species and met level.
             let (sp, lmin) = match (egg, enc) {
-                (Some(sp), _) => (sp, 1),
+                (Some(sp), _) => (sp, if gen3 { 5 } else { 1 }),
                 (None, Some(e)) => (species_of(e), enc_level_min(e)),
                 (None, None) => (pk.species(), pk.met_level()),
             };
@@ -905,8 +969,25 @@ fn verify_common_inner(
     let species_now = pk.species();
     let [a1, a2, _] = pi.abilities();
     let ab = pk.ability();
+    let pid_ability = |pid: u32| if pid & 1 == 0 { a1 } else { a2 };
     if ab != a1 && ab != a2 {
         report.flag(CheckId::Ability);
+    } else if let Some(o) = origin {
+        verify_ability3(
+            pk,
+            o,
+            data,
+            enc_species,
+            a1,
+            a2,
+            pid_ability(pk.pid()),
+            report,
+        );
+    } else if gen3 {
+        // EncounterInvalid (Gen 3): VerifyAbilityPreCapsule has no history; the PID must match.
+        if ab != pid_ability(pk.pid()) {
+            report.flag(CheckId::Ability);
+        }
     } else if ranger {
         // VerifyAbilityMG: PGT (Ranger Manaphy) accepts either ability slot in Gen 4.
     } else if let Some((g, t)) = gift.as_ref().filter(|(g, _)| g.species() == pk.species()) {
@@ -1028,6 +1109,9 @@ fn verify_common_inner(
             report.flag(CheckId::Form);
         } else {
             match species {
+                201 if gen3 && form != crate::rng::method_h::unown_form3(pk.pid()) => {
+                    report.flag(CheckId::Form)
+                }
                 487 if (form == 1) != (pk.held_item() == 112) => report.flag(CheckId::Form),
                 493 => {
                     const PLATES: [u16; 17] = [
@@ -1073,10 +1157,16 @@ fn verify_common_inner(
     // BallVerifier (wild slot / static)
     if let Some(e) = data {
         let ball = pk.ball();
-        let ok = if e.species() == 290 && pk.species() == 292 {
+        const BALLS3: u64 = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (0x7F << 6);
+        let shedinja = e.species() == 290 && pk.species() == 292;
+        // VerifyEvolvedShedinja: in Gen 3 the ball is copied if it evolved there.
+        let copied3 = origin.is_some_and(|o| e.is_slot() && o.gen3.len() == 2);
+        let ok = if shedinja && !copied3 {
             ball == 4 // Nincada -> Shedinja outside the Bug-Catching Contest: Poké Ball only
         } else if e.ball() != 0 {
             ball == e.ball()
+        } else if gen3 {
+            ball < 64 && BALLS3 & (1u64 << ball) != 0
         } else {
             // BallUseLegality.WildPokeBalls4_DPPt
             const DPPT: u64 = (1 << 1)
@@ -1163,11 +1253,12 @@ fn verify_common_inner(
     // LanguageVerifier (Gen 4 origin: 1..=8, not 6). The Korean/non-Korean save check needs an
     // active trainer, as in PKHeX.
     let lang = pk.language();
-    if lang == 0 || lang == 6 || lang > 8 {
+    if lang == 0 || lang == 6 || lang > if gen3 { 7 } else { 8 } {
         report.flag(CheckId::Language);
     }
 
     let trade = data.filter(|e| super::enc4::is_trade(e));
+    let trade3 = data.filter(|e| e.kind() == Some(crate::data::encounters::EncounterKind::Trade3));
     // TrainerNameVerifier (player OT; skipped for fixed-trainer trades, checked below)
     let mut ot = [0u16; 8];
     let on = crate::text::decode4(&pk.ot_name_raw(), &mut ot);
@@ -1175,8 +1266,8 @@ fn verify_common_inner(
     // IsPlayerOriginalTrainer: not for fixed-trainer trades or any gift (MysteryGift has a
     // trainer ID of its own, so `ITrainerID16ReadOnly` excludes gift eggs too).
     let gift_ot = event;
-    if trade.is_none() && !gift_ot && ranch.is_none() {
-        let too_many_digits = on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
+    if trade.is_none() && trade3.is_none() && !gift_ot && ranch.is_none() {
+        let too_many_digits = !gen3 && on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
         if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
             report.flag(CheckId::Trainer);
         }
@@ -1205,6 +1296,15 @@ fn verify_common_inner(
         }
     }
 
+    // TrainerIDVerifier.VerifyTrainerID_RS: R/S IDs come from a seed; hatched eggs only Fishy.
+    if matches!(pk.version(), 1 | 2)
+        && trade3.is_none()
+        && (egg.is_none() || pk.is_egg())
+        && !trainer_id_seed_exists(pk.tid(), pk.sid())
+    {
+        report.flag(CheckId::Trainer);
+    }
+
     // NicknameVerifier: a gift that came un-nicknamed cannot be nicknamed.
     if let Some((g, t)) = &gift {
         if !g.is_egg() && pk.is_nicknamed() && !t.is_nicknamed() {
@@ -1225,19 +1325,26 @@ fn verify_common_inner(
         species: pk.species(),
         form: pk.form(),
         spiky_static: data.is_some_and(|e| !e.is_slot() && e.species() == PICHU && e.form() == 1),
+        gen3: origin.map(|o| super::ribbons4::Gen3Ribbons {
+            species: o.gen3.first().map_or(0, |e| e.species),
+            encounter_level: enc.map_or(5, enc_level_min),
+        }),
+        gen3_origin: gen3,
     };
     if super::ribbons4::ribbons_invalid(&ribbon_args) {
         report.flag(CheckId::Ribbon);
     }
 
     // NicknameVerifier (Gen 4 format)
-    if let Some(t) = trade {
+    if let (Some(t), Some(o)) = (trade3, origin) {
+        verify_trade3(o, pk, t, ot, report);
+    } else if let Some(t) = trade {
         verify_trade4(ctx, pk, t, ot, report);
     } else {
         if ranch.is_some() && !ranch4::trainer_matches(pk.language(), ot) {
             report.flag(CheckId::Trainer);
         }
-        verify_nickname(ctx, pk, enc_species, report);
+        verify_nickname(ctx, pk, enc_species, gen3, report);
     }
 
     // GenderVerifier
@@ -1267,6 +1374,112 @@ fn verify_common_inner(
         };
         if !ok {
             report.flag(CheckId::Gender);
+        }
+    }
+}
+
+/// `MethodH.TryGetSeedTrainerID`.
+fn trainer_id_seed_exists(tid: u16, sid: u16) -> bool {
+    let mut out = [0u32; crate::rng::reversal::MAX_SEEDS_PID];
+    crate::rng::reversal::seeds(&mut out, (sid as u32) << 16, (tid as u32) << 16) != 0
+}
+
+/// `AbilityVerifier.VerifyAbility345` for a Gen 3 origin in the Gen 4 format.
+#[allow(clippy::too_many_arguments)]
+fn verify_ability3(
+    pk: &Pkm,
+    o: &Origin3,
+    data: Option<&Encounter>,
+    enc_species: u16,
+    a1: u8,
+    a2: u8,
+    from_pid: u8,
+    report: &mut Report,
+) {
+    let ability = pk.ability();
+    let index = if ability == a1 { 0 } else { 1 };
+    let bit = (pk.pid() & 1) as u8;
+    let mut must_match = true;
+    if a1 != a2 {
+        must_match = gen3_must_match(pk, o, a2, report);
+    }
+    // A fixed-ability trade (AbilityPermission.OnlyFirst/OnlySecond).
+    let fixed = data.map(|e| e.ability()).filter(|a| matches!(a, 1 | 2));
+    let ok = match fixed {
+        Some(a) => {
+            let single = a - 1;
+            if enc_species != pk.species() && must_match {
+                index == single || from_pid == ability
+            } else if index == single || bit == single {
+                true
+            } else if !must_match {
+                from_pid == ability
+            } else {
+                false
+            }
+        }
+        None => !must_match || from_pid == ability,
+    };
+    if !ok {
+        report.flag(CheckId::Ability);
+    }
+}
+
+/// `AbilityVerifier.VerifyAbilityPreCapsule` / `VerifyAbilityGen3Transfer`.
+fn gen3_must_match(pk: &Pkm, o: &Origin3, a2: u8, report: &mut Report) -> bool {
+    if pk.species() > 386 {
+        return true;
+    }
+    let Some(top) = o.gen3.first() else {
+        return true;
+    };
+    let [e1, e2, _] = o.g3.learn.data.personal(top.species as usize).abilities();
+    if e1 != e2 {
+        return true;
+    }
+    if pk.species() != top.species {
+        return true;
+    }
+    let ability = pk.ability();
+    if o.gen4.len() > 1 {
+        if ability == e1 {
+            return false;
+        }
+        if ability == a2 {
+            return true;
+        }
+    }
+    if ability != e1 {
+        report.flag(CheckId::Ability);
+    }
+    false
+}
+
+/// `NicknameVerifier`'s fixed-trainer check for a Gen 3 trade (names are exported already
+/// converted to Gen 4 glyphs, as `EncounterTrade3.IsTrainerMatch` converts them).
+fn verify_trade3(o: &Origin3, pk: &Pkm, e: &Encounter, ot: &[u16], report: &mut Report) {
+    let mut nbuf = [0u16; 11];
+    let nn = crate::text::decode4(&pk.nickname_raw(), &mut nbuf);
+    let nick = &nbuf[..nn];
+    let mut lang = pk.language();
+    if e.species() == 124 && pk.version() == 5 && lang == 5 {
+        lang = 2;
+    }
+    let eq = |a: &[u16], b: crate::data::blob::U16s| {
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| *x == y)
+    };
+    match o.g3.enc.trade_names(e, lang) {
+        Some((n, t)) => {
+            if !eq(ot, t) {
+                report.flag(CheckId::Trainer);
+            }
+            if !eq(nick, n) {
+                report.flag(CheckId::Nickname);
+            }
+        }
+        None => {
+            report.flag(CheckId::Trainer);
+            report.flag(CheckId::Nickname);
         }
     }
 }
@@ -1390,7 +1603,7 @@ fn verify_trade4(ctx: &Context4, pk: &Pkm, e: &Encounter, ot: &[u16], report: &m
     }
 }
 
-fn verify_nickname(ctx: &Context4, pk: &Pkm, enc_species: u16, report: &mut Report) {
+fn verify_nickname(ctx: &Context4, pk: &Pkm, enc_species: u16, gen3: bool, report: &mut Report) {
     let mut buf = [0u16; 11];
     let n = crate::text::decode4(&pk.nickname_raw(), &mut buf);
     let nick = &buf[..n];
@@ -1427,7 +1640,7 @@ fn verify_nickname(ctx: &Context4, pk: &Pkm, enc_species: u16, report: &mut Repo
             return;
         }
         // Word filter not applied (docs/discrepancies.md); digit count is.
-        if n > 4 && nick.iter().filter(|&&c| is_number(c)).count() > 4 {
+        if !gen3 && n > 4 && nick.iter().filter(|&&c| is_number(c)).count() > 4 {
             report.flag(CheckId::Nickname);
         }
         return;

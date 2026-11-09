@@ -39,6 +39,30 @@ pub struct RibbonArgs {
     pub form: u8,
     /// The encounter is the spiky-eared Pichu static (`EncounterStatic4 { Pichu, Form 1 }`).
     pub spiky_static: bool,
+    /// A Gen 3 origin (`EvolutionHistory.HasVisitedGen3`).
+    pub gen3: Option<Gen3Ribbons>,
+    /// The encounter is from Gen 3 (`enc.Generation`), matched or not.
+    pub gen3_origin: bool,
+}
+
+/// What the Gen 3 ribbons depend on.
+#[derive(Clone, Copy)]
+pub struct Gen3Ribbons {
+    /// `evos.Gen3[0].Species`.
+    pub species: u16,
+    /// `enc.LevelMin`.
+    pub encounter_level: u8,
+}
+
+/// `AddMissingContest3`: a rank needs every rank below it.
+fn contest3_ranks_valid(hoenn: [u8; 3]) -> bool {
+    let bits = hoenn[0] as u32 | (hoenn[1] as u32) << 8 | (hoenn[2] as u32) << 16;
+    (0..5).all(|i| {
+        matches!(
+            (bits >> (i * 4)) & 0xF,
+            0b0000 | 0b0001 | 0b0011 | 0b0111 | 0b1111
+        )
+    })
 }
 
 /// True when any ribbon is invalid or missing (PKHeX `RibbonVerifier` adds an Invalid line).
@@ -58,16 +82,36 @@ pub fn ribbons_invalid(a: &RibbonArgs) -> bool {
             || a.contest4[2] & 0x0F != 0;
     }
     // Event3 + Event4: as the encounter had them (Earth and National included: never for Gen 4).
-    if event != a.event {
+    // Earth can be earned on Colosseum/XD Pokémon, so a Gen 3 origin may carry it.
+    let earth = if a.gen3_origin { !0x40 } else { 0xFF };
+    if event[0] != a.event[0] || event[1] != a.event[1] || event[2] & earth != a.event[2] & earth {
         return true;
     }
-    // Unique3 (not visited Gen 3): no Winning/Victory. Common3: no Champion G3/Artist; Effort
-    // needs Gen 4. Unique4: no Hoenn contest ribbons.
-    if a.hoenn[0] != 0 || a.hoenn[1] != 0 || a.hoenn[2] != 0 {
-        return true;
-    }
-    if a.hoenn[3] & 0x01 != 0 && !a.gen4 {
-        return true;
+    match a.gen3 {
+        Some(g) => {
+            // Unique3: Winning needs a Frontier-allowed species below level 50 at some point,
+            // Victory a Frontier-allowed species. Contest ribbons: each rank needs those below.
+            let frontier = !FRONTIER_BANNED.contains(&g.species);
+            if a.hoenn[2] & 0x20 != 0 && !(frontier && g.encounter_level <= 50) {
+                return true;
+            }
+            if a.hoenn[2] & 0x40 != 0 && !frontier {
+                return true;
+            }
+            if !contest3_ranks_valid([a.hoenn[0], a.hoenn[1], a.hoenn[2] & 0x0F]) {
+                return true;
+            }
+        }
+        None => {
+            // Unique3 (not visited Gen 3): no Winning/Victory. Common3: no Champion G3/Artist;
+            // Effort needs Gen 4. Unique4: no Hoenn contest ribbons.
+            if a.hoenn[0] != 0 || a.hoenn[1] != 0 || a.hoenn[2] != 0 {
+                return true;
+            }
+            if a.hoenn[3] & 0x01 != 0 && !a.gen4 {
+                return true;
+            }
+        }
     }
     // Unique4: Battle Frontier ability ribbons.
     let frontier =

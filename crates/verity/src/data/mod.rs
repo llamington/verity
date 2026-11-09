@@ -16,6 +16,11 @@ pub mod game_table {
     pub const HELD_ITEMS: u16 = 5;
     pub const MAX_SPECIES: u16 = 6;
     pub const EVOLUTIONS: u16 = 7;
+    /// Gen 3 origin blob only: level-up moves of the other games, and the encounter blob.
+    pub const LEVELUP_RS: u16 = 8;
+    pub const LEVELUP_FR: u16 = 9;
+    pub const LEVELUP_LG: u16 = 10;
+    pub const ENCOUNTERS: u16 = 11;
 }
 
 /// Table ids in a [`BlobKind::Moves`] blob.
@@ -234,6 +239,21 @@ impl<'a> GameData<'a> {
             .0
             .iter()
             .map(|c| (c[2], u16::from_le_bytes([c[0], c[1]])))
+    }
+
+    /// Level-up moves from one of the Gen 3 per-game tables ([`game_table::LEVELUP_RS`] etc.).
+    pub fn levelup_from(&self, id: u16, index: usize) -> impl Iterator<Item = (u8, u16)> + 'a {
+        Indexed(self.blob.bytes(id))
+            .get(index)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| (c[2], u16::from_le_bytes([c[0], c[1]])))
+    }
+
+    /// Bytes of a table in this blob.
+    pub fn raw_table(&self, id: u16) -> &'a [u8] {
+        self.blob.bytes(id)
     }
 
     pub fn egg_moves(&self, index: usize) -> U16s<'a> {
