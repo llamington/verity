@@ -494,6 +494,10 @@ fn build_legal_egg3(n: usize, dir: &Path, seed: u64) {
     build_origin3("egg", n, dir, seed);
 }
 
+fn build_legal_gift3(n: usize, dir: &Path, seed: u64) {
+    build_origin3("gift", n, dir, seed);
+}
+
 fn check_origin3(build: fn(usize, &Path, u64), n: usize, seed: u64, muts: u32) {
     if !root().join("data/blobs/g3_origin.bin").exists() {
         eprintln!("skipping: build data blobs first");
@@ -522,6 +526,11 @@ fn p5_parity_fuzz_trade3() {
 }
 
 #[test]
+fn p5_parity_fuzz_gift3() {
+    check_origin3(build_legal_gift3, 300, 341, 3);
+}
+
+#[test]
 fn p5_parity_fuzz_egg3() {
     check_origin3(build_legal_egg3, 300, 331, 3);
 }
@@ -533,6 +542,7 @@ fn p5_parity_origin3_1e4() {
         (build_legal_slot3 as fn(usize, &Path, u64), 3001),
         (build_legal_static3, 3002),
         (build_legal_egg3, 3004),
+        (build_legal_gift3, 3005),
     ] {
         check_origin3(b, 10_000, seed, 4);
     }
@@ -799,6 +809,10 @@ fn p5_parity_corpus() {
                         | "EncounterStatic3"
                         | "EncounterTrade3"
                         | "EncounterEgg3"
+                        | "EncounterGift3"
+                        | "EncounterGift3NY"
+                        | "EncounterGift3JPN"
+                        | "EncounterGift3Colo"
                         | "PCD"
                         | "PGT"
                 )

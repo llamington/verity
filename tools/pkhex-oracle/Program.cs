@@ -842,6 +842,8 @@ public static class Program
     private static System.Collections.Generic.Dictionary<string, object?> Describe(object o)
     {
         var d = new System.Collections.Generic.Dictionary<string, object?> { ["kind"] = o.GetType().Name };
+        if (o is EncounterGift3 g3)
+            d["VersionMask"] = Enumerable.Range(1, 5).Sum(v => g3.Version.Contains((GameVersion)v) ? 1 << (v - 1) : 0);
         foreach (var p in o.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (p.GetIndexParameters().Length != 0 || p.Name is "Parent" or "EqualityContract" or "Name" or "LongName")
@@ -881,7 +883,7 @@ public static class Program
         var asm = typeof(EntityFormat).Assembly;
         const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
         var summary = new System.Collections.Generic.Dictionary<string, object>();
-        foreach (var cls in new[] { "Encounters3RSE", "Encounters3FRLG", "Encounters4DPPt", "Encounters4HGSS", "Encounters5BW", "Encounters5B2W2", "Encounters5DR" })
+        foreach (var cls in new[] { "Encounters3RSE", "Encounters3FRLG", "EncountersWC3", "Encounters4DPPt", "Encounters4HGSS", "Encounters5BW", "Encounters5B2W2", "Encounters5DR" })
         {
             var t = asm.GetType("PKHeX.Core." + cls) ?? throw new InvalidOperationException(cls);
             var groups = new System.Collections.Generic.Dictionary<string, object>();
@@ -889,6 +891,8 @@ public static class Program
             {
                 if (f.GetValue(null) is not Array arr || arr.Length == 0)
                     continue;
+                if (cls == "EncountersWC3" && f.Name is not ("Encounter_WC3" or "PCNY" or "PCJP"))
+                    continue; // the rest are the parts Encounter_WC3 is built from
                 var et = arr.GetType().GetElementType()!;
                 if (typeof(IEncounterArea<IEncounterable>).IsAssignableFrom(et) || et.GetProperty("Slots") is { } slotsProp && et.GetInterfaces().Any(i => i.Name.StartsWith("IEncounterArea")))
                 {
@@ -1123,6 +1127,9 @@ public static class Program
         IEncounterConvertible[] Slots(EncounterArea3[] areas) => areas.SelectMany(a => a.Slots).Cast<IEncounterConvertible>().ToArray();
         IEncounterConvertible[] Eggs(GameVersion v) => Enumerable.Range(1, 386).Where(sp => Breeding.CanHatchAsEgg((ushort)sp) && EvolutionTree.Evolves3.GetBaseSpeciesForm((ushort)sp, 0).Item1 == sp)
             .Select(sp => (IEncounterConvertible)new EncounterEgg3((ushort)sp, v)).ToArray();
+        IEncounterConvertible[] Gifts() => Field<EncounterGift3>("EncountersWC3", "Encounter_WC3").Cast<IEncounterConvertible>()
+            .Concat(Field<EncounterGift3NY>("EncountersWC3", "PCNY")).Concat(Field<EncounterGift3JPN>("EncountersWC3", "PCJP"))
+            .Concat(Field<EncounterGift3Colo>("Encounters3RSE", "ColoGiftsR")).Concat(Field<EncounterGift3Colo>("Encounters3RSE", "ColoGiftsS")).ToArray();
         string mode = args.Length > 4 ? args[4] : "slot";
         (GameVersion V, IEncounterConvertible[] Slots) Game(GameVersion v, string rse, string frlg)
         {
@@ -1136,6 +1143,7 @@ public static class Program
                     ? Trade(cls, v == GameVersion.E ? new[] { "TradeGift_E" } : new[] { "TradeGift_RS", "TradeGift_E" })
                     : Trade(cls, frlg, "TradeGift_FRLG"),
                 "egg" => Eggs(v),
+                "gift" => Gifts(),
                 _ => Slots(Get(cls, "Slots" + v)),
             });
         }
@@ -1155,7 +1163,9 @@ public static class Program
             tr.Language = languages[rng.Next(languages.Length)];
             tr.TID16 = (ushort)rng.Next(65536);
             tr.SID16 = (ushort)rng.Next(65536);
-            var pk3 = (PK3)slot.ConvertToPKM(tr);
+            var made3 = slot.ConvertToPKM(tr);
+            if (!made3.Valid) continue;
+            var pk3 = made3 is CK3 ck ? ck.ConvertToPK3() : (PK3)made3;
             pk3.CurrentLevel = (byte)Math.Min(100, Math.Max(pk3.MetLevel, (byte)5) + rng.Next(3) * rng.Next(20));
             var pk = pk3.ConvertToPK4();
             pk.RefreshChecksum();

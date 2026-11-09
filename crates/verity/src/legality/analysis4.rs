@@ -877,6 +877,17 @@ fn verify_common_inner(
     let enc_species = egg.unwrap_or_else(|| enc.map_or(pk.species(), species_of));
     // Blob templates (slots, statics, trades) vs Mystery Gifts (template PK4, Ranger Manaphy).
     let data = enc.and_then(|e| e.data());
+    let gift3 = data.filter(|e| {
+        matches!(
+            e.kind(),
+            Some(
+                crate::data::encounters::EncounterKind::Gift3
+                    | crate::data::encounters::EncounterKind::Gift3NY
+                    | crate::data::encounters::EncounterKind::Gift3JPN
+                    | crate::data::encounters::EncounterKind::Gift3Colo
+            )
+        )
+    });
     let gift = match enc {
         Some(Enc4::Gift(g)) => Some((*g, g.pk())),
         _ => None,
@@ -1036,8 +1047,20 @@ fn verify_common_inner(
             report.flag(CheckId::GameOrigin);
         }
     }
-    if pk.fateful() != fateful_expected {
+    // VerifyMiscFatefulEncounter: a Gen 3 gift egg may have hatched in either game.
+    let gift3_egg = gift3.is_some_and(|e| {
+        e.has(crate::data::encounters::flag::FATEFUL) && e.has(crate::data::encounters::flag::EGG)
+    });
+    if !gift3_egg && pk.fateful() != fateful_expected {
         report.flag(CheckId::Fateful);
+    }
+    // VerifyGift3Shiny.
+    if let Some(e) = gift3.filter(|_| !gift3_egg) {
+        if e.kind() == Some(crate::data::encounters::EncounterKind::Gift3)
+            && !shiny_valid(e.shiny(), pk.is_shiny())
+        {
+            report.flag(CheckId::Fateful);
+        }
     }
     if let Some((g, t)) = &gift {
         // PIDVerifier: Shiny rule, then the fixed PID.
@@ -1062,8 +1085,8 @@ fn verify_common_inner(
                 report.flag(CheckId::Nature);
             }
         }
-        // Shiny.Never.
-        if e.shiny() == 1 && pk.is_shiny() {
+        // PIDVerifier.VerifyShiny.
+        if !shiny_valid(e.shiny(), pk.is_shiny()) {
             report.flag(CheckId::Shiny);
         }
     }
@@ -1259,6 +1282,8 @@ fn verify_common_inner(
 
     let trade = data.filter(|e| super::enc4::is_trade(e));
     let trade3 = data.filter(|e| e.kind() == Some(crate::data::encounters::EncounterKind::Trade3));
+    let fixed_trainer3 = trade3.is_some()
+        || gift3.is_some_and(|e| e.has(crate::data::encounters::flag::FIXED_TRAINER));
     // TrainerNameVerifier (player OT; skipped for fixed-trainer trades, checked below)
     let mut ot = [0u16; 8];
     let on = crate::text::decode4(&pk.ot_name_raw(), &mut ot);
@@ -1266,7 +1291,7 @@ fn verify_common_inner(
     // IsPlayerOriginalTrainer: not for fixed-trainer trades or any gift (MysteryGift has a
     // trainer ID of its own, so `ITrainerID16ReadOnly` excludes gift eggs too).
     let gift_ot = event;
-    if trade.is_none() && trade3.is_none() && !gift_ot && ranch.is_none() {
+    if trade.is_none() && !fixed_trainer3 && !gift_ot && ranch.is_none() {
         let too_many_digits = !gen3 && on > 4 && ot.iter().filter(|&&c| is_number(c)).count() > 4;
         if on == 0 || ot.contains(&0xFFFF) || too_many_digits {
             report.flag(CheckId::Trainer);
@@ -1298,7 +1323,7 @@ fn verify_common_inner(
 
     // TrainerIDVerifier.VerifyTrainerID_RS: R/S IDs come from a seed; hatched eggs only Fishy.
     if matches!(pk.version(), 1 | 2)
-        && trade3.is_none()
+        && !fixed_trainer3
         && (egg.is_none() || pk.is_egg())
         && !trainer_id_seed_exists(pk.tid(), pk.sid())
     {
@@ -1320,7 +1345,14 @@ fn verify_common_inner(
         hoenn: [raw[0x3C], raw[0x3D], raw[0x3E], raw[0x3F]],
         contest4: [raw[0x60], raw[0x61], raw[0x62]],
         is_egg: pk.is_egg(),
-        event: gift.as_ref().map_or([0; 3], |(_, t)| t.event_ribbons4()),
+        event: gift.as_ref().map_or_else(
+            || {
+                let national =
+                    gift3.is_some_and(|e| e.has(crate::data::encounters::flag::RIBBON_NATIONAL));
+                [0, 0, if national { 0x20 } else { 0 }]
+            },
+            |(_, t)| t.event_ribbons4(),
+        ),
         gen4: !ctx.evo.encounter_origin_chain(&inp.evo).is_empty(),
         species: pk.species(),
         form: pk.form(),
@@ -1375,6 +1407,15 @@ fn verify_common_inner(
         if !ok {
             report.flag(CheckId::Gender);
         }
+    }
+}
+
+/// PKHeX `Shiny.IsValid` for the values Gen 3 and Gen 4 templates use.
+fn shiny_valid(shiny: u8, is_shiny: bool) -> bool {
+    match shiny {
+        1 => !is_shiny,
+        2 => is_shiny,
+        _ => true,
     }
 }
 

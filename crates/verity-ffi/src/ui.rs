@@ -477,12 +477,6 @@ pub(crate) mod legal {
             return;
         }
         let r = analyze4(ctx, pk);
-        // Gen 3 event gifts aren't modelled yet, so a Gen 3 origin that fails might be one of
-        // those: only a pass is a verdict.
-        if gba && !r.valid() {
-            out.unsupported = 2;
-            return;
-        }
         // Only wild slots are modelled; without a slot match the origin is something verity
         // cannot judge yet, so it says nothing rather than a false "illegal".
         if matches!(r.matched, Matched::Invalid) {

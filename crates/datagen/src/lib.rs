@@ -365,6 +365,12 @@ pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
             flags |= flag::CORONET_FEEBAS;
         }
     }
+    if truthy(t, "RibbonNational") {
+        flags |= flag::RIBBON_NATIONAL;
+    }
+    if truthy(t, "IsJapaneseBonusDisk") {
+        flags |= flag::JAPANESE_BONUS_DISK;
+    }
     put16(&mut r, 18, flags as i64);
     for (i, k) in ["Move1", "Move2", "Move3", "Move4"].iter().enumerate() {
         put16(&mut r, 20 + 2 * i, num(&t["Moves"], k, 0));
@@ -373,7 +379,7 @@ pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
     put32(&mut r, 32, num(t, "PID", 0));
     put16(&mut r, 36, num(t, "TID16", 0));
     put16(&mut r, 38, num(t, "SID16", 0));
-    r[40] = num(t, "OTGender", 0) as u8;
+    r[40] = num(t, "OTGender", num(t, "OriginalTrainerGender", 0)) as u8;
     r[41] = num(t, "MetLevel", 0) as u8;
     put16(&mut r, 42, num(t, "MetLocation", 0));
     for (i, k) in ["HP", "ATK", "DEF", "SPE", "SPA", "SPD"].iter().enumerate() {
@@ -400,6 +406,18 @@ pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
     r[61] = num(t, "StaticCount", 0) as u8;
     r[62] = num(t, "Type", 0) as u8;
     r[63] = num(t, "AreaRate", 0) as u8;
+    if matches!(
+        kind,
+        EncounterKind::Gift3
+            | EncounterKind::Gift3NY
+            | EncounterKind::Gift3JPN
+            | EncounterKind::Gift3Colo
+    ) {
+        r[58] = num(t, "Language", 0) as u8;
+        r[59] = num(t, "Distribution", 0) as u8;
+        r[66] = num(t, "VersionMask", 0) as u8;
+        r[67] = num(t, "Method", 0) as u8;
+    }
     put16(&mut r, 64, area.map_or(NO_AREA as i64, |(i, _)| i as i64));
     r
 }
@@ -538,9 +556,18 @@ pub fn build_encounters(j: &Value) -> Vec<u8> {
 /// Per language: nickname then OT name, each as a u8 length (UTF-16 units) and UTF-16 LE.
 /// Empty for templates without fixed trade names.
 fn encode_trade_names(t: &Value) -> Vec<u8> {
-    let (Some(nick), Some(ot)) = (t["Nicknames"].as_array(), t["TrainerNames"].as_array()) else {
+    if let Some(name) = t["OriginalTrainerName"].as_str() {
+        // Gen 3 event gift: the OT in language slot 0, no nickname.
+        let s: Vec<u16> = name.encode_utf16().collect();
+        let mut out = vec![0u8, s.len() as u8];
+        out.extend(s.iter().flat_map(|u| u.to_le_bytes()));
+        return out;
+    }
+    let Some(ot) = t["TrainerNames"].as_array() else {
         return Vec::new();
     };
+    let empty = Vec::new();
+    let nick = t["Nicknames"].as_array().unwrap_or(&empty);
     let mut out = Vec::new();
     for i in 0..nick.len().max(ot.len()) {
         for list in [nick, ot] {
@@ -682,8 +709,12 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     let frlg = load(&exports.join("enc_Encounters3FRLG.json"));
     let groups = enc3.as_object_mut().unwrap();
     groups.extend(frlg.as_object().unwrap().clone());
-    // Colosseum bonus-disc gifts belong with the Wonder Card events, not this table.
-    groups.retain(|name, _| !name.starts_with("ColoGifts"));
+    groups.extend(
+        load(&exports.join("enc_EncountersWC3.json"))
+            .as_object()
+            .unwrap()
+            .clone(),
+    );
     put(
         "g3_origin.bin".into(),
         build_g3_origin(

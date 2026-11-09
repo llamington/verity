@@ -19,7 +19,7 @@ use crate::data::encounters::{Encounter, EncounterData, EncounterKind};
 use crate::data::game_table as gt;
 use crate::data::GameData;
 use crate::pkm::Pkm;
-use crate::rng::finder::{analyze, PidType};
+use crate::rng::finder::{analyze, PidIv, PidType};
 use crate::rng::method_h::{self, Bounds, Slot3};
 use crate::rng::method_j::LeadSeed;
 
@@ -97,6 +97,13 @@ impl<'a> Search<'a, '_> {
                 self.deferred = Some(Enc4::Data(e));
             }
         }
+    }
+}
+
+fn colo_rating(e: &Encounter, pk: &Pkm) -> Rating {
+    match e.template() {
+        Some(t) if super::gift3::colo_partial(&t, pk) => Rating::PartialMatch,
+        _ => Rating::Match,
     }
 }
 
@@ -186,8 +193,26 @@ enum TypeCheck {
     Mismatch,
 }
 
-fn type_check(e: &Enc4, pk: &Pkm, kind: PidType) -> TypeCheck {
+fn type_check(e: &Enc4, pk: &Pkm, pv: PidIv, mutated: &mut Option<PidType>) -> TypeCheck {
     use PidType::*;
+    let kind = pv.kind;
+    if let Enc4::Data(d) = e {
+        if matches!(
+            d.kind(),
+            Some(
+                EncounterKind::Gift3
+                    | EncounterKind::Gift3NY
+                    | EncounterKind::Gift3JPN
+                    | EncounterKind::Gift3Colo
+            )
+        ) {
+            return if super::gift3::compatible(d, pk, pv, mutated) {
+                TypeCheck::Match
+            } else {
+                TypeCheck::Mismatch
+            };
+        }
+    }
     let yes = |b: bool| {
         if b {
             TypeCheck::Match
@@ -307,6 +332,16 @@ fn enumerate<'a>(g3: &Context3<'a>, inp: &Inputs, chain: &[EvoCriteria]) -> Vec<
         return s.out;
     }
     let ed = &g3.enc;
+    // EncounterEnumerator3 Event states.
+    let gift = |e: &Encounter<'a>, evo: &EvoCriteria| super::gift3::is_match_exact(ed, e, pk, evo);
+    s.scan(ed.group(b"ColoGiftsR"), gift, |e| colo_rating(e, pk));
+    s.scan(ed.group(b"ColoGiftsS"), gift, |e| colo_rating(e, pk));
+    s.scan(ed.group(b"Encounter_WC3"), gift, |_| Rating::Match);
+    if super::gift3::pcny_language(pk.language()) {
+        s.scan(ed.group(b"PCNY"), gift, |_| Rating::Match);
+    } else if super::gift3::pcjp_language(pk.language()) {
+        s.scan(ed.group(b"PCJP"), gift, |_| Rating::Match);
+    }
     let trade_groups: &[&[u8]] = match version {
         VERSION_E => &[b"TradeGift_E"],
         VERSION_FR => &[b"TradeGift_FR", b"TradeGift_FRLG"],
@@ -394,8 +429,9 @@ pub fn analyze3<'a>(ctx: &'a Context4<'a>, g3: &'a Context3<'a>, pk: &Pkm) -> Re
             | PidType::Method3Unown
             | PidType::Method4Unown
     );
+    let mut mutated = None;
     for (e, partial) in enumerate(g3, &inp, &chain) {
-        match type_check(&e, pk, pidiv.kind) {
+        match type_check(&e, pk, pidiv, &mut mutated) {
             TypeCheck::Mismatch => {
                 defer_update(&mut defer, Deferral::PidIv, e);
                 continue;
@@ -478,12 +514,16 @@ struct Candidate<'a> {
     deferral: Option<Deferral>,
 }
 
-fn is_partial(e: &Enc4, pk: &MatchPkm) -> bool {
+fn is_partial(e: &Enc4, inp: &Inputs) -> bool {
+    let pk = &inp.matcher;
     match e {
         Enc4::Data(d) if d.is_slot() => slot_rating(d, pk) != Rating::Match,
         Enc4::Data(d) if d.kind() == Some(EncounterKind::Static3) => {
             static_rating(d, pk) != Rating::Match
         }
+        Enc4::Data(d) if d.kind() == Some(EncounterKind::Gift3Colo) => d
+            .template()
+            .is_some_and(|t| super::gift3::colo_partial(&t, &inp.pk)),
         _ => false,
     }
 }
@@ -574,6 +614,13 @@ fn egg_transfer_ok(pk: &Pkm) -> bool {
 fn encounter_ok(pk: &Pkm, e: &Enc4) -> bool {
     match e {
         Enc4::Egg3 { .. } => egg_transfer_ok(pk),
+        Enc4::Data(d)
+            if d.kind() == Some(EncounterKind::Gift3)
+                && d.has(crate::data::encounters::flag::EGG)
+                && !pk.is_egg() =>
+        {
+            egg_transfer_ok(pk)
+        }
         Enc4::Data(d) if d.kind() == Some(EncounterKind::Static3) => {
             let japanese = pk.language() == 1;
             !((d.species() == 151 && !japanese)
@@ -614,7 +661,7 @@ fn choose3<'a>(
         if !ev && !last {
             continue;
         }
-        if is_partial(&c.encounter, &inp.matcher) && !last {
+        if is_partial(&c.encounter, inp) && !last {
             continue;
         }
         report.moves = moves;
@@ -645,7 +692,7 @@ fn choose3<'a>(
         Enc4::Egg3 { species, .. } => report.matched = Matched::Egg { species },
         _ => {}
     }
-    if is_partial(&c.encounter, &inp.matcher) {
+    if is_partial(&c.encounter, inp) {
         report.flag(CheckId::Encounter);
     }
     // A Gen 3 frame mismatch is only Fishy in PKHeX (`RNGFrameNotFound3`), so it isn't flagged.
