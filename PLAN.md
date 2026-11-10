@@ -531,6 +531,21 @@ It sets a random seed `(rand16 << 16)`. BW_tool's own notes say this unlocks all
 - Mystery gift collection runs (P8) and Memory Link runs (P10).
 - Run nightly when ROMs are available locally. Store the results in `corpus/reports/`.
 
+### P12 — Web version (proposed, user decision 2026-11-10)
+
+A browser build of the core, after the DS loads its font and graphics from the user's ROM.
+
+- **WASM holds code only.** Per-game data blobs are separate files, fetched for the open save's game
+  only, served Brotli-compressed and kept in the browser cache.
+- **Text** uses the browser's fonts, with Noto Sans JP/KR loaded only when a name needs them, so the
+  web version needs no ROM for Japanese or Korean.
+- **Sprites** load at runtime from a third-party host, never bundled, proxied or re-hosted by verity.
+  The URL template is configurable and pinned to a commit; the default is the PokeAPI sprites
+  repository (`sprites/pokemon/versions/generation-iv/{diamond-pearl,platinum,heartgold-soulsilver}`
+  and `generation-v/black-white`) through a CDN. If a sprite fails to load, show the species name and
+  a generic icon.
+- **Risk:** sprites depend on that host staying up and on its copy of Nintendo's art.
+
 ---
 
 ## 9. Local configuration
