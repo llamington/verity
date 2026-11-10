@@ -66,6 +66,18 @@ byte of the word at `0x21204`.
 The 8 flashbacks unlock on flag bits 8, 13, 0, 15, 12 and 0, then "musical player linked", then flag
 bit 0. BW_tool's "8 flashback flags" at `+0x8D` are flag bits 8–15, not the 8 flashbacks.
 
+## Refusals
+
+verity links what the game links, including a save without event flag 2400: the game skips the Hall
+of Fame part and the flashbacks that need that flag stay locked. It refuses:
+
+- a source that isn't a valid Black or White save, or a target that isn't a valid B2W2 save
+- corrupt gift or key blocks, which the game would silently clear
+- overwriting another player's data, unless `replace` is set (the game asks)
+
+Only finished saves with this one flag cleared were tested, not saves that are really early in the
+story. The download program on the BW console can report its own errors, and its code wasn't found.
+
 ## Not done
 
 - The Key System (R5). `+0x0C` is preserved or initialised, never edited.
