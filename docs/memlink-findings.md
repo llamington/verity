@@ -78,6 +78,23 @@ of Fame part and the flashbacks that need that flag stay locked. It refuses:
 Only finished saves with this one flag cleared were tested, not saves that are really early in the
 story. The download program on the BW console can report its own errors, and its code wasn't found.
 
+### What the game does with corrupt blocks
+
+Tested by flipping one byte in the keys block and in both gift copies of a linked save, then booting
+retail Black 2 in the harness. After A on the title screen, it shows these on a blue screen, one per A
+press, with no choice offered, before the normal menu:
+
+> Your Mystery Gift data has been erased.
+
+> Your Key System and Memory Link data has been erased.
+
+The save was still byte-identical after the menu and Continue, so at that point the data is still
+there. The decompilation (`SaveControl_ContinueSave`) clears the blocks on the next in-game save;
+that step wasn't run. The messages come from one table entry per broken block
+(`sBrokenSaveMessages`); only the case with both blocks corrupt was tested.
+
+verity refuses instead, because the game's path destroys data the player can't choose to keep.
+
 ## Not done
 
 - The Key System (R5). `+0x0C` is preserved or initialised, never edited.
