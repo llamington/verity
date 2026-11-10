@@ -68,6 +68,7 @@ emu-font: emu-harness nds
 	  python3 tools/emu-harness/font_rom.py roms/$$g.nds build/emu/sd/roms/$$g.nds && \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-rom-font.json --out build/emu/ui-rom-font-$$g && \
 	  test -s build/emu/sd/_nds/verity/font.vfnt || exit 1; \
+	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-keyboard-jp.json --out build/emu/ui-keyboard-jp-$$g || exit 1; \
 	done
 
 emu-ui: emu-harness nds

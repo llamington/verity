@@ -315,6 +315,12 @@ void set_rom_font(const uint8_t* cache, size_t len)
 
 bool has_rom_font() { return g_rom_font != nullptr; }
 
+bool has_glyph(uint16_t c)
+{
+    verity_glyph g;
+    return (c >= 0x20 && c < 0x7F) || rom_glyph(c, &g);
+}
+
 int text_len(const char* s)
 {
     int n = 0;

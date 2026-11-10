@@ -319,6 +319,11 @@ verity_err verity_save_probe(uint8_t *buf, size_t len, verity_save_info *out);
  */
 void verity_on_panic(void);
 
+/* Nickname keyboard: types key into text (*len characters, capacity cap, at most max), applying
+ * the voicing marks 0x309B/0x309C to the last kana and composing Hangul jamo. 1 if it changed. */
+uint8_t verity_keyboard_type(uint16_t *text, size_t *len, size_t cap, size_t max, uint16_t key,
+                             uint8_t generation);
+
 /* ---- ROM font (crates/verity-ffi/src/rom.rs, docs/research/rom-font.md) ---- */
 
 /* Reads len bytes at offset of the ROM file into buf; false on failure. */

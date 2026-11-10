@@ -19,8 +19,13 @@ the font (`tools/emu-harness/font_rom.py`, written under `build/`).
 Decisions behind it (user, 2026-11-10): no Nintendo assets in the repo or a release; the user never
 picks a ROM; a separate crate rather than a Cargo feature.
 
-Rest of M8, in order: (1) the nickname keyboard still refuses Japanese and Korean Pokémon (needs a
-kana/Hangul input mode, now that the glyphs exist); (2) box icons and sprites from the ROM (LZ is
+The nickname keyboard follows the Pokémon's language (needs the ROM font): Japanese has hiragana,
+katakana and fullwidth Latin pages with ゛/゜ keys that change the last kana; Korean types jamo that
+compose into syllables (`verity-ffi/src/keyboard.rs`, unit-tested; a syllable Gen 4 can't store
+stays as separate jamo). `make emu-font` also runs `ui-keyboard-jp.json`. Korean has no in-emulator
+check (no Korean Pokémon in the test saves).
+
+Rest of M8: box icons and sprites from the ROM (LZ is
 ready; NCGR/NCLR/NCER parsing and the file locations are still to do, from the pret decomps and
 `fuddlesworth/pokebw2`), with the current placeholder icons as the fallback.
 
