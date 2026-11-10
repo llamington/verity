@@ -17,6 +17,7 @@ picolibc-allocator = []
 
 [dependencies]
 verity = { path = "../verity", default-features = false }
+verity-rom = { path = "../verity-rom" }
 
 [dev-dependencies]
 serde_json = "1"

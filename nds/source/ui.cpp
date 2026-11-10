@@ -163,11 +163,33 @@ void plot(Surface* c, int x, int y)
     *word |= (uint16_t)(1 << (((x % 8) % 4) * 4));
 }
 
-// Draws one glyph; returns the x after it, with one pixel of spacing.
-int glyph(Surface* c, int x, int y, unsigned char ch)
+const uint8_t* g_rom_font = nullptr;  // font cache from the user's ROM (verity_font_*)
+size_t g_rom_font_len = 0;
+
+bool rom_glyph(uint16_t cp, verity_glyph* g)
 {
-    if (ch >= 128)
-        ch = '?';
+    return g_rom_font && verity_font_glyph(g_rom_font, g_rom_font_len, cp, g);
+}
+
+// Draws one glyph; returns the x after it, with one pixel of spacing. ASCII comes from the
+// console font, anything else from the ROM font when there is one, otherwise '?'.
+int glyph(Surface* c, int x, int y, uint32_t cp)
+{
+    if (cp >= 128)
+    {
+        verity_glyph g;
+        if (cp > 0xFFFF || !rom_glyph((uint16_t)cp, &g))
+            cp = '?';
+        else
+        {
+            for (int row = 0; row < g.height; row++)
+                for (int col = 0; col < g.width; col++)
+                    if (g.rows[row] & (1u << col))
+                        plot(c, x + col, y + row);
+            return x + (g.width ? g.width + 1 : kSpaceWidth);
+        }
+    }
+    unsigned char ch = (unsigned char)cp;
     int ix = ch - g_font_first;
     if (ix < 0 || ix >= g_font_count)
         return x + kSpaceWidth;
@@ -182,6 +204,26 @@ int glyph(Surface* c, int x, int y, unsigned char ch)
     if (ch >= '0' && ch <= '9')
         return x + g_digit_width;
     return x + g_width[ch] + 1;
+}
+
+// Decodes one UTF-8 sequence at s[*i] and advances *i; malformed or cut-off bytes give '?'.
+uint32_t next_cp(const char* s, int* i)
+{
+    unsigned char b = (unsigned char)s[*i];
+    int n = b < 0x80 ? 0 : (b & 0xE0) == 0xC0 ? 1 : (b & 0xF0) == 0xE0 ? 2 : -1;
+    (*i)++;
+    if (n < 0)
+        return '?';
+    uint32_t cp = n == 0 ? b : b & (n == 1 ? 0x1F : 0x0F);
+    for (int k = 0; k < n; k++)
+    {
+        unsigned char t = (unsigned char)s[*i];
+        if ((t & 0xC0) != 0x80)
+            return '?';
+        cp = (cp << 6) | (t & 0x3F);
+        (*i)++;
+    }
+    return cp;
 }
 }  // namespace
 
@@ -201,49 +243,84 @@ void at(Surface* c, int col, int row, const char* fmt, ...)
         return;
     memset(c->tiles + (row * 32 + col) * 16, 0, (size_t)(32 - col) * 32);
     int x = col * 8, y = row * 8;
-    for (int i = 0; text[i]; i++)
+    int chars = 0;  // characters so far (table gaps line up by character, not byte)
+    for (int i = 0; text[i];)
     {
         if (text[i] != ' ')
         {
-            x = glyph(c, x, y, (unsigned char)text[i]);
+            x = glyph(c, x, y, next_cp(text, &i));
+            chars++;
             continue;
         }
         int run = 1;
         while (text[i + run] == ' ')
             run++;
         x += kSpaceWidth;
+        chars += run;
         // Two or more spaces mean a table column: line up with the character grid.
         if (run > 1)
         {
-            int grid = (col + i + run) * 8;
+            int grid = (col + chars) * 8;
             x = x > grid ? x : grid;
         }
-        i += run - 1;
+        i += run;
     }
 }
 
-void utf16_to_ascii(const uint16_t* s, char* out, int cap)
+void utf16_to_text(const uint16_t* s, char* out, int cap)
 {
     int n = 0;
     for (; *s && n + 1 < cap; s++)
     {
         uint16_t c = *s;
         char o;
+        verity_glyph g;
         if (c >= 0x20 && c < 0x7F)
             o = (char)c;
-        else if ((c >= 0xE8 && c <= 0xEB) || (c >= 0xC8 && c <= 0xCB))
-            o = 'e';
         else if (c == 0x2642)
             o = 'M';  // male sign (Nidoran)
         else if (c == 0x2640)
             o = 'F';
         else if (c == 0x3000)
             o = ' ';
+        else if (c >= 0x80 && rom_glyph(c, &g))
+        {
+            int len = c < 0x800 ? 2 : 3;
+            if (n + len + 1 > cap)
+                break;
+            if (len == 2)
+                out[n++] = (char)(0xC0 | (c >> 6));
+            else
+            {
+                out[n++] = (char)(0xE0 | (c >> 12));
+                out[n++] = (char)(0x80 | ((c >> 6) & 0x3F));
+            }
+            out[n++] = (char)(0x80 | (c & 0x3F));
+            continue;
+        }
+        else if ((c >= 0xE8 && c <= 0xEB) || (c >= 0xC8 && c <= 0xCB))
+            o = 'e';
         else
             o = '?';
         out[n++] = o;
     }
     out[n] = 0;
+}
+
+void set_rom_font(const uint8_t* cache, size_t len)
+{
+    g_rom_font = cache;
+    g_rom_font_len = len;
+}
+
+bool has_rom_font() { return g_rom_font != nullptr; }
+
+int text_len(const char* s)
+{
+    int n = 0;
+    for (; *s; s++)
+        n += ((unsigned char)*s & 0xC0) != 0x80;
+    return n;
 }
 
 const char* name(uint32_t category, uint32_t id)
@@ -254,7 +331,7 @@ const char* name(uint32_t category, uint32_t id)
     uint16_t w[32];
     if (verity_name(category, id, w, 32) == 0)
         return "?";
-    utf16_to_ascii(w, out, 32);
+    utf16_to_text(w, out, 32);
     return out;
 }
 
@@ -267,7 +344,7 @@ const char* location(uint8_t generation, uint16_t id)
     if (verity_location_name(generation, id, w, 32) == 0)
         snprintf(out, 32, "Loc %u", id);
     else
-        utf16_to_ascii(w, out, 32);
+        utf16_to_text(w, out, 32);
     return out;
 }
 

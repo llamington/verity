@@ -5,29 +5,24 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Resume here
 
-**Next task: create the `verity-rom` crate** (M8, "optional ROM-graphics loading", now chosen; PLAN
-§P9 stretch goal at `grep -n "Stretch:" PLAN.md`). Nothing for it exists yet. Decisions (user,
-2026-11-10):
+**M8 ROM font is done (2026-11-10); next: the rest of M8, then P12.** `crates/verity-rom` (used
+only by `verity-ffi`; the core crate doesn't depend on it) reads the NDS file system, NARCs, LZ10/11
+and both font formats; findings in `docs/research/rom-font.md`. Any Gen 5 ROM's font covers kana,
+kanji and Hangul; an English Gen 4 ROM covers kana only. On boot the DS loads
+`/_nds/verity/font.vfnt`, or scans the SD card (depth 3) for the best `.nds` (Gen 5 > Korean Gen 4 >
+Gen 4), builds the cache (~150 KB) and saves it; a better ROM later replaces a worse cache. ASCII
+still uses the console font; other characters come from the ROM font (Gen 4: stroke only, rows
+2..11; all glyphs fitted to 8 rows by merging similar rows). Without a ROM the picker says a ROM
+enables Japanese/Korean names. `make emu-font` checks both paths with stand-in ROMs that hold only
+the font (`tools/emu-harness/font_rom.py`, written under `build/`).
 
-- **Nintendo assets never go in the repo or a release.** The DS loads its font and graphics from the
-  user's own ROM at runtime. Reasoning: a takedown notice can name a whole repo, and deleting files
-  later leaves them in git history and in forks.
-- **A separate workspace crate `crates/verity-rom`, used only by `verity-ffi`.** The core `verity`
-  crate must not depend on it, so a web build can't pull it in. A Cargo feature was rejected: ROM
-  parsing needs nothing from verity's internals, and feature unification could switch it on by
-  accident.
-- **The user never picks a ROM.** On startup, scan the SD card for `.nds` files and identify them by
-  the 4-letter game code in the header. The first time one is found, extract what verity needs into
-  `/_nds/verity/` (a few hundred KB at most), so the ROM isn't needed afterwards. Without a ROM, keep
-  today's behaviour (Latin text, "?" for kana and Hangul) and say on screen that a ROM enables more.
-  The ROM needn't match the save: any Gen 4 or 5 ROM serves every save.
-- **Check first:** whether an English ROM's font includes Japanese and Korean characters. Read the
-  font out of `roms/platinum.nds` and `roms/black2.nds` before building the loader. If it doesn't,
-  those names need a Japanese or Korean ROM, and the plan should say so.
-- Scope of the crate: NDS header and file system (FAT/FNT), NARC archives, LZ decompression, then the
-  font format and sprite/palette formats. File locations come from the pret decompilations
-  (`pret/pokeplatinum`, `pret/pokeheartgold`, read through `gh api`) and `fuddlesworth/pokebw2`,
-  read for facts only.
+Decisions behind it (user, 2026-11-10): no Nintendo assets in the repo or a release; the user never
+picks a ROM; a separate crate rather than a Cargo feature.
+
+Rest of M8, in order: (1) the nickname keyboard still refuses Japanese and Korean Pokémon (needs a
+kana/Hangul input mode, now that the glyphs exist); (2) box icons and sprites from the ROM (LZ is
+ready; NCGR/NCLR/NCER parsing and the file locations are still to do, from the pret decomps and
+`fuddlesworth/pokebw2`), with the current placeholder icons as the fallback.
 
 After that: **P12 web version** (in PLAN, user decisions 2026-11-10). WASM holds code only; data
 blobs are fetched per game; text uses browser fonts; sprites are hotlinked at runtime from the

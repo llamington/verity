@@ -202,6 +202,13 @@ private:
             at(top(), 0, 5, "Open: %.26s", strrchr(core::doc().path, '/') + 1);
         if (message[0])
             at(top(), 0, 8, "! %s", message);
+        if (ui::has_rom_font())
+            at(top(), 0, 18, "Font: from your ROM (%s)", core::font_game());
+        else
+        {
+            at(top(), 0, 17, "Put a Gen 4/5 ROM (.nds) on the SD");
+            at(top(), 0, 18, "card to show Japanese/Korean names.");
+        }
         at(top(), 0, 21, "A / tap twice: open");
         at(top(), 0, 22, "Up/Down/L/R or drag: scroll");
     }
@@ -232,8 +239,8 @@ public:
     {
         const auto& d = core::doc();
         const auto& i = d.info;
-        char ot[16];
-        ui::utf16_to_ascii(i.ot_name, ot, sizeof(ot));
+        char ot[32];
+        ui::utf16_to_text(i.ot_name, ot, sizeof(ot));
         ui::clear(top());
         at(top(), 0, 0, "%.32s", strrchr(d.path, '/') + 1);
         at(top(), 0, 2, "Game     %s", core::game_name(i.kind));
@@ -390,7 +397,7 @@ private:
         if (e.ranger)
             snprintf(out, cap, "Ranger Manaphy Egg");
         else
-            ui::utf16_to_ascii(e.title, out, cap);
+            ui::utf16_to_text(e.title, out, cap);
     }
 
     void draw_list()
@@ -520,7 +527,7 @@ private:
     bool replace_ = false;
     bool enabling_ = false;
     verity_unova_preview_t preview_{};
-    char trainer_[16] = "";
+    char trainer_[32] = "";
     char message_[40] = "";
 
     void open_other(const char* path)
@@ -542,7 +549,7 @@ private:
             verity_unova_preview(d.buf, d.len, other_, other_len_, true, &preview_);
         auto info = d.info;
         if (verity_save_probe(other_, other_len_, &info) == VERITY_OK)
-            ui::utf16_to_ascii(info.ot_name, trainer_, sizeof(trainer_));
+            ui::utf16_to_text(info.ot_name, trainer_, sizeof(trainer_));
         draw();
     }
 
@@ -769,7 +776,7 @@ private:
 
     void draw()
     {
-        char name[24];
+        char name[64];
         if (party_)
         {
             at(bottom(), 0, 0, "           Party");
@@ -778,7 +785,7 @@ private:
         else
         {
             core::box_name(box_, name, sizeof(name));
-            int pad = (32 - (int)strlen(name)) / 2 - 2;
+            int pad = (32 - ui::text_len(name)) / 2 - 2;
             at(bottom(), 0, 0, " <%*s%s%*s> ", pad > 0 ? pad : 0, "", name,
                pad > 0 ? pad : 0, "");
             at(bottom(), 26, 1, "%2d/%-2d", box_ + 1, (int)core::doc().boxes);
@@ -809,9 +816,9 @@ private:
             at(top(), 0, 0, "(empty)");
             return;
         }
-        char nick[16], ot[12];
-        ui::utf16_to_ascii(v.nickname, nick, sizeof(nick));
-        ui::utf16_to_ascii(v.ot_name, ot, sizeof(ot));
+        char nick[32], ot[32];
+        ui::utf16_to_text(v.nickname, nick, sizeof(nick));
+        ui::utf16_to_text(v.ot_name, ot, sizeof(ot));
         const char* sp = ui::name(VERITY_NAME_SPECIES, v.species);
         const char* g = v.gender == 0 ? "M" : v.gender == 1 ? "F" : "-";
         if (v.is_egg)
@@ -1674,7 +1681,7 @@ private:
     void draw_keyboard()
     {
         char text[12];
-        ui::utf16_to_ascii(name_, text, sizeof(text));
+        ui::utf16_to_text(name_, text, sizeof(text));
         at(bottom(), 0, 0, " Nickname (%d/%d)", name_len_, max_name());
         at(bottom(), 0, 2, " %s_", text);
         at(bottom(), 0, 3, "%s", "");
@@ -1987,8 +1994,8 @@ private:
 
     void draw()
     {
-        char nick[16];
-        ui::utf16_to_ascii(orig_.nickname, nick, sizeof(nick));
+        char nick[32];
+        ui::utf16_to_text(orig_.nickname, nick, sizeof(nick));
         at(top(), 0, 0, "Edit: %s (%s)", nick, ui::name(VERITY_NAME_SPECIES, orig_.species));
         at(top(), 0, 1, "Mode: %s  (Select)", legal_mode_ ? "Legal" : "Game-safe");
         at(top(), 0, 3, "L/R tab  Left/Right change");
@@ -2048,13 +2055,13 @@ private:
         else
         {
             static const char* cs[6] = {"Cool", "Beauty", "Cute", "Smart", "Tough", "Sheen"};
-            char nick2[16];
+            char nick2[32];
             if (e_.mask & 2048)
-                ui::utf16_to_ascii(e_.nickname, nick2, sizeof(nick2));
+                ui::utf16_to_text(e_.nickname, nick2, sizeof(nick2));
             else if (e_.mask & 4096)
                 snprintf(nick2, sizeof(nick2), "%s", ui::name(VERITY_NAME_SPECIES, orig_.species));
             else
-                ui::utf16_to_ascii(orig_.nickname, nick2, sizeof(nick2));
+                ui::utf16_to_text(orig_.nickname, nick2, sizeof(nick2));
             at(bottom(), 0, 3, " Nickname   %s  (A)", nick2);
             for (int i = 0; i < 6; i++)
                 at(bottom(), 0, 4 + i, " %-6s     < %3u >", cs[i], e_.contest[i]);

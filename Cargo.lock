@@ -112,7 +112,12 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "verity",
+ "verity-rom",
 ]
+
+[[package]]
+name = "verity-rom"
+version = "0.1.0"
 
 [[package]]
 name = "zmij"

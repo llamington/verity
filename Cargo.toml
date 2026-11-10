@@ -2,6 +2,7 @@
 members = [
     "crates/verity",
     "crates/verity-ffi",
+    "crates/verity-rom",
     "crates/datagen",
 ]
 resolver = "2"

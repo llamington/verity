@@ -7,6 +7,7 @@
 #include <fat.h>
 #include <nds.h>
 
+#include "core.h"
 #include "scenes.h"
 #include "ui.h"
 #include "verity.h"
@@ -34,6 +35,8 @@ int main(int argc, char **argv)
         while (1)
             swiWaitForVBlank();
     }
+    ui::at(ui::top(), 0, 0, "verity: reading font...");
+    core::font_init();
     ui::push(scenes::file_picker());
     ui::run();
     return 0;

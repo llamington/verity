@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <initializer_list>
+#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -163,7 +166,7 @@ void box_name(uint32_t b, char* out, int cap)
         snprintf(out, cap, "Box %lu", (unsigned long)b + 1);
         return;
     }
-    ui::utf16_to_ascii(w, out, cap);
+    ui::utf16_to_text(w, out, cap);
 }
 
 static const char* config_path()
@@ -176,15 +179,20 @@ static const char* config_path()
     return path;
 }
 
-void remember(const char* p)
+static void ensure_config_dir()
 {
-    char dir[64], file[80];
+    char dir[64], nds[64];
     snprintf(dir, sizeof(dir), "%s", config_path());
-    char nds[64];
     snprintf(nds, sizeof(nds), "%.*s", (int)(strrchr(dir, '/') - dir), dir);
     mkdir(nds, 0777);
     mkdir(dir, 0777);
-    snprintf(file, sizeof(file), "%s/last.txt", dir);
+}
+
+void remember(const char* p)
+{
+    char file[80];
+    ensure_config_dir();
+    snprintf(file, sizeof(file), "%s/last.txt", config_path());
     FILE* f = fopen(file, "w");
     if (!f)
         return;
@@ -205,6 +213,140 @@ bool last(char* out, int cap)
         out[strcspn(out, "\r\n")] = 0;
     return ok && out[0];
 }
+
+// ---- ROM font ------------------------------------------------------------------------------
+// The font comes from the user's own ROM: the first time a Gen 4/5 .nds is on the SD card, its
+// font goes into font.vfnt and the ROM isn't needed again. A better ROM (Gen 5 covers kana,
+// kanji and Hangul) replaces a cache built from a worse one. See docs/research/rom-font.md.
+
+namespace {
+
+uint8_t* g_font = nullptr;
+size_t g_font_len = 0;
+char g_font_game[5] = "";
+
+bool read_rom(void* ctx, uint32_t offset, uint8_t* buf, uint32_t len)
+{
+    FILE* f = (FILE*)ctx;
+    return fseek(f, (long)offset, SEEK_SET) == 0 && fread(buf, 1, len, f) == len;
+}
+
+int rom_rank(const char* path)
+{
+    FILE* f = fopen(path, "rb");
+    if (!f)
+        return 0;
+    uint8_t code[4];
+    bool ok = fseek(f, 0x0C, SEEK_SET) == 0 && fread(code, 1, 4, f) == 4;
+    fclose(f);
+    return ok ? verity_rom_font_rank(code) : 0;
+}
+
+void scan_roms(const char* dir, int depth, char* best, int cap, int* best_rank)
+{
+    DIR* d = opendir(dir);
+    if (!d)
+        return;
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr && *best_rank < 3)
+    {
+        if (e->d_name[0] == '.')
+            continue;
+        char path[192];
+        int n = snprintf(path, sizeof(path), "%s%s%s", dir, dir[strlen(dir) - 1] == '/' ? "" : "/",
+                         e->d_name);
+        if (n <= 0 || n >= (int)sizeof(path))
+            continue;
+        const char* dot = strrchr(e->d_name, '.');
+        if (e->d_type == DT_DIR)
+        {
+            if (depth > 0)
+                scan_roms(path, depth - 1, best, cap, best_rank);
+        }
+        else if (dot && strcasecmp(dot, ".nds") == 0)
+        {
+            int r = rom_rank(path);
+            if (r > *best_rank)
+            {
+                *best_rank = r;
+                snprintf(best, cap, "%s", path);
+            }
+        }
+    }
+    closedir(d);
+}
+
+void use_font(uint8_t* buf, size_t len)
+{
+    free(g_font);
+    g_font = buf;
+    g_font_len = len;
+    memcpy(g_font_game, buf + 12, 4);
+    g_font_game[4] = 0;
+    ui::set_rom_font(g_font, g_font_len);
+}
+
+}  // namespace
+
+bool font_init()
+{
+    char file[80];
+    snprintf(file, sizeof(file), "%s/font.vfnt", config_path());
+    size_t len = 0;
+    uint8_t* cached = read_all(file, 512 * 1024, &len);
+    int rank = 0;
+    if (cached && verity_font_check(cached, len))
+        rank = verity_rom_font_rank(cached + 12);
+    if (rank == 3)
+    {
+        use_font(cached, len);
+        return true;
+    }
+    char best[192] = "";
+    int best_rank = 0;
+    for (const char* root : {"sd:/", "fat:/"})
+        scan_roms(root, 3, best, sizeof(best), &best_rank);
+    uint8_t* built = nullptr;
+    size_t built_len = 0;
+    if (best_rank > rank)
+    {
+        FILE* f = fopen(best, "rb");
+        if (f)
+        {
+            built = verity_rom_build_font_cache(read_rom, f, &built_len);
+            fclose(f);
+        }
+    }
+    if (built)
+    {
+        uint8_t* copy = (uint8_t*)malloc(built_len);
+        if (copy)
+        {
+            memcpy(copy, built, built_len);
+            ensure_config_dir();
+            FILE* out = fopen(file, "wb");
+            if (out)
+            {
+                fwrite(copy, 1, built_len, out);
+                fclose(out);
+            }
+            free(cached);
+            use_font(copy, built_len);
+        }
+        verity_rom_free(built, built_len);
+        if (copy)
+            return true;
+    }
+    if (rank > 0)
+    {
+        use_font(cached, len);
+        return true;
+    }
+    free(cached);
+    return false;
+}
+
+const char* font_game() { return g_font_game; }
 
 bool ensure_gen4_data()
 {

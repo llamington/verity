@@ -11,6 +11,8 @@ use core::slice;
 #[cfg(feature = "alloc")]
 pub mod edit;
 pub mod events;
+#[cfg(feature = "alloc")]
+pub mod rom;
 pub mod ui;
 pub mod unova;
 
