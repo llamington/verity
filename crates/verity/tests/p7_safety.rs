@@ -460,3 +460,46 @@ fn rejected_writes_leave_save_unchanged() {
     }
     assert!(data == orig, "a rejected write changed the save");
 }
+
+/// A White 2 save with its party and boxes emptied, using a real empty slot from the save. With
+/// `keep_one`, the first box slot keeps a Pokémon.
+fn emptied_white2(keep_one: bool) -> Option<Vec<u8>> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/real/pkhex-avalonia/gen5_white2.sav");
+    let mut data = fs::read(path).ok()?;
+    let mut save = Save::open(&mut data).unwrap();
+    let slots: Vec<Slot> = (0..save.box_count() as u8)
+        .flat_map(|b| (0..30u8).map(move |s| Slot::Box(b, s)))
+        .collect();
+    let empty_at = *slots
+        .iter()
+        .find(|s| save.pkm(**s).unwrap().species() == 0)
+        .unwrap();
+    let empty = save.slot_raw(empty_at).unwrap().to_vec();
+    let occupied = *slots
+        .iter()
+        .find(|s| save.pkm(**s).unwrap().species() != 0)
+        .unwrap();
+    for slot in slots {
+        if !(keep_one && slot == occupied) {
+            save.set_slot_raw(slot, &empty).unwrap();
+        }
+    }
+    save.set_party_count(0);
+    save.finalize();
+    Some(data)
+}
+
+#[test]
+fn p7_empty_party_is_only_safe_before_the_first_pokemon() {
+    let r = rules(SaveKind::B2W2);
+    let Some(mut fresh) = emptied_white2(false) else {
+        return;
+    };
+    assert_eq!(check_save(&r, &Save::open(&mut fresh).unwrap()), Ok(()));
+    let mut in_progress = emptied_white2(true).unwrap();
+    assert_eq!(
+        check_save(&r, &Save::open(&mut in_progress).unwrap()),
+        Err(SaveIssue::PartyCount)
+    );
+}

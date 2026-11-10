@@ -2,7 +2,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use verity::memlink::keys::{read, receivable, receive, KeyState, KEY_CITY, KEY_COUNT};
+use verity::memlink::keys::{enable_all, read, receivable, receive, KeyState, KEY_CITY, KEY_COUNT};
 use verity::memlink::MemLinkError;
 use verity::save::Save;
 
@@ -124,4 +124,48 @@ fn p10_keys_refuse_other_games_and_corrupt_saves() {
     corrupt[KEY_INFO] ^= 1;
     assert_eq!(read(&corrupt), Err(MemLinkError::NotBlack2White2));
     assert_eq!(target, b2w2);
+}
+
+#[test]
+fn p10_keys_enable_all_needs_no_partner_and_marks_nothing_earned() {
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
+    let mut target = blank(&save, WHITE2);
+    assert_eq!(enable_all(&mut target).unwrap(), [true; 5]);
+    let keys = read(&target).unwrap();
+    assert_eq!((keys.enabled, keys.unlocked), ([true; 5], [false; 5]));
+    let once = target.clone();
+    assert_eq!(enable_all(&mut target).unwrap(), [false; 5]);
+    assert_eq!(target, once, "a second run writes nothing");
+    let mut next = blank(&save, BLACK2);
+    assert_eq!(receive(&mut next, &target).unwrap(), [false; 5]);
+}
+
+#[test]
+fn p10_keys_enable_all_only_adds_what_is_missing() {
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
+    let mut target = save.clone();
+    assert_eq!(
+        enable_all(&mut target).unwrap(),
+        [false, true, true, true, true]
+    );
+    assert!(
+        read(&target).unwrap().unlocked[0],
+        "earned keys stay earned"
+    );
+}
+
+#[test]
+fn p10_keys_enable_all_refuses_a_corrupt_save() {
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
+    let mut corrupt = save.clone();
+    corrupt[KEY_INFO] ^= 1;
+    let before = corrupt.clone();
+    assert_eq!(enable_all(&mut corrupt), Err(MemLinkError::NotBlack2White2));
+    assert_eq!(corrupt, before);
 }

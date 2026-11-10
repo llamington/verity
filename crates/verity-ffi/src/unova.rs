@@ -3,7 +3,7 @@
 
 use core::slice;
 
-use verity::memlink::keys::{read, receivable, receive, KEY_COUNT};
+use verity::memlink::keys::{enable_all, missing, read, receivable, receive, KEY_COUNT};
 use verity::memlink::{apply, build, preview, MemLinkError, Seeds};
 use verity::save::{detect, SaveKind};
 
@@ -12,6 +12,7 @@ const RAW_SAVE_LEN: usize = 0x80000;
 const MODE_NONE: u8 = 0;
 const MODE_MEMORY_LINK: u8 = 1;
 const MODE_KEYS: u8 = 2;
+const MODE_ENABLE_ALL: u8 = 3;
 
 const STATUS_OK: u8 = 0;
 const STATUS_OTHER_PLAYER: u8 = 1;
@@ -24,7 +25,7 @@ const STATUS_KEYS_CORRUPT: u8 = 5;
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct VerityUnovaPreview {
-    /// 0 unusable, 1 Memory Link, 2 keys.
+    /// 0 unusable, 1 Memory Link, 2 keys, 3 enable all keys.
     pub mode: u8,
     /// 0 ready; otherwise see `verity_unova_status_text`.
     pub status: u8,
@@ -138,13 +139,56 @@ pub unsafe extern "C" fn verity_unova_apply(
     result.map_or_else(status_of, |()| STATUS_OK)
 }
 
+/// Fills `out` with what `verity_unova_enable_all` would do. Writes nothing to the save.
+///
+/// # Safety
+/// `buf` must be valid for `len` bytes, and `out` for one write.
+#[no_mangle]
+pub unsafe extern "C" fn verity_unova_enable_preview(
+    buf: *const u8,
+    len: usize,
+    out: *mut VerityUnovaPreview,
+) {
+    let save = unsafe { slice::from_raw_parts(buf, len) };
+    let mut plan = VerityUnovaPreview {
+        mode: MODE_ENABLE_ALL,
+        ..Default::default()
+    };
+    match read(save) {
+        Ok(keys) => {
+            let new = missing(&keys);
+            plan.keys = new.map(u8::from);
+            if !new.contains(&true) {
+                plan.status = STATUS_NO_NEW_KEYS;
+            }
+        }
+        Err(e) => plan.status = status_of(e),
+    }
+    unsafe { *out = plan };
+}
+
+/// Enables every key without a partner save. Returns 0 on success, else a status code. The save is
+/// not finalised.
+///
+/// # Safety
+/// `buf` must be valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_unova_enable_all(buf: *mut u8, len: usize) -> u8 {
+    let save = unsafe { slice::from_raw_parts_mut(buf, len) };
+    match enable_all(save) {
+        Ok(new) if !new.contains(&true) => STATUS_NO_NEW_KEYS,
+        Ok(_) => STATUS_OK,
+        Err(e) => status_of(e),
+    }
+}
+
 /// Text for a status from `verity_unova_preview` or `verity_unova_apply`.
 #[no_mangle]
 pub extern "C" fn verity_unova_status_text(status: u8) -> *const u8 {
     let text: &[u8] = match status {
         STATUS_OK => b"Ready\0",
         STATUS_OTHER_PLAYER => b"Replaces another player's link\0",
-        STATUS_NO_NEW_KEYS => b"No new keys to receive\0",
+        STATUS_NO_NEW_KEYS => b"No new keys to enable\0",
         STATUS_GIFTS_CORRUPT => b"This save's gift data is corrupt\0",
         STATUS_KEYS_CORRUPT => b"This save's link data is corrupt\0",
         _ => b"Needs a valid B/W or B2/W2 save\0",

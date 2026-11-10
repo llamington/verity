@@ -56,17 +56,36 @@ pub fn receivable(target: &KeyState, partner: &KeyState) -> [bool; KEY_COUNT] {
     })
 }
 
+fn write_enabled(target: &mut [u8], new: [bool; KEY_COUNT]) {
+    if !new.contains(&true) {
+        return;
+    }
+    let seed = read_u32(target, SEED);
+    for (i, _) in new.iter().enumerate().filter(|(_, new)| **new) {
+        let ofs = ENABLED + i * 4;
+        target[ofs..ofs + 4].copy_from_slice(&(ENABLED_MAGIC[i] ^ seed).to_le_bytes());
+    }
+    Layout5::new(SaveKind::B2W2).set_checksums(target);
+}
+
 /// Enables on `target` every key it can receive from `partner`, and returns which. Nothing is
 /// written when there are none.
 pub fn receive(target: &mut [u8], partner: &[u8]) -> Result<[bool; KEY_COUNT], MemLinkError> {
     let new = receivable(&read(target)?, &read(partner)?);
-    if new.contains(&true) {
-        let seed = read_u32(target, SEED);
-        for (i, _) in new.iter().enumerate().filter(|(_, new)| **new) {
-            let ofs = ENABLED + i * 4;
-            target[ofs..ofs + 4].copy_from_slice(&(ENABLED_MAGIC[i] ^ seed).to_le_bytes());
-        }
-        Layout5::new(SaveKind::B2W2).set_checksums(target);
-    }
+    write_enabled(target, new);
+    Ok(new)
+}
+
+/// The keys `enable_all` would newly enable.
+pub fn missing(keys: &KeyState) -> [bool; KEY_COUNT] {
+    keys.enabled.map(|enabled| !enabled)
+}
+
+/// Enables every key without a partner save, and returns which were new. This goes beyond the
+/// game's exchange, but leaves the state an exchange would: nothing is marked as earned, so the
+/// keys can't be sent on.
+pub fn enable_all(target: &mut [u8]) -> Result<[bool; KEY_COUNT], MemLinkError> {
+    let new = missing(&read(target)?);
+    write_enabled(target, new);
     Ok(new)
 }

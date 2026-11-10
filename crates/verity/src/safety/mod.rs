@@ -319,10 +319,22 @@ pub fn check_party(r: &Rules, save: &Save) -> Result<(), SaveIssue> {
     Ok(())
 }
 
+/// A game that hasn't reached its first Pokémon: an empty party and empty boxes. A slot that can't
+/// be read counts as occupied.
+fn before_first_pokemon(save: &Save) -> bool {
+    save.party_count() == 0
+        && (0..save.box_count() as u8).all(|b| {
+            (0..crate::save::BOX_SLOTS as u8)
+                .all(|s| save.pkm(Slot::Box(b, s)).is_ok_and(|p| p.species() == 0))
+        })
+}
+
 /// Checks the whole save: party, every box slot and the block checksums. Run after
 /// [`Save::finalize`].
 pub fn check_save(r: &Rules, save: &Save) -> Result<(), SaveIssue> {
-    check_party(r, save)?;
+    if !before_first_pokemon(save) {
+        check_party(r, save)?;
+    }
     for b in 0..save.box_count() as u8 {
         for s in 0..crate::save::BOX_SLOTS as u8 {
             check_slot(r, save, Slot::Box(b, s))?;

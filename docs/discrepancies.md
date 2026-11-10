@@ -106,3 +106,14 @@ region or language doesn't match. The game links a save with the Hall of Fame fl
 leaving out the Hall of Fame part, so `build` does too. The decompiled host code has no language
 check and verity adds none; other-language links are untested. verity is stricter than the game in
 one way: it refuses corrupt outside blocks, which the game clears and starts again.
+
+## P10: keys without a partner save
+
+PLAN P10 says to unlock keys only under the game's exchange rules. At the user's request
+(2026-11-10), the DS screen also offers "Enable all keys", which needs no partner. It sets only the
+enabled state, so nothing is marked as earned.
+
+## P7: empty party
+
+The whole-save check accepts an empty party only when every box is empty too, the state of a game
+before its first Pokémon. Edits still can't empty a party (`check_party`).

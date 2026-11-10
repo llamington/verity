@@ -479,7 +479,7 @@ public:
                 if (strcmp(files_[i], core::doc().path) != 0)
                     memmove(files_[kept++], files_[i], kPathLen);
             count_ = kept;
-            list_.count = count_;
+            list_.count = count_ + 1;  // row 0 is "Enable all keys"
             list_.clamp();
         }
         draw();
@@ -487,7 +487,7 @@ public:
 
     bool update(const ui::Input& in) override
     {
-        if (other_)
+        if (other_ || enabling_)
         {
             if (in.down & KEY_B)
                 close_other();
@@ -499,11 +499,13 @@ public:
         int pick = list_.update(in, &changed);
         if (changed)
             draw_list();
-        ui::bar(0, list_.bar_y(), count_ > 0);
+        ui::bar(0, list_.bar_y(), true);
         if (in.down & KEY_B)
             return false;
-        if (pick >= 0)
-            open_other(files_[pick]);
+        if (pick == 0)
+            open_enable_all();
+        else if (pick > 0)
+            open_other(files_[pick - 1]);
         return true;
     }
 
@@ -516,6 +518,7 @@ private:
     size_t other_len_ = 0;
     const char* other_path_ = "";
     bool replace_ = false;
+    bool enabling_ = false;
     verity_unova_preview_t preview_{};
     char trainer_[16] = "";
     char message_[40] = "";
@@ -543,10 +546,20 @@ private:
         draw();
     }
 
+    void open_enable_all()
+    {
+        const auto& d = core::doc();
+        verity_unova_enable_preview(d.buf, d.len, &preview_);
+        enabling_ = true;
+        message_[0] = 0;
+        draw();
+    }
+
     void close_other()
     {
         free(other_);
         other_ = nullptr;
+        enabling_ = false;
         draw();
     }
 
@@ -554,11 +567,12 @@ private:
     {
         auto& d = core::doc();
         uint32_t seed = (uint32_t)time(nullptr) * 1103515245u + 12345u;
-        uint8_t r = verity_unova_apply(d.buf, d.len, other_, other_len_, replace_, seed);
+        uint8_t r = enabling_ ? verity_unova_enable_all(d.buf, d.len)
+                              : verity_unova_apply(d.buf, d.len, other_, other_len_, replace_, seed);
         if (r == 0)
         {
             d.dirty = true;
-            snprintf(message_, sizeof(message_), "Linked. Save to SD to keep it.");
+            snprintf(message_, sizeof(message_), "Done. Save to SD to keep it.");
         }
         else
             snprintf(message_, sizeof(message_), "%s", verity_unova_status_text(r));
@@ -570,15 +584,14 @@ private:
         ui::clear(top());
         ui::clear(bottom());
         at(top(), 0, 0, "Memory Link and keys");
-        if (other_)
+        if (other_ || enabling_)
             draw_preview();
         else
         {
             at(top(), 0, 2, "Pick a Black or White save for");
             at(top(), 0, 3, "Memory Link, or a Black 2 or");
             at(top(), 0, 4, "White 2 save to receive its keys.");
-            if (count_ == 0)
-                at(top(), 0, 6, "No other saves found.");
+            at(top(), 0, 5, "Or enable every key, no partner.");
             if (message_[0])
                 at(top(), 0, 8, "%s", message_);
             draw_list();
@@ -589,9 +602,12 @@ private:
     {
         static constexpr const char* kKeys[5] = {"Easy Mode", "Challenge Mode", "City swap",
                                                  "Iron Chamber", "Iceberg Chamber"};
-        const char* slash = strrchr(other_path_, '/');
-        at(top(), 0, 2, "%.30s", slash ? slash + 1 : other_path_);
-        at(top(), 0, 3, "Trainer  %s", trainer_);
+        if (other_)
+        {
+            const char* slash = strrchr(other_path_, '/');
+            at(top(), 0, 2, "%.30s", slash ? slash + 1 : other_path_);
+            at(top(), 0, 3, "Trainer  %s", trainer_);
+        }
         ui::bar(0, 0, false);
         if (preview_.status != 0)
             at(top(), 0, 5, "%s", verity_unova_status_text(preview_.status));
@@ -604,7 +620,9 @@ private:
         }
         else
         {
-            at(top(), 0, 5, "Keys this save will receive:");
+            at(top(), 0, 5, preview_.mode == 3 ? "Keys this will enable:" : "Keys this save will receive:");
+            if (preview_.mode == 3)
+                at(top(), 0, 12, "These can't be sent to other games.");
             int row = 6;
             for (int i = 0; i < 5; i++)
                 if (preview_.keys[i])
@@ -619,8 +637,10 @@ private:
         at(bottom(), 0, 0, " Link with");
         for (int r = 0; r < list_.rows; r++)
         {
-            int i = list_.scroll + r;
-            if (i < count_)
+            int i = list_.scroll + r - 1;
+            if (i < 0)
+                at(bottom(), 0, list_.first_row + r, " Enable all keys");
+            else if (i < count_)
             {
                 const char* slash = strrchr(files_[i], '/');
                 at(bottom(), 0, list_.first_row + r, " %.30s", slash ? slash + 1 : files_[i]);
