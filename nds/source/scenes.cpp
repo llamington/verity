@@ -1554,31 +1554,59 @@ private:
     // ---- nickname keyboard -----------------------------------------------------------------
 
     static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 5;
+    static constexpr char16_t kDakuten = 0x309B, kHandakuten = 0x309C;
 
-    static const char* page_row(int page, int row)
+    // Four rows of ten keys per page; 0 is no key. Japanese and Korean follow the games'
+    // keyboards: kana with ゛/゜ marks that change the last kana, fullwidth Latin for Japanese, and
+    // Hangul typed as jamo that compose into syllables (verity_keyboard_type).
+    static const char16_t* page_row(int layout, int page, int row)
     {
-        static const char* kPages[3][kKeyRows] = {
-            {"ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ .,-", "0123456789"},
-            {"abcdefghij", "klmnopqrst", "uvwxyz .,-", "0123456789"},
-            {"!?/:'&()+=", "*%@#~;_<>^", "        .,", "0123456789"},
+        static const char16_t* kLatin[] = {
+            u"ABCDEFGHIJ", u"KLMNOPQRST", u"UVWXYZ .,-", u"0123456789",
+            u"abcdefghij", u"klmnopqrst", u"uvwxyz .,-", u"0123456789",
+            u"!?/:'&()+=", u"*%@#~;_<>^", u"\0\0\0\0\0\0\0\0.,", u"0123456789",
         };
-        return kPages[page][row];
+        static const char16_t* kJapanese[] = {
+            u"あいうえおかきくけこ", u"さしすせそたちつてと", u"なにぬねのはひふへほ", u"まみむめもやゆよ゛゜",
+            u"らりるれろわをんー　", u"ぁぃぅぇぉっゃゅょ・", u"！？…「」、。\0゛゜", u"０１２３４５６７８９",
+            u"アイウエオカキクケコ", u"サシスセソタチツテト", u"ナニヌネノハヒフヘホ", u"マミムメモヤユヨ゛゜",
+            u"ラリルレロワヲンー　", u"ァィゥェォッャュョ・", u"！？…「」、。\0゛゜", u"０１２３４５６７８９",
+            u"ＡＢＣＤＥＦＧＨＩＪ", u"ＫＬＭＮＯＰＱＲＳＴ", u"ＵＶＷＸＹＺ　．，－", u"０１２３４５６７８９",
+            u"ａｂｃｄｅｆｇｈｉｊ", u"ｋｌｍｎｏｐｑｒｓｔ", u"ｕｖｗｘｙｚ　．，－", u"０１２３４５６７８９",
+        };
+        static const char16_t* kKorean[] = {
+            u"ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅ", u"ㅆㅇㅈㅉㅊㅋㅌㅍㅎ ", u"ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅛ", u"ㅜㅠㅡㅣ.,!?-\0",
+        };
+        if (layout == 1)
+            return kJapanese[page * kKeyRows + row];
+        if (layout == 2)
+            return page == 0 ? kKorean[row] : kLatin[(page - 1) * kKeyRows + row];
+        return kLatin[page * kKeyRows + row];
     }
 
-    int max_name() const { return orig_.language == 1 || orig_.language == 8 ? 5 : 10; }
+    // 0 Latin, 1 Japanese, 2 Korean (by the Pokémon's language).
+    int layout() const { return orig_.language == 1 ? 1 : orig_.language == 8 ? 2 : 0; }
+    int page_count() const { return layout() == 1 ? 6 : layout() == 2 ? 4 : 3; }
+    int max_name() const { return layout() != 0 ? 5 : 10; }
 
-    bool key_ok(char c) const
+    bool key_ok(char16_t c) const
     {
-        return c != ' ' ? verity_char_encodable(core::doc().info.generation, (uint8_t)c) != 0 : true;
+        if (c == 0)
+            return false;
+        if (c == ' ' || c == kDakuten || c == kHandakuten)
+            return true;
+        return verity_char_encodable(core::doc().info.generation, c) != 0;
     }
 
     bool open_keyboard()
     {
-        if (orig_.language == 1 || orig_.language == 8)
+        if (layout() != 0 && !ui::has_rom_font())
         {
-            snprintf(status_, sizeof(status_), "Keyboard: Latin names only");
+            snprintf(status_, sizeof(status_), "Keyboard: needs a ROM font");
             return false;
         }
+        if (key_page_ >= page_count())
+            key_page_ = 0;
         typing_ = true;
         if (e_.mask & 2048)
             memcpy(name_, e_.nickname, sizeof(name_));
@@ -1597,12 +1625,13 @@ private:
 
     void press_key(int page_row_i, int col)
     {
-        char c = page_row(key_page_, page_row_i)[col];
-        if (name_len_ < max_name() && key_ok(c))
-        {
-            name_[name_len_++] = (uint8_t)c;
-            name_[name_len_] = 0;
-        }
+        char16_t c = page_row(layout(), key_page_, page_row_i)[col];
+        if (!key_ok(c))
+            return;
+        size_t len = (size_t)name_len_;
+        verity_keyboard_type(name_, &len, 10, (size_t)max_name(), c, core::doc().info.generation);
+        name_len_ = (int)len;
+        name_[name_len_] = 0;
     }
 
     bool update_keyboard(const ui::Input& in)
@@ -1646,7 +1675,7 @@ private:
             }
         }
         if (in.down & KEY_Y)
-            key_page_ = (key_page_ + 1) % 3, redraw = true;
+            key_page_ = (key_page_ + 1) % page_count(), redraw = true;
         if (in.down & KEY_X)
         {
             // Back to the species name, which also clears the nicknamed flag.
@@ -1680,28 +1709,35 @@ private:
 
     void draw_keyboard()
     {
-        char text[12];
+        char text[48];
         ui::utf16_to_text(name_, text, sizeof(text));
         at(bottom(), 0, 0, " Nickname (%d/%d)", name_len_, max_name());
         at(bottom(), 0, 2, " %s_", text);
         at(bottom(), 0, 3, "%s", "");
         for (int r = 0; r < kKeyRows; r++)
         {
-            char line[33];
-            memset(line, ' ', 32);
+            uint16_t line[33];
+            for (int i = 0; i < 32; i++)
+                line[i] = ' ';
             line[32] = 0;
-            const char* keys = page_row(key_page_, r);
+            const char16_t* keys = page_row(layout(), key_page_, r);
             for (int c = 0; c < kKeyCols; c++)
             {
                 int x = 2 + c * 3;
-                line[x + 1] = key_ok(keys[c]) ? keys[c] : ' ';
+                char16_t k = key_ok(keys[c]) ? keys[c] : u' ';
+                // Gen 4 fonts have no standalone voicing marks.
+                if ((k == kDakuten || k == kHandakuten) && !ui::has_glyph(k))
+                    k = k == kDakuten ? u'"' : u'o';
+                line[x + 1] = k;
                 if (r == key_row_ && c == key_col_)
                 {
                     line[x] = '[';
                     line[x + 2] = ']';
                 }
             }
-            at(bottom(), 0, kKeyTop + r * 2, "%s", line);
+            char text_line[128];
+            ui::utf16_to_text(line, text_line, sizeof(text_line));
+            at(bottom(), 0, kKeyTop + r * 2, "%s", text_line);
         }
         at(bottom(), 0, 14, " A key  B erase  Y next page");
         at(bottom(), 0, 15, " X species name  Start done");

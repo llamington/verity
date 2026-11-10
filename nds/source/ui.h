@@ -66,6 +66,8 @@ void utf16_to_text(const uint16_t* s, char* out, int cap);
 // The font cache built from the user's ROM (stays owned by the caller), or null for none.
 void set_rom_font(const uint8_t* cache, size_t len);
 bool has_rom_font();
+// Whether c can be drawn (ASCII, or in the ROM font).
+bool has_glyph(uint16_t c);
 // Characters (not bytes) in UTF-8 text, for centring.
 int text_len(const char* s);
 // A name from the strings blob as ASCII ("?" when unknown).
