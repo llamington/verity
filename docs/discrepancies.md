@@ -99,9 +99,10 @@ PLAN §7 asks for two instances stepped in lockstep. melonDS's `LocalMP` waits o
 limited. Linked runs aren't deterministic; single-console runs still are. See
 `docs/research/emu-harness.md`.
 
-## Memory Link has no minimum-progress refusal (P10)
+## Memory Link refusals (P10)
 
 PLAN P10 says `memlink::build` should refuse a BW save that hasn't reached minimum progress or whose
-region or language doesn't match. The game links a save with the Hall of Fame flag (2400) cleared, and
-the decompiled host code has no language check, so `build` follows the game and only refuses saves
-that aren't valid Black or White saves. Other-language links are untested.
+region or language doesn't match. The game links a save with the Hall of Fame flag (2400) cleared,
+leaving out the Hall of Fame part, so `build` does too. The decompiled host code has no language
+check and verity adds none; other-language links are untested. verity is stricter than the game in
+one way: it refuses corrupt outside blocks, which the game clears and starts again.

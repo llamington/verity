@@ -66,6 +66,35 @@ byte of the word at `0x21204`.
 The 8 flashbacks unlock on flag bits 8, 13, 0, 15, 12 and 0, then "musical player linked", then flag
 bit 0. BW_tool's "8 flashback flags" at `+0x8D` are flag bits 8–15, not the 8 flashbacks.
 
+## Refusals
+
+verity links what the game links, including a save without event flag 2400: the game skips the Hall
+of Fame part and the flashbacks that need that flag stay locked. It refuses:
+
+- a source that isn't a valid Black or White save, or a target that isn't a valid B2W2 save
+- corrupt gift or key blocks, which the game would clear and start again
+- overwriting another player's data, unless `replace` is set (the game asks)
+
+Only finished saves with this one flag cleared were tested, not saves that are really early in the
+story. The download program on the BW console can report its own errors, and its code wasn't found.
+
+### What the game does with corrupt blocks
+
+Tested by flipping one byte in the keys block and in both gift copies of a linked save, then booting
+retail Black 2 in the harness. After A on the title screen, it shows these on a blue screen, one per A
+press, with no choice offered, before the normal menu:
+
+> Your Mystery Gift data has been erased.
+
+> Your Key System and Memory Link data has been erased.
+
+The save was still byte-identical after the menu and Continue, so at that point the data is still
+there. The decompilation (`SaveControl_ContinueSave`) clears the blocks on the next in-game save;
+that step wasn't run. The messages come from one table entry per broken block
+(`sBrokenSaveMessages`); only the case with both blocks corrupt was tested.
+
+verity refuses instead, because the game's path destroys data the player can't choose to keep.
+
 ## Not done
 
 - The Key System (R5). `+0x0C` is preserved or initialised, never edited.
