@@ -60,6 +60,38 @@ void clear(Surface* c);
 // printf at the 8x8 cell (col, row); clears to the end of the line. Runs of two or more spaces
 // are table gaps and line the next text up with the cell grid.
 void at(Surface* c, int col, int row, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// ---- frames (the layer under the text) -----------------------------------------------------
+// Scene changes reset both screens to the backdrop. Text on a panel, chip or light badge is drawn
+// in dark ink, elsewhere in light ink; "\x01" in a string toggles the muted label shade.
+
+// Toggles the muted label shade inside a string: "Ability" UI_MUTED ... (a macro, so the next
+// letter can't be read as part of a hex escape).
+#define UI_MUTED "\x01"
+
+enum class Badge : uint8_t
+{
+    Legal,
+    Fishy,
+    Invalid,
+    Safe,
+};
+
+void frame_clear(Surface* c);
+// Row 0 as a dark bar with a title (and optional right-aligned text).
+void title(Surface* c, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+void title_right(Surface* c, const char* text);
+// Row 23 as a dark bar of button hints: "A:Open|B:Back|L/R:Box".
+void hints(Surface* c, const char* spec);
+// A cream panel over cells [col, col+w) x [row, row+h) (w, h >= 2); its border is drawn just
+// outside them.
+void panel(Surface* c, int col, int row, int w, int h);
+// A verdict pill `cells` wide (>= 2) on a panel, with centred text.
+void badge(Surface* c, int col, int row, int cells, Badge b, const char* text);
+// A 32x32 box slot at a cell: style 0 filled, 1 empty, 2 selected.
+void slot(Surface* c, int col, int row, int style);
+// Width in pixels of text as drawn.
+int text_width(const char* s);
+
 // UTF-16 to drawable UTF-8: ASCII as is; other characters as UTF-8 when the ROM font has them,
 // otherwise common accented letters folded and the rest '?'. Cut short rather than split one.
 void utf16_to_text(const uint16_t* s, char* out, int cap);
