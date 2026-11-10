@@ -1,6 +1,6 @@
 # Gen 4 event availability and delivery (R3, R4)
 
-Answers PLAN research tasks R3 and R4 for Gen 4. Gen 5 (PGF) is still open and waits on M5.
+Answers PLAN research tasks R3 and R4 for Gen 4 and Gen 5.
 
 ## R3: which events belong on which save
 
@@ -92,3 +92,31 @@ Pokémon. Every Pokémon is PKHeX-Legal and matched to its card.
 
 Not run in-game: Diamond, Pearl and SoulSilver (no ROMs here). D/P is the one layout that differs,
 with the markers; it is covered only by the PKHeX read-back.
+
+# Gen 5 (PGF)
+
+## Availability
+
+`scripts/gen-events5-manifest.py` joins PKHeX's `MGDB_G5` to EventsGallery's
+`Released/Gen 5/Wondercards` byte for byte, as for Gen 4: 709 files, 709 cards, one each, written
+to `data/events5.tsv`. Language comes from the folder and games from the file name (`W`, `B`, `W2`,
+`B2` and their combinations). Unlike Gen 4, a Gen 5 save records which game it is (PlayerData
+0x1F), so a White-only card isn't offered on Black.
+
+## Delivery
+
+From PKHeX `MysteryBlock5` and genuine saves:
+
+- Block 34 at 0x1C800, 0xA94 bytes. The first 0xA90 are one LCRNG-encrypted stream, keyed by the
+  u32 stored after them. verity keeps the existing seed.
+- Received flags: 2048 bits at the start, indexed by card ID. Then 12 cards of 0xCC bytes.
+- Comparing cards in genuine saves with the database: only the received date (0xAC day, 0xAD
+  month, 0xAE u16 year) and the state byte 0xB4 differ. Bit 1 of 0xB4 is set once collected, so
+  a waiting card is stored exactly as distributed. There's no separate pending-gift list as in Gen 4.
+
+Delivery writes the card to the first slot with card type 0, dates it, and sets its flag.
+
+Verified end to end: PKHeX read back 31 deliveries across four real saves, and in Black 2 a White 2
+save written this way had a waiting Meloetta collected from the deliveryman (the blue-capped man
+near the Pokémon Center entrance), who then reported no other gifts. He refuses while the party
+is full.

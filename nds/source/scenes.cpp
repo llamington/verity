@@ -252,8 +252,7 @@ public:
         at(bottom(), 0, 0, " Save%s", d.dirty ? " *" : "");
         count_ = 0;
         items_[count_++] = kBoxes;
-        if (i.generation == 4)
-            items_[count_++] = kGifts;
+        items_[count_++] = kGifts;
         items_[count_++] = kSave;
         items_[count_++] = kClose;
         for (int r = 0; r < count_; r++)
@@ -342,7 +341,7 @@ public:
     }
 
 private:
-    static constexpr int kMaxEvents = 200;
+    static constexpr int kMaxEvents = 500;
     verity_event_view events_[kMaxEvents];
     int count_ = 0;
     ListView list_;
@@ -367,7 +366,7 @@ private:
         if (r == 0)
         {
             d.dirty = true;
-            snprintf(message_, sizeof(message_), "Delivered. Save, visit a Mart.");
+            snprintf(message_, sizeof(message_), "Delivered. Save, then collect it.");
         }
         else
             snprintf(message_, sizeof(message_), "%s", verity_event_status_text(r));
@@ -445,7 +444,8 @@ private:
         if (message_[0])
             at(top(), 0, 12, "> %s", message_);
         at(top(), 0, 19, "Collect in-game from the");
-        at(top(), 0, 20, "deliveryman in any Poke Mart.");
+        at(top(), 0, 20, core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
+                                                          : "deliveryman in any Poke Mart.");
         at(top(), 0, 22, "A: deliver   B: back");
     }
 };

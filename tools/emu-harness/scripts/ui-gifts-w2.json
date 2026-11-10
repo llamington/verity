@@ -1,0 +1,27 @@
+// P8 Gen 5: picker -> overview -> Mystery gifts on the White 2 save: deliver the first card, save.
+{
+  "rom": "../../../nds/verity.nds",
+  "sd_dir": "../../../build/emu/sd",
+  "sd_image": "../../../build/emu/sd.img",
+  "rtc": [2026, 11, 9, 12, 0, 0],
+  "steps": [
+    {"wait": 90},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 60},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 90},
+    {"screenshot": "01-list.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 30},
+    {"screenshot": "02-delivered.png"},
+    {"press": ["B"], "frames": 2},
+    {"wait": 30},
+    {"press": ["Down"], "frames": 2},
+    {"wait": 5},
+    {"press": ["A"], "frames": 2},
+    {"wait": 240},
+    {"screenshot": "03-saved.png"}
+  ]
+}

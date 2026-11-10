@@ -420,6 +420,31 @@ impl<'a> Save<'a> {
         }
     }
 
+    /// The Gen 5 Mystery Gift block, still encrypted, or `None` on Gen 4.
+    pub fn mystery5(&self) -> Option<&[u8]> {
+        match &self.layout {
+            Layout::Gen4(_) => None,
+            Layout::Gen5(_) => Some(&self.data[gen5::MYSTERY_RANGE]),
+        }
+    }
+
+    /// Mutable form of [`Save::mystery5`].
+    pub fn mystery5_mut(&mut self) -> Option<&mut [u8]> {
+        match &self.layout {
+            Layout::Gen4(_) => None,
+            Layout::Gen5(_) => Some(&mut self.data[gen5::MYSTERY_RANGE]),
+        }
+    }
+
+    /// The game a Gen 5 save belongs to (20 W, 21 B, 22 W2, 23 B2), or 0 on Gen 4, where the save
+    /// doesn't record it.
+    pub fn game_version(&self) -> u8 {
+        match &self.layout {
+            Layout::Gen4(_) => 0,
+            Layout::Gen5(_) => self.data[gen5::PLAYER_DATA + 0x1F],
+        }
+    }
+
     /// Mutable form of [`Save::mystery4`].
     pub fn mystery4_mut(&mut self) -> Option<(&mut [u8], usize)> {
         match &self.layout {

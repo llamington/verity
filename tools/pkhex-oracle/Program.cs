@@ -48,6 +48,7 @@ public static class Program
                 "gen-slot3" => HandleGenSlot3(args),
                 "gen-origin5" => HandleGenOrigin5(args),
                 "export-gifts5" => HandleExportGifts5(args),
+                "sav-gifts5" => HandleSavGifts5(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -462,6 +463,19 @@ public static class Program
             list.Add(converted);
         }
         return list;
+    }
+
+    // Reads a Gen 5 save's Wonder Card album the way PKHeX does.
+    private static int HandleSavGifts5(string[] args)
+    {
+        var sav = (SAV5)SaveUtil.GetSaveFile(File.ReadAllBytes(args[1]))!;
+        // Before the album is read: reading leaves the block decrypted in memory.
+        var checksums = sav.ChecksumsValid;
+        var m = sav.Mystery;
+        var cards = Enumerable.Range(0, m.GiftCountMax).Select(i => Convert.ToHexString(m.GetMysteryGift(i).Data)).ToArray();
+        var flags = Enumerable.Range(0, m.MysteryGiftReceivedFlagMax).Where(m.GetMysteryGiftReceivedFlag).ToArray();
+        Console.WriteLine(JsonSerializer.Serialize(new { checksums, version = sav.Version.ToString(), cards, flags }));
+        return 0;
     }
 
     private static int HandleSavDump(string[] args)

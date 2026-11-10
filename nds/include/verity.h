@@ -44,6 +44,7 @@ typedef enum verity_blob_kind {
     VERITY_BLOB_ENC_DR = 17,
     VERITY_BLOB_NAMES5 = 18,
     VERITY_BLOB_GIFTS5 = 19, /* Gen 5 event database (gifts5.bin); optional */
+    VERITY_BLOB_EVENTS5 = 20, /* Gen 5 card availability (events5.bin) */
 } verity_blob_kind;
 
 /** Name categories for verity_name (string_table in the strings blob). */
@@ -284,6 +285,7 @@ typedef struct verity_save_info {
     uint16_t played_hours;
     uint8_t played_minutes;
     uint8_t played_seconds;
+    uint8_t game_version; /* 20 W, 21 B, 22 W2, 23 B2; 0 on Gen 4 */
 } verity_save_info;
 
 /**

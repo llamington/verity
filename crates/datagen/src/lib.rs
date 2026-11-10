@@ -685,6 +685,34 @@ fn fnv64(data: &[u8]) -> u64 {
     })
 }
 
+/// `events5.bin` from `data/events5.tsv`: language and games for each card of `gifts5.bin`.
+pub fn build_events5(cards: &[Value], manifest: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut n = 0;
+    for line in manifest.lines().filter(|l| !l.starts_with('#')) {
+        let f: Vec<&str> = line.split('\t').collect();
+        let i: usize = f[0].parse().unwrap();
+        assert_eq!(i, n);
+        let hex = cards[i].as_str().unwrap();
+        let raw: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|j| u8::from_str_radix(&hex[j..j + 2], 16).unwrap())
+            .collect();
+        assert_eq!(
+            fnv64(&raw),
+            u64::from_str_radix(f[4], 16).unwrap(),
+            "data/events5.tsv does not match card {i}; rerun scripts/gen-events5-manifest.py"
+        );
+        out.push(f[2].parse::<u8>().unwrap());
+        out.push(f[3].parse::<u8>().unwrap());
+        n += 1;
+    }
+    assert_eq!(n, cards.len(), "data/events5.tsv is out of date");
+    let mut w = BlobWriter::new(5, BlobKind::Gifts);
+    w.table(1, verity::gift::pgf::EVENT5_SIZE as u16, out);
+    w.finish()
+}
+
 /// Builds every blob from `exports` into `out`; returns (name, size) pairs.
 pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     fs::create_dir_all(out).unwrap();
@@ -760,6 +788,14 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
     let mut w5 = BlobWriter::new(5, BlobKind::Gifts);
     w5.table(1, verity::gift::pgf::PGF_SIZE as u16, gifts5);
     put("gifts5.bin".into(), w5.finish());
+    let events5 = fs::read_to_string(exports.parent().unwrap().join("events5.tsv")).unwrap();
+    put(
+        "events5.bin".into(),
+        build_events5(
+            load(&exports.join("gifts5.json")).as_array().unwrap(),
+            &events5,
+        ),
+    );
     let gifts = load(&exports.join("gifts4.json"));
     let events4 = fs::read_to_string(exports.parent().unwrap().join("events4.tsv")).unwrap();
     put("gifts4.bin".into(), build_gifts4(&gifts, &events4, true));
