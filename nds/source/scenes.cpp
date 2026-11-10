@@ -773,7 +773,7 @@ private:
         // On the cell grid, so each slot's backing is whole frame tiles.
         if (party_)
         {
-            *x = 56 + (i % 2) * 112;
+            *x = 48 + (i % 2) * 112;
             *y = 24 + (i / 2) * 48;
         }
         else
@@ -804,7 +804,7 @@ private:
         {
             int cx, cy;
             cell_pos(i, &cx, &cy);
-            if (x >= cx - 4 && x < cx + 36 && y >= cy && y < cy + 32)
+            if (x >= cx && x < cx + 40 && y >= cy && y < cy + 32)
                 cur_ = i;
         }
     }
@@ -843,10 +843,12 @@ private:
             uint8_t tiles[512], pal;
             if (v.species != 0 &&
                 core::icon_tiles(v.species, v.form, v.gender == 1, v.is_egg, tiles, &pal))
-                ui::icon_rom(2 + 2 * i, x, y, tiles, pal, v.is_shiny && !v.is_egg);
+                ui::icon_rom(2 + 2 * i, x + ui::kSlotIconX, y + ui::kSlotIconY, tiles, pal,
+                             v.is_shiny && !v.is_egg);
             else if (v.species != 0)
-                ui::icon(2 + 2 * i, x, y, v.types[0] == 0xFF ? 17 : v.types[0], v.is_egg,
-                         v.is_shiny);
+                // The placeholders are drawn centred in their frame, unlike the game's icons.
+                ui::icon(2 + 2 * i, x + ui::kSlotIconX, y - 1,
+                         v.types[0] == 0xFF ? 17 : v.types[0], v.is_egg, v.is_shiny);
         }
         details(at_cell(cur_));
     }
