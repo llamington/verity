@@ -125,6 +125,9 @@ void icon(int oam_id, int x, int y, uint8_t type, bool egg, bool shiny);
 void set_icon_palettes(const uint16_t (*pal)[16], int count);
 // A box icon from the ROM: 4 bpp tiles (1D 32x32) drawn with ROM palette `palette`; shiny star.
 void icon_rom(int oam_id, int x, int y, const uint8_t* tiles, uint8_t palette, bool shiny);
+// A held item's icon from the ROM (4 bpp 1D 32x32 tiles, its own 16 colours) at x, y on the top
+// or bottom screen; one per screen. Null tiles hide it.
+void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* colors);
 // Selection cursor (32x32 frame) on the bottom screen.
 void cursor(int oam_id, int x, int y);
 // Highlight bar (8 px high, full width) on the bottom screen.

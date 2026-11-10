@@ -7,6 +7,7 @@ use core::slice;
 use verity::text::{value_to_char_g4, TERMINATOR};
 use verity_rom::font::{self, CachedFont, Keys};
 use verity_rom::icons::{self, CachedIcons, IconKey};
+use verity_rom::items::{self, CachedItems};
 use verity_rom::moves::{self, CachedMoves};
 use verity_rom::nds::{Game, Rom};
 use verity_rom::{Error, Source};
@@ -241,6 +242,99 @@ pub unsafe extern "C" fn verity_icons_find(
     };
     unsafe {
         *palette = r.palette;
+        *tiles_at = r.tiles_at;
+    }
+    true
+}
+
+/// Builds the held item icon cache file for the ROM read by `src`.
+pub fn build_items_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error> {
+    let mut rom = Rom::open(src)?;
+    Ok(items::load(&mut rom)?.to_cache(rom.game_code()))
+}
+
+/// C ABI: builds an item icon cache from a ROM, like `verity_rom_build_font_cache` (free the
+/// result with `verity_rom_free`). The cache serves saves of the ROM's generation only.
+///
+/// # Safety
+///
+/// As for `verity_rom_build_font_cache`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_rom_build_items_cache(
+    read: Option<ReadFn>,
+    ctx: *mut c_void,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let Some(read) = read else {
+        return core::ptr::null_mut();
+    };
+    if out_len.is_null() {
+        return core::ptr::null_mut();
+    }
+    match build_items_cache(Callback { read, ctx }) {
+        Ok(v) => {
+            let b = v.into_boxed_slice();
+            unsafe { *out_len = b.len() };
+            alloc::boxed::Box::into_raw(b) as *mut u8
+        }
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+fn cached_items(p: *const u8, len: usize) -> Option<CachedItems<'static>> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: callers vouch that `p` is valid for `len` bytes while the items are in use.
+    CachedItems::parse(unsafe { slice::from_raw_parts(p, len) }).ok()
+}
+
+/// C ABI: how many bytes from the start of an item icon cache the DS keeps in memory (header and
+/// index), from its first 16 bytes; 0 if it isn't one.
+///
+/// # Safety
+///
+/// `p` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_items_head_len(p: *const u8, len: usize) -> usize {
+    if p.is_null() {
+        return 0;
+    }
+    CachedItems::head_len(unsafe { slice::from_raw_parts(p, len) }).unwrap_or(0)
+}
+
+/// C ABI: the generation an item icon cache head serves (4 or 5), or 0 if it isn't one.
+///
+/// # Safety
+///
+/// `head` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_items_generation(head: *const u8, len: usize) -> u8 {
+    cached_items(head, len).map_or(0, |c| c.generation)
+}
+
+/// C ABI: the icon of held item `item`: file offsets of its 16 colours and 512 tile bytes. False
+/// if the cache has no icon for it (including item 0).
+///
+/// # Safety
+///
+/// `head` is null or valid for `len` bytes; `palette_at` and `tiles_at` are null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn verity_items_find(
+    head: *const u8,
+    len: usize,
+    item: u16,
+    palette_at: *mut u32,
+    tiles_at: *mut u32,
+) -> bool {
+    if palette_at.is_null() || tiles_at.is_null() {
+        return false;
+    }
+    let Some(r) = cached_items(head, len).and_then(|c| c.find(item)) else {
+        return false;
+    };
+    unsafe {
+        *palette_at = r.palette_at;
         *tiles_at = r.tiles_at;
     }
     true
@@ -532,6 +626,35 @@ mod tests {
         assert!(unsafe { verity_icons_find(v.as_ptr(), head, 25, 0, 0, 0, &mut pi, &mut at) });
         assert!(at as usize + 512 <= v.len());
         assert!(!unsafe { verity_icons_find(v.as_ptr(), head, 2000, 0, 0, 0, &mut pi, &mut at) });
+    }
+
+    #[test]
+    fn item_cache_through_the_c_abi() {
+        let Some(mut rom) = rom("heartgold.nds") else {
+            return;
+        };
+        let mut len = 0;
+        let p = unsafe {
+            verity_rom_build_items_cache(
+                Some(read_slice),
+                &mut rom as *mut _ as *mut c_void,
+                &mut len,
+            )
+        };
+        assert!(!p.is_null());
+        let v = unsafe { slice::from_raw_parts(p, len) }.to_vec();
+        unsafe { verity_rom_free(p, len) };
+        let head = unsafe { verity_items_head_len(v.as_ptr(), 16) };
+        assert_eq!(head, 16 + 4 * 537);
+        assert_eq!(unsafe { verity_items_generation(v.as_ptr(), head) }, 4);
+        let (mut pal, mut at) = (0u32, 0u32);
+        assert!(
+            unsafe { verity_items_find(v.as_ptr(), head, 234, &mut pal, &mut at) },
+            "Leftovers"
+        );
+        assert!(pal as usize + 32 <= at as usize && at as usize + 512 <= v.len());
+        assert!(!unsafe { verity_items_find(v.as_ptr(), head, 0, &mut pal, &mut at) });
+        assert!(!unsafe { verity_items_find(v.as_ptr(), head, 537, &mut pal, &mut at) });
     }
 
     #[test]

@@ -346,6 +346,15 @@ bool verity_icons_palette(const uint8_t *head, size_t len, uint8_t index, uint16
 bool verity_icons_find(const uint8_t *head, size_t len, uint16_t species, uint8_t form,
                        uint8_t female, uint8_t egg, uint8_t *palette, uint32_t *tiles_at);
 
+/* Held item icons, one cache per generation (item IDs differ). The DS keeps the head
+ * (verity_items_head_len bytes, from the first 16) in memory; verity_items_find gives the file
+ * offsets of the item's 16 BGR555 colours and 512 tile bytes (4 bpp, 1D 32x32). */
+uint8_t *verity_rom_build_items_cache(verity_read_fn read, void *ctx, size_t *out_len);
+size_t verity_items_head_len(const uint8_t *p, size_t len);
+uint8_t verity_items_generation(const uint8_t *head, size_t len);
+bool verity_items_find(const uint8_t *head, size_t len, uint16_t item, uint32_t *palette_at,
+                       uint32_t *tiles_at);
+
 /* Move stats from the ROM (category, power, accuracy), one cache per generation: values differ
  * between Gen 4 and Gen 5. */
 uint8_t *verity_rom_build_moves_cache(verity_read_fn read, void *ctx, size_t *out_len);

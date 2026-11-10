@@ -998,6 +998,33 @@ void icon_rom(int id, int x, int y, const uint8_t* tiles, uint8_t palette, bool 
            g_star, -1, false, !shiny, false, false, false);
 }
 
+void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* colors)
+{
+    // The last OAM entry of each screen and colours 128..143 of its sprite palette.
+    constexpr int kId = 127, kBase = 128;
+    static uint16_t* gfx[2];
+    OamState* oam = top ? &oamMain : &oamSub;
+    if (!tiles)
+    {
+        oamClear(oam, kId, 1);
+        return;
+    }
+    uint16_t*& dst = gfx[top ? 0 : 1];
+    if (!dst)
+        dst = oamAllocateGfx(oam, SpriteSize_32x32, SpriteColorFormat_256Color);
+    uint16_t* pal = top ? SPRITE_PALETTE : SPRITE_PALETTE_SUB;
+    for (int i = 1; i < 16; i++)
+        pal[kBase + i] = colors[i];
+    for (int i = 0; i < 512; i++)
+    {
+        uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
+        dst[i] = (uint16_t)((lo ? kBase + lo : 0) | (hi ? kBase + hi : 0) << 8);
+    }
+    // Priority 0: above the row highlight bar, which crosses the icon on the Item row.
+    oamSet(oam, kId, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
+           false, false, false, false);
+}
+
 void cursor(int id, int x, int y)
 {
     oamSet(&oamSub, id, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, g_cursor, -1,
