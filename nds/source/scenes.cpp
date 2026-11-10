@@ -2114,6 +2114,50 @@ private:
         return true;
     }
 
+    // A move's stats in a panel on the top screen (rows row..row+3).
+    void move_details(int row, uint16_t mv)
+    {
+        ui::panel(top(), 1, row, 30, 4);
+        for (int r = row; r < row + 4; r++)
+            at(top(), 1, r, "%s", "");
+        if (mv == 0)
+        {
+            at(top(), 1, row, UI_MUTED "No move in this slot.");
+            return;
+        }
+        verity_move_stats m;
+        uint8_t gen = gen4_ ? 4 : 5;
+        if (!core::move_info(gen, mv, &m))
+        {
+            at(top(), 1, row, "%s", ui::name(VERITY_NAME_MOVES, mv));
+            at(top(), 1, row + 1, UI_MUTED "Not in Gen %u games.", gen);
+            return;
+        }
+        at(top(), 1, row, "%s", ui::name(VERITY_NAME_MOVES, mv));
+        if (m.type_ != 0xFF)
+            at(top(), 17, row, UI_MUTED "%s" UI_MUTED "  %u PP", ui::name(VERITY_NAME_TYPES, m.type_), m.pp);
+        if (!m.from_rom)
+        {
+            at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
+            at(top(), 1, row + 3, UI_MUTED "power, accuracy and category.");
+            return;
+        }
+        static const char* kCat[3] = {"Physical", "Special", "Status"};
+        char power[12], acc[16];
+        if (m.power == 0)
+            snprintf(power, sizeof(power), "-");
+        else if (m.power == 1)
+            snprintf(power, sizeof(power), "varies");
+        else
+            snprintf(power, sizeof(power), "%u", m.power);
+        if (m.accuracy == 0 || m.accuracy == 101)
+            snprintf(acc, sizeof(acc), "never misses");
+        else
+            snprintf(acc, sizeof(acc), "%u%%", m.accuracy);
+        at(top(), 1, row + 2, UI_MUTED "Category" UI_MUTED "  %s", kCat[m.category % 3]);
+        at(top(), 1, row + 3, UI_MUTED "Power" UI_MUTED "  %s    " UI_MUTED "Accuracy" UI_MUTED "  %s", power, acc);
+    }
+
     void draw_picker()
     {
         uint32_t cat = picking_ == 1 ? (gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5)
@@ -2129,10 +2173,19 @@ private:
         {
             int i = pick_.scroll + r;
             if (i < pick_.count)
-                at(bottom(), 0, 2 + r, " " UI_MUTED "%3d" UI_MUTED "  %s", i, i ? ui::name(cat, i) : "(none)");
+            {
+                verity_move_stats m;
+                if (picking_ >= 2 && i && core::move_info(gen4_ ? 4 : 5, (uint16_t)i, &m) && m.type_ != 0xFF)
+                    at(bottom(), 0, 2 + r, " %-14.14s  " UI_MUTED "%-8.8s  %2u PP", ui::name(cat, i),
+                       ui::name(VERITY_NAME_TYPES, m.type_), m.pp);
+                else
+                    at(bottom(), 0, 2 + r, " " UI_MUTED "%3d" UI_MUTED "  %s", i, i ? ui::name(cat, i) : "(none)");
+            }
             else
                 at(bottom(), 0, 2 + r, "%s", "");
         }
+        if (picking_ >= 2)
+            move_details(10, (uint16_t)pick_.selected);
     }
 
     void apply()
@@ -2219,11 +2272,16 @@ private:
         ui::panel(top(), 1, 6, 30, 2);
         at(top(), 1, 6, "%s", e_.mask ? "* Edited, not applied yet" : "No changes yet");
         at(top(), 1, 7, UI_MUTED "%s", status_[0] ? status_ : "START applies, B goes back.");
+        if (tab_ == 2)
+            move_details(10, e_.moves[row_ < 4 ? row_ : 0]);
+        else
+        {
         ui::panel(top(), 1, 10, 30, 4);
         at(top(), 1, 10, UI_MUTED "Left/Right" UI_MUTED "  change the value");
         at(top(), 1, 11, UI_MUTED "Y+Left/Right" UI_MUTED "  in tens");
         at(top(), 1, 12, UI_MUTED "A" UI_MUTED "  pick from a list (item, moves)");
         at(top(), 1, 13, UI_MUTED "%s", tab_ == 1 && gen4_ ? "X  closest legal IVs" : "Tap a row twice to step it");
+        }
         show_preview();
 
         static const char* tabs[kTabs] = {"Main", "Stats", "Moves", "Met", "Misc"};

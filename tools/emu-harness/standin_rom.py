@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Writes a small stand-in for a Gen 4/5 ROM that keeps only what verity reads (header, ARM9,
-file tables, the font, icon and species-data files), so the DS can build its font and icon caches
+file tables, the font, icon, species-data and move files), so the DS can build its font and icon caches
 in the emulator without a 512 MB SD image. Output goes under build/ (gitignored), never the repo.
 
 usage: standin_rom.py <rom.nds> <out.nds>
@@ -8,11 +8,11 @@ usage: standin_rom.py <rom.nds> <out.nds>
 import struct
 import sys
 
-KEEP = {b"CPU": ["graphic/pl_font.narc", "poketool/icongra/pl_poke_icon.narc"],
-        b"ADA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc"],
-        b"APA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc"],
-        b"IPK": ["a/0/1/6", "a/0/2/0"], b"IPG": ["a/0/1/6", "a/0/2/0"]}
-GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6"]
+KEEP = {b"CPU": ["graphic/pl_font.narc", "poketool/icongra/pl_poke_icon.narc", "poketool/waza/pl_waza_tbl.narc"],
+        b"ADA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc"],
+        b"APA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc"],
+        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1"]}
+GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1"]
 
 
 def file_id(d, fnt, path):

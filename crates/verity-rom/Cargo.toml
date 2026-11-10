@@ -10,3 +10,6 @@ repository.workspace = true
 # Used only by verity-ffi (the DS build). The core `verity` crate must never depend on this.
 
 [dependencies]
+
+[dev-dependencies]
+serde_json = "1"

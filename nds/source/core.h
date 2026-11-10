@@ -45,6 +45,9 @@ void remember(const char* path);
 void rom_assets_init();
 // A Pokémon's box icon from the ROM: 512 bytes of 4 bpp tiles (1D 32x32) and its palette.
 bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* tiles, uint8_t* palette);
+// Type and PP of a move, plus category, power and accuracy when a ROM of the save's generation
+// was found (from_rom). False for a move number the generation doesn't have.
+bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out);
 // The game code of the ROM the font came from ("" for none).
 const char* font_game();
 bool last(char* out, int cap);
