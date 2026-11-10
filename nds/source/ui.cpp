@@ -162,7 +162,8 @@ uint8_t g_ink = 1;  // palette index plot() writes (see the theme below)
 
 void plot(Surface* c, int x, int y)
 {
-    if (x < 0 || x >= 256 || y < 0 || y >= 192)
+    // The text layer is scrolled 2 px right, so its last 2 columns would wrap to the left edge.
+    if (x < 0 || x >= 254 || y < 0 || y >= 192)
         return;
     int tile = (y / 8) * 32 + x / 8;
     uint16_t* word = c->tiles + tile * 16 + (y % 8) * 2 + (x % 8) / 4;
@@ -625,7 +626,7 @@ void hints(Surface* c, const char* spec)
         int x = col * 8 + cells * 8 + 2;
         if (label)
             x = draw_text(c, x, row * 8, label);
-        col = (x + 9) / 8;
+        col = (x + 12) / 8;  // at least 4 px before the next chip
     }
 }
 
