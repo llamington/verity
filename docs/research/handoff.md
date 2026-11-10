@@ -23,8 +23,15 @@ and gaps are in `docs/research/p5-plan.md`.
   100 KB). It now compares in 4 KB chunks. Found by `make emu-tour`, which runs every `ui-*.json`
   with stand-in ROMs; `make emu-ui` runs without ROMs and missed it. DS heap is getting tight:
   watch large allocations.
-- Seen, not fixed: the save overview shows "Checksums BAD" for an edited save before it's saved
-  (probably because checksums are recomputed only on save; not checked), e.g. `ui-misc-tabs` 10-overview.
+- **Fixed: "Checksums BAD" on an edited, unsaved save.** Edits leave the block checksums in memory
+  stale until `verity_save_finalize` runs on save, and the overview re-probed the buffer. It now
+  shows the file's state (`Doc::file_checksums_ok`) and "updated on save" while there are unsaved
+  edits. Also fixed: `core::open` kept `dirty` from the previous save. Still open: backing out of
+  an edited save with B discards the edits without asking.
+- **Mystery Gift list repeats explained and labelled:** repeated titles are different cards (regional
+  or shop releases of one event, or a series sharing a title) whose Pokémon differ in OT name and
+  trainer ID. Rows now show what the card gives, the OT, the ID and the region; the top panel adds
+  OT and ID (`VerityEventView` gained `item`, `tid`, `sid`, `ot`).
 - **Move descriptions:** from the ROM's message bank into the move cache (version 2, so old
   caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
   the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`

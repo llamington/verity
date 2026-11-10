@@ -17,6 +17,9 @@ struct Doc
     verity_save_info info{};
     uint32_t boxes = 0;
     bool dirty = false;  // unsaved changes
+    // The checksums of the file as last read or written. Edits leave the block checksums in
+    // `buf` stale until saving recomputes them, so `info.checksums_valid` is false while dirty.
+    bool file_checksums_ok = false;
 
     bool loaded() const { return buf != nullptr; }
 };
