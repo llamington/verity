@@ -98,3 +98,10 @@ PLAN §7 asks for two instances stepped in lockstep. melonDS's `LocalMP` waits o
 25 ms timeout, so each console needs its own thread, and the frame lead between them is only softly
 limited. Linked runs aren't deterministic; single-console runs still are. See
 `docs/research/emu-harness.md`.
+
+## Memory Link has no minimum-progress refusal (P10)
+
+PLAN P10 says `memlink::build` should refuse a BW save that hasn't reached minimum progress or whose
+region or language doesn't match. The game links a save with the Hall of Fame flag (2400) cleared, and
+the decompiled host code has no language check, so `build` follows the game and only refuses saves
+that aren't valid Black or White saves. Other-language links are untested.

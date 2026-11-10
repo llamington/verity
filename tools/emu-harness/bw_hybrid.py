@@ -13,9 +13,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TABLE = os.path.join(HERE, "..", "..", "crates", "verity", "src", "save", "gen5_blocks.rs")
 
 
-def blocks():
+def blocks(table="BLOCKS_BW"):
     text = open(TABLE).read()
-    text = text[text.index("BLOCKS_BW") : text.index("BLOCKS_B2W2")]
+    if table == "BLOCKS_BW":
+        text = text[text.index("BLOCKS_BW") : text.index("BLOCKS_B2W2")]
+    else:
+        text = text[text.index("BLOCKS_B2W2") :]
     row = r"offset: (0x[0-9A-F]+), length: (0x[0-9A-F]+), chk: (0x[0-9A-F]+), chk_mirror: (0x[0-9A-F]+)"
     return [tuple(int(v, 16) for v in m) for m in re.findall(row, text)]
 
@@ -29,6 +32,13 @@ def crc16(data):
     return crc
 
 
+def fix_checksums(data, table):
+    for offset, length, chk, mirror in table:
+        value = struct.pack("<H", crc16(data[offset : offset + length]))
+        data[chk : chk + 2] = value
+        data[mirror : mirror + 2] = value
+
+
 def main(base, donor, out, *which):
     data = bytearray(open(base, "rb").read())
     other = open(donor, "rb").read()
@@ -36,10 +46,7 @@ def main(base, donor, out, *which):
     for offset, length, _, _ in table[:-1]:  # the last block is the checksum table itself
         if "all" in which or any(offset <= int(w, 16) < offset + length for w in which):
             data[offset : offset + length] = other[offset : offset + length]
-    for offset, length, chk, mirror in table:
-        value = struct.pack("<H", crc16(data[offset : offset + length]))
-        data[chk : chk + 2] = value
-        data[mirror : mirror + 2] = value
+    fix_checksums(data, table)
     open(out, "wb").write(data)
 
 

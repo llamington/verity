@@ -1,68 +1,80 @@
 # Memory Link findings (P10)
 
-Evidence comes from genuine Memory Links in the harness (`make emu-link`, `memlink_run.py`): Black 2
-(IREO) hosting, White (IRAO) receiving over DS Download Play. Saves used: `gen5_black.sav`
-("RoC"), `Black - Full Completion.sav` ("Lynx"), and hybrids of the two (`bw_hybrid.py`). Links run
-under a fixed RTC, and repeat runs give identical bytes.
+`verity::memlink` reproduces the game's Memory Link byte for byte. `memlink_accept.py` records
+genuine links in the harness (Black 2 IREO hosting, White IRAO receiving over DS Download Play), and
+`tests/p10_memlink.rs` compares the whole save: 17 of 17 match. Random seeds are taken from the
+genuine result, since they can't be reproduced.
 
-Status: partly decoded. This covers two real saves and their hybrids, not the 10 diverse saves P10's
-acceptance needs. `memlink::build` is not written yet.
+The 17 cases are 2 real saves, 14 single edits of them (each event flag group, the unlock word, event
+variables, musical, Hall of Fame, gender, version, name and ID, and two Black 2 musical states), and
+a second link onto an already linked save.
 
-## Layout, all confirmed
+Sources: the field meanings come from the `fuddlesworth/pokebw2` decompilation, read for facts only
+(`src/ov332/wb_save_convert.c`, `src/system/memory_link_savedata.c`, `src/ov331/save_outside.c`).
+Its names are inferred, so the evidence for each rule is the match against genuine links.
 
-The link changes only `0x7E000..0x7EA1F`. Offsets below are relative to the region or block.
+## Region layout
 
-| Part | Offset | Size | Notes |
+`0x7E000..0x7EA1F` is the game's "outside" data, in three blocks. Each has the header
+`u32 magic (0xA10F49AE)`, `u32 save count`, `u16 CRC16-CCITT of the data`, `u16 size`.
+
+| Block | Offset | Data size | Contents |
 |---|---|---|---|
-| Block 1 | `+0x000` | `0x374` | CRC16-CCITT of `+0xC..+0x374` at `+0x8`; seed at `+0x370` |
-| Mirror | `+0x400` | `0x374` | Byte-identical to block 1, including the seed |
-| Block 2 | `+0x800` | `0x220` | Unencrypted. CRC of `+0xC..+0x220` at `+0x8`; `+0xA` holds `0x214`, the CRC'd length |
+| Gifts | `0x7E000` | `0x368` | Outside mystery gifts, encrypted |
+| Gifts backup | `0x7E400` | `0x368` | Same; the newer valid copy is written to both |
+| Keys | `0x7E800` | `0x214` | `KeySystemData`: Key System info, then the Memory Link data |
 
-Both blocks start with the bytes `ae 49 0f a1`, the same for both saves. `+0x4` is 1 in block 1 and 0
-in block 2.
+PKHeX's `Link1Data`/`Link2Data` (`0x400` each) are the two gift copies. The Memory Link data is the
+keys block, so PKHeX isn't wrong about those offsets. BW_tool's "block 1" is really the gifts.
 
-The seed has the form `rand16 << 16` (`0x7D7D0000` under the fixed RTC).
+The header bytes follow from how the game loads the blocks. A block with no valid magic keeps the
+raw count it read, so erased flash gives a keys count of 0 after `0xFFFFFFFF + 1`. New gifts are
+zeroed first, giving count 1 and size 0.
 
-Block 1's crypto covers `+0xC..+0x370`. BW_tool's loop treats the length as an end offset and stops
-at `+0x364`; that round-trips in its own tool but leaves 12 bytes wrong against the game's format.
-Block 1's plaintext is all zeros for both real saves, so its content is still unknown.
+New gifts are encrypted from `+0xC` to `+0x370` with the seed `checksum + (tail << 16)`, stored at
+`+0x370`. `tail` is one frame-counter byte repeated, and never 0. BW_tool's loop stops 12 bytes short.
 
-PKHeX labels `0x7E000` as `Link1Data` (`0x400`). The real write is `0xA20` long. Not yet compared
-with PKHeX's source in detail.
+## Keys block
 
-## Block 2 fields
+| Offset | Size | Meaning | Source in the BW save |
+|---|---|---|---|
+| `+0x0C` | `0x38` | Key System info; the last `u32` (`+0x40`) is its seed | Not from BW |
+| `+0x44` | `0x18` each | 3 player records: events, musical, Hall of Fame | `0x19404` block, see below |
+| `+0x8C` | 2 | 16 flag bits | See below |
+| `+0x8E` | 6 | 3 event variables | Event work `0x4030`, `0x408E`, `0x40BC` |
+| `+0x94` | `0x20` | Musical props | `0x1F958` |
+| `+0xB4` | 2 | Musical total points | `0x1F956` |
+| `+0xB6` | 2 | Musical shows played | `0x1F952` |
+| `+0xB8` | `0x168` | Hall of Fame | `0x23B00` |
 
-| Offset | Value | Source in the BW save |
-|---|---|---|
-| `+0x40` | `e0 f8 9a 90` | Constant across both saves; not found in the BW save |
-| `+0x44`, `+0x46`, `+0x48` | TID, SID, name | `0x19414`, `0x19416`, `0x19404` |
-| `+0x5C`, `+0x5E`, `+0x60` | TID, SID, name, conditional | Written only if `0x1F952` is nonzero |
-| `+0x74`, `+0x76`, `+0x78` | TID, SID, name | Same as the first set |
-| `+0x8D` | Flashback bits | `0xFF` for both saves; rules unknown |
-| `+0x8E` | Starter | `0x20160` |
-| `+0x90` | `1` | Constant across both saves |
-| `+0x94` | `0x13` bytes, conditional | `0x1F958`, copied only if `0x1F952` is nonzero |
-| `+0xB4` | u16 | `0x1F956` |
-| `+0xB6` | u16 | `0x1F952` |
-| `+0xB8` | `0x168` bytes | Hall of Fame, `0x23B00` |
+Player record: `u32 id`, 8 UTF-16 name units, gender, version, linked, padding. Sources are `0x19414`,
+`0x19404`, `0x19421` and `0x1941F`.
 
-BW_tool writes all three name slots and always copies the props, so its output differs from the
-game's when `0x1F952` is zero.
+Flag bits 0–7 come from event flags 2400, 2401, 2427 and, inverted, 681–685. Bits 8–15 are the low
+byte of the word at `0x21204`.
 
-How `0x1F952` was found: copying every block from the Full Completion save reproduces its output.
-Bisecting the 69 data blocks isolates `0x1F700`, and patching just `0x1F952` into `gen5_black` fills
-the slot and props. Patching only `0x1F956` does neither. What the game stores at `0x1F952` hasn't
-been identified. The block's `0x1F958` field is presumably Musical props, which is unconfirmed.
+## Merge rules
 
-## Still unknown
+- Flags only get set. Variable 1 is skipped when the BW value is 0.
+- Musical data is copied only if the BW show count is nonzero, the B2W2 save's "downloaded props" byte
+  (`0x1F700 + 0x2A0`) is 0, and the B2W2 props differ from BW's or B2W2 already owns all 100.
+- Hall of Fame is copied only if flag bit 0 is set.
+- A player record is written only for a part that changed.
+- If any part is already linked and this save would change a part owned by a different player, the
+  game asks before replacing. `apply` returns `DifferentPlayer` unless `replace` is set.
 
-- The rule behind each flashback bit (both real saves give `0xFF`; needs early-progress saves).
-- Block 1's content, and what makes it nonzero, if anything.
-- `+0x58` (low byte 0 or 1) and `+0x8C`, which change with blocks not yet identified.
-- The Key System (R5).
+The 8 flashbacks unlock on flag bits 8, 13, 0, 15, 12 and 0, then "musical player linked", then flag
+bit 0. BW_tool's "8 flashback flags" at `+0x8D` are flag bits 8–15, not the 8 flashbacks.
+
+## Not done
+
+- The Key System (R5). `+0x0C` is preserved or initialised, never edited.
+- The in-game check that the Memory Link indicator shows and a flashback can be triggered.
+- A DS screen for this.
+- Linking a Japanese or Korean BW save, which hasn't been tried.
 
 ## Harness reliability
 
-A link can drop mid-download; Black 2 then says "Unable to connect" and leaves the save untouched.
-This happened in 2 of 18 parallel runs at melonDS's 25 ms timeout. At 150 ms, 4 of 4 parallel
-runs linked on the first try. `memlink_run.py` retries when the save comes back unchanged.
+Links can still drop mid-download; the game then says "Unable to connect" and leaves the save
+untouched. At 4 parallel runs this cost a retry in 4 of the 17 acceptance links. `memlink_run.py`
+retries up to 3 times when the save comes back unchanged.
