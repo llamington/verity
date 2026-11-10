@@ -35,6 +35,7 @@ pub enum BlobKind {
     EncDr = 17,
     Names5 = 18,
     Gifts5 = 19,
+    Events5 = 20,
 }
 
 const SLOTS: usize = 24;
@@ -84,6 +85,7 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
         17 => EncDr,
         18 => Names5,
         19 => Gifts5,
+        20 => Events5,
         _ => return None,
     })
 }
@@ -111,6 +113,7 @@ pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usiz
             | BlobKind::EncDr => verity::data::encounters::EncounterData::load(data).is_ok(),
             BlobKind::Names4 | BlobKind::Names5 => Strings::load(data).is_ok(),
             BlobKind::Gifts5 => verity::gift::pgf::Gifts5::load(data).is_ok(),
+            BlobKind::Events5 => verity::gift::pgf::Events5::load(data).is_ok(),
             BlobKind::Gifts4 | BlobKind::Events4 => verity::gift::pcd::Gifts4::load(data).is_ok(),
             BlobKind::G3Origin => verity::legality::analysis3::Context3::load(data).is_ok(),
             _ => GameData::load(data).is_ok(),

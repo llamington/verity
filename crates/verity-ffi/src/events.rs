@@ -3,7 +3,9 @@
 use core::slice;
 
 use verity::gift::inject4::{available, check, inject, Refusal};
+use verity::gift::inject5;
 use verity::gift::pcd::{Gift4, Gifts4, RANGER_INDEX};
+use verity::gift::pgf::{Events5, Gifts5, Pgf};
 use verity::save::Save;
 
 use crate::ui::{blob, open, BlobKind};
@@ -60,6 +62,75 @@ fn view(save: &Save, which: u8, record: usize, g: &Gift4) -> VerityEventView {
     v
 }
 
+/// `blob` value of a Gen 5 card in a [`VerityEventView`].
+const WHICH_GEN5: u8 = 2;
+
+fn database5() -> Option<(Gifts5<'static>, Events5<'static>)> {
+    Some((
+        Gifts5::load(blob(BlobKind::Gifts5)?).ok()?,
+        Events5::load(blob(BlobKind::Events5)?).ok()?,
+    ))
+}
+
+fn status5(result: Result<(), inject5::Refusal5>) -> u8 {
+    match result {
+        Ok(()) => 0,
+        Err(r) => r as u8,
+    }
+}
+
+fn view5(save: &Save, record: usize, g: &Pgf) -> VerityEventView {
+    // The front end names card types by their Gen 4 numbers.
+    let gift_type = match (g.card_type(), g.is_egg()) {
+        (1, true) => 7,
+        (1, false) => 1,
+        (2, _) => 3,
+        _ => 0,
+    };
+    let mut v = VerityEventView {
+        blob: WHICH_GEN5,
+        gift_type,
+        record: record as u16,
+        card_id: g.card_id(),
+        species: if g.card_type() == 1 { g.species() } else { 0 },
+        region: 0,
+        status: status5(inject5::check(save, g)),
+        ranger: 0,
+        reserved: 0,
+        title: [0; 37],
+    };
+    let raw = g.title_raw();
+    let n = verity::text::decode5(&raw, &mut v.title[..36]);
+    v.title[n] = 0;
+    v
+}
+
+/// The civil date of `days` since 2000-01-01.
+fn date_of(days: u16) -> (u16, u8, u8) {
+    let (mut year, mut left) = (2000u16, days as u32);
+    loop {
+        let len =
+            if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) {
+                366
+            } else {
+                365
+            };
+        if left < len {
+            break;
+        }
+        left -= len;
+        year += 1;
+    }
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let lengths = [31, 28 + leap as u32, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 0;
+    while left >= lengths[month] {
+        left -= lengths[month];
+        month += 1;
+    }
+    (year, month as u8 + 1, left as u8 + 1)
+}
+
 /// C ABI: fills `out` with the gifts for this save's game and language.
 ///
 /// # Safety
@@ -81,6 +152,22 @@ pub unsafe extern "C" fn verity_events_list(
     let out = slice::from_raw_parts_mut(out, cap);
     let (kind, language) = (save.kind(), save.trainer().language);
     let mut n = 0;
+    if save.generation() == 5 {
+        let Some((cards, events)) = database5() else {
+            return 0;
+        };
+        let version = save.game_version();
+        for (record, g) in cards.iter().enumerate() {
+            let offered = events
+                .get(record)
+                .is_some_and(|e| inject5::available(e, kind, version, language));
+            if n < out.len() && offered {
+                out[n] = view5(&save, record, &g);
+                n += 1;
+            }
+        }
+        return n;
+    }
     for which in 0..2 {
         let Some(db) = database(which) else {
             continue;
@@ -112,6 +199,18 @@ pub unsafe extern "C" fn verity_event_inject(
     let Some(mut save) = open(buf, len) else {
         return UNAVAILABLE;
     };
+    if which == WHICH_GEN5 {
+        let Some((cards, events)) = database5() else {
+            return UNAVAILABLE;
+        };
+        let (Some(g), Some(e)) = (cards.get(record as usize), events.get(record as usize)) else {
+            return UNAVAILABLE;
+        };
+        if !inject5::available(e, save.kind(), save.game_version(), save.trainer().language) {
+            return UNAVAILABLE;
+        }
+        return status5(inject5::inject(&mut save, &g, date_of(days)));
+    }
     let Some(g) = database(which).and_then(|db| db.get(record as usize)) else {
         return UNAVAILABLE;
     };
@@ -130,6 +229,7 @@ pub extern "C" fn verity_event_status_text(code: u8) -> *const u8 {
         2 => b"Waiting at the deliveryman\0",
         3 => b"Deliveryman has 8 gifts waiting\0",
         4 => b"3 cards held: discard one in-game\0",
+        6 => b"12 cards held: discard one in-game\0",
         _ => b"Not available for this save\0",
     };
     s.as_ptr()

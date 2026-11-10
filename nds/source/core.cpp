@@ -248,6 +248,12 @@ bool ensure_events_data()
 {
     if (!g_nitro_tried)
         load_data_for(g_doc.info.kind);
+    if (g_doc.info.generation == 5)
+    {
+        bool ok5 = attach(VERITY_BLOB_GIFTS5, "gifts5.bin");
+        ok5 &= attach(VERITY_BLOB_EVENTS5, "events5.bin");
+        return ok5;
+    }
     bool ok = attach(VERITY_BLOB_GIFTS4, "gifts4.bin");
     ok &= attach(VERITY_BLOB_EVENTS4, "events4.bin");
     return ok;
@@ -261,8 +267,8 @@ uint8_t wizard_version()
     {
         case 1: return 10;
         case 3: return 7;
-        case 4: return 20;
-        case 5: return 22;
+        case 4: return g_doc.info.game_version == 21 ? 21 : 20;
+        case 5: return g_doc.info.game_version == 23 ? 23 : 22;
         default: return 12;
     }
 }

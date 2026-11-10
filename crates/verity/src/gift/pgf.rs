@@ -3,6 +3,7 @@
 use crate::data::blob::{Blob, BlobError, BlobKind};
 
 pub const PGF_SIZE: usize = 0xCC;
+pub const EVENT5_SIZE: usize = 2;
 
 /// One card.
 #[derive(Clone, Copy)]
@@ -89,6 +90,13 @@ impl<'a> Pgf<'a> {
     pub fn is_egg(&self) -> bool {
         self.0[0x5C] == 1
     }
+    /// The card's title, 0xFFFF-terminated UTF-16.
+    pub fn title_raw(&self) -> [u16; 37] {
+        core::array::from_fn(|i| self.u16(0x60 + 2 * i))
+    }
+    pub fn card_id(&self) -> u16 {
+        self.u16(0xB0)
+    }
     /// 1 Pokémon, 2 item, 3 Pass Power.
     pub fn card_type(&self) -> u8 {
         self.0[0xB3]
@@ -141,5 +149,45 @@ impl<'a> Gifts5<'a> {
             .0
             .iter()
             .map(|c| Pgf(c.as_slice()))
+    }
+
+    pub fn get(&self, index: usize) -> Option<Pgf<'a>> {
+        self.iter().nth(index)
+    }
+}
+
+/// Where and in which games one card was distributed (`data/events5.tsv`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Event5 {
+    /// A save language ID.
+    pub language: u8,
+    /// Bits: 1 White, 2 Black, 4 White 2, 8 Black 2.
+    pub games: u8,
+}
+
+/// `events5.bin`: one [`Event5`] per card of [`Gifts5`], in the same order.
+#[derive(Clone, Copy)]
+pub struct Events5<'a> {
+    recs: &'a [u8],
+}
+
+impl<'a> Events5<'a> {
+    pub fn load(data: &'a [u8]) -> Result<Self, BlobError> {
+        let b = Blob::expect(data, BlobKind::Gifts)?;
+        let (t, elem) = b.table(1).ok_or(BlobError::BadDirectory)?;
+        if elem != EVENT5_SIZE || !t.len().is_multiple_of(EVENT5_SIZE) {
+            return Err(BlobError::BadDirectory);
+        }
+        Ok(Self { recs: t })
+    }
+
+    pub fn get(&self, index: usize) -> Option<Event5> {
+        let r = self
+            .recs
+            .get(index * EVENT5_SIZE..(index + 1) * EVENT5_SIZE)?;
+        Some(Event5 {
+            language: r[0],
+            games: r[1],
+        })
     }
 }

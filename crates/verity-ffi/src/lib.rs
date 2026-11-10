@@ -60,6 +60,8 @@ pub struct VeritySaveInfo {
     pub played_hours: u16,
     pub played_minutes: u8,
     pub played_seconds: u8,
+    /// 20 W, 21 B, 22 W2, 23 B2; 0 on Gen 4, whose saves don't record it.
+    pub game_version: u8,
 }
 
 /// C ABI: detects a save in `buf` (raw or DeSmuME `.dsv`) and summarises it. The buffer is not
@@ -115,6 +117,7 @@ fn probe(data: &mut [u8]) -> Option<VeritySaveInfo> {
         played_hours: t.played_hours,
         played_minutes: t.played_minutes,
         played_seconds: t.played_seconds,
+        game_version: save.game_version(),
     })
 }
 

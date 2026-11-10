@@ -9,6 +9,8 @@ pub const BOX_COUNT: usize = 24;
 const BOX: usize = 0x400;
 const PARTY: usize = 0x18E00;
 pub(super) const PLAYER_DATA: usize = 0x19400;
+/// PKHeX block 34 (`SaveBlockAccessor5*`), the same in B/W and B2/W2.
+pub(super) const MYSTERY_RANGE: core::ops::Range<usize> = 0x1C800..0x1C800 + 0xA94;
 const MISC_BLOCK: usize = 52;
 const ITEMS_BLOCK: usize = 25;
 const EVENT_BLOCK: usize = 45;
