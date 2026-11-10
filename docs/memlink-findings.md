@@ -109,9 +109,27 @@ The script that arms the flashback runs on entering the zone, not on Continue, s
 directly on Route 1 shows nothing. Flag 2400 is set by the helper because the test save hasn't got
 it; the map script requires it. One of the 8 flashbacks was played, on Black 2 only.
 
+## Key System (R5)
+
+The game keeps a copy of the key info (`+0x0C` in the keys block) outside the save, but reads main
+block 69 (`0x25800`, key info at `+0x28`) whenever a save exists, so `memlink::keys` writes that one.
+Each of the 5 keys (Easy, Challenge, City, Iron, Iceberg) has two states, stored exclusive-ored with
+the seed at `+0x34`. PKHeX calls them obtained and unlocked; the decompilation calls them unlocked
+and enabled, used here.
+
+Rules of the exchange (`KeySystemKeyState_Receive`), which `receive` follows:
+
+- A key is shareable if the partner save *unlocked* it, meaning that save earned it.
+- Receiving sets only *enabled*, so a received key can't be passed on.
+- The city key needs the other version: Black 2 to White 2, or the reverse. Every other key doesn't.
+- The sender's save doesn't change.
+
+Keys are earned at the end of the story or in the Underground Ruins, and verity doesn't grant them:
+there must be a partner save that earned the key. `make emu-keys` confirms the difficulty, city and
+chamber settings unlock in retail Black 2 for all five keys, against a save with none.
+
 ## Not done
 
-- The Key System (R5). `+0x0C` is preserved or initialised, never edited.
 - A DS screen for this.
 - Linking a Japanese or Korean BW save, which hasn't been tried.
 
