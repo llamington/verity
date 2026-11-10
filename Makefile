@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys
 
 all: nds
 
@@ -33,6 +33,10 @@ emu-link: emu-harness
 # P10: retail Black 2 plays a flashback from a save linked by memlink::apply (needs roms/, bios/).
 emu-flashback: emu-harness
 	python3 tools/emu-harness/memlink_flashback.py
+
+# P10: retail Black 2's Key System settings on a save that received keys (needs roms/, bios/).
+emu-keys: emu-harness
+	python3 tools/emu-harness/key_system_check.py
 
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
