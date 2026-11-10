@@ -24,6 +24,13 @@ pub struct VerityEventView {
     pub ranger: u8,
     pub reserved: u8,
     pub title: [u16; 37],
+    /// Item cards: the item (0 otherwise).
+    pub item: u16,
+    /// Pokémon cards: the original trainer, which tells apart releases of one event (regional
+    /// or shop distributions share a title). `ot` is UTF-16, 0-terminated; all 0 otherwise.
+    pub tid: u16,
+    pub sid: u16,
+    pub ot: [u16; 9],
 }
 
 fn database(which: u8) -> Option<Gifts4<'static>> {
@@ -55,10 +62,25 @@ fn view(save: &Save, which: u8, record: usize, g: &Gift4) -> VerityEventView {
         ranger: ranger as u8,
         reserved: 0,
         title: [0; 37],
+        item: 0,
+        tid: 0,
+        sid: 0,
+        ot: [0; 9],
     };
     let raw = g.title_raw();
     let n = verity::text::decode4(&raw, &mut v.title[..36]);
     v.title[n] = 0;
+    if g.is_entity() && !ranger {
+        let pk = g.pk();
+        v.tid = pk.tid();
+        v.sid = pk.sid();
+        let n = verity::text::decode4(&pk.ot_name_raw(), &mut v.ot[..8]);
+        v.ot[n] = 0;
+    } else if g.card_type() == 3 {
+        // PKHeX `PGT.ItemID`.
+        let p = g.pgt();
+        v.item = u16::from_le_bytes([p[4], p[5]]);
+    }
     v
 }
 
@@ -98,10 +120,25 @@ fn view5(save: &Save, record: usize, g: &Pgf) -> VerityEventView {
         ranger: 0,
         reserved: 0,
         title: [0; 37],
+        item: 0,
+        tid: 0,
+        sid: 0,
+        ot: [0; 9],
     };
     let raw = g.title_raw();
     let n = verity::text::decode5(&raw, &mut v.title[..36]);
     v.title[n] = 0;
+    match g.card_type() {
+        1 => {
+            v.tid = g.tid();
+            v.sid = g.sid();
+            let n = verity::text::decode5(&g.ot_raw(), &mut v.ot[..8]);
+            v.ot[n] = 0;
+        }
+        // PKHeX `PGF.ItemID` (the same bytes as the Pokémon's ID).
+        2 => v.item = g.tid(),
+        _ => {}
+    }
     v
 }
 

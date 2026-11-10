@@ -181,6 +181,9 @@ typedef struct verity_event_view {
     uint8_t ranger;    /* 1 for the Ranger Manaphy egg (it has no title) */
     uint8_t reserved;
     uint16_t title[37]; /* UTF-16, 0-terminated */
+    uint16_t item;      /* item cards: the item */
+    uint16_t tid, sid;  /* Pokemon cards: the original trainer's IDs */
+    uint16_t ot[9];     /* Pokemon cards: OT name, UTF-16, 0-terminated (tells releases apart) */
 } verity_event_view;
 
 /** Gifts for this save's game and language; returns how many were written (at most cap). */

@@ -92,6 +92,8 @@ bool open(const char* path, const char** err)
     g_doc.buf = buf;
     g_doc.len = len;
     g_doc.info = info;
+    g_doc.file_checksums_ok = info.checksums_valid;
+    g_doc.dirty = false;  // a fresh file (unsaved edits to the previous one are gone)
     g_doc.boxes = verity_box_count(buf, len);
     snprintf(g_doc.path, sizeof(g_doc.path), "%s", path);
     return true;
@@ -723,6 +725,7 @@ bool save_to_disk(const char** message)
     }
     g_doc.dirty = false;
     verity_save_probe(g_doc.buf, g_doc.len, &g_doc.info);
+    g_doc.file_checksums_ok = g_doc.info.checksums_valid;
     *message = "saved (backup: .bak1)";
     return true;
 }

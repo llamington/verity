@@ -279,9 +279,16 @@ public:
            i.played_seconds);
         at(top(), 1, 7, UI_MUTED "Party" UI_MUTED "  %u   " UI_MUTED "Boxes" UI_MUTED "  %lu", i.party_count,
            (unsigned long)d.boxes);
+        // Unsaved edits leave the checksums in memory stale; saving recomputes them, so show the
+        // file's state and say they'll be updated.
         at(top(), 1, 9, UI_MUTED "Checksums");
-        ui::badge(top(), 12, 9, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
-                  i.checksums_valid ? "OK" : "BAD");
+        if (d.dirty && d.file_checksums_ok)
+            ui::badge(top(), 12, 9, ui::Badge::Safe, "updated on save");
+        else if (d.dirty)
+            ui::badge(top(), 12, 9, ui::Badge::Invalid, "BAD in file, fixed on save");
+        else
+            ui::badge(top(), 12, 9, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
+                      i.checksums_valid ? "OK" : "BAD");
         if (!core::data_available())
             at(top(), 1, 12, "(data missing: showing IDs)");
         if (!message_[0] && d.dirty)
@@ -443,20 +450,50 @@ private:
             ui::utf16_to_text(e.title, out, cap);
     }
 
+    // What the card gives: the Pokémon, the item, or the kind of gift.
+    const char* gives(const verity_event_view& e) const
+    {
+        if (e.ranger)
+            return "Manaphy Egg";
+        if (e.species)
+            return ui::name(VERITY_NAME_SPECIES, e.species);
+        if (e.item)
+            return ui::name(core::doc().info.generation == 5 ? VERITY_NAME_ITEMS5 : VERITY_NAME_ITEMS4, e.item);
+        return kind_name(e.gift_type);
+    }
+
+    static const char* region_tag(uint8_t r)
+    {
+        static const char* kTags[] = {"", "NA", "UK", "AU", "EU"};
+        return r <= 4 ? kTags[r] : "";
+    }
+
+    // One row per card: what it gives, then what tells releases of one event apart (the
+    // original trainer's name and ID, and the region). Gifts that can't be delivered now are
+    // muted.
     void draw_list()
     {
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r;
-            if (i < count_)
+            int row = list_.first_row + r;
+            if (i >= count_)
             {
-                char t[37];
-                title_of(events_[i], t, sizeof(t));
-                // Gifts that can't be delivered now are muted.
-                at(bottom(), 0, list_.first_row + r, events_[i].status ? " " UI_MUTED "%.30s" : " %.30s", t);
+                at(bottom(), 0, row, "%s", "");
+                continue;
             }
-            else
-                at(bottom(), 0, list_.first_row + r, "%s", "");
+            const auto& e = events_[i];
+            const char* m = e.status ? UI_MUTED : "";
+            at(bottom(), 0, row, " %s%.16s", m, gives(e));
+            char ot[24];
+            ui::utf16_to_text(e.ot, ot, sizeof(ot));
+            if (ot[0])
+            {
+                at(bottom(), 12, row, UI_MUTED "%s", ot);  // at most 7 characters
+                at(bottom(), 22, row, UI_MUTED "%05u", e.tid);
+            }
+            if (region_tag(e.region)[0])
+                at(bottom(), 28, row, UI_MUTED "%s", region_tag(e.region));
         }
     }
 
@@ -495,19 +532,23 @@ private:
         const auto& e = events_[list_.selected];
         char t[37];
         title_of(e, t, sizeof(t));
-        ui::panel(top(), 1, 2, 30, 7);
+        ui::panel(top(), 1, 2, 30, 8);
         at(top(), 1, 2, "%.32s", t);
         at(top(), 1, 4, UI_MUTED "Type" UI_MUTED "       %s", kind_name(e.gift_type));
-        if (e.species)
-            at(top(), 1, 5, UI_MUTED "Pokemon" UI_MUTED "   %s", ui::name(VERITY_NAME_SPECIES, e.species));
+        if (e.species || e.item)
+            at(top(), 1, 5, UI_MUTED "%s" UI_MUTED "   %s", e.species ? "Pokemon" : "Item   ", gives(e));
+        char ot[24];
+        ui::utf16_to_text(e.ot, ot, sizeof(ot));
+        if (ot[0])
+            at(top(), 1, 6, UI_MUTED "OT" UI_MUTED "          %s   " UI_MUTED "ID" UI_MUTED " %05u", ot, e.tid);
         static const char* regions[] = {"", "North America", "United Kingdom", "Australia",
                                         "Europe"};
         if (e.region >= 1 && e.region <= 4)
-            at(top(), 1, 6, UI_MUTED "Region" UI_MUTED "     %s", regions[e.region]);
+            at(top(), 1, 7, UI_MUTED "Region" UI_MUTED "     %s", regions[e.region]);
         if (e.card_id)
-            at(top(), 1, 7, UI_MUTED "Card" UI_MUTED "        %u", e.card_id);
-        at(top(), 1, 8, UI_MUTED "Status");
-        ui::badge(top(), 7, 8, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
+            at(top(), 1, 8, UI_MUTED "Card" UI_MUTED "        %u", e.card_id);
+        at(top(), 1, 9, UI_MUTED "Status");
+        ui::badge(top(), 7, 9, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
                   verity_event_status_text(e.status));
         if (message_[0])
         {
