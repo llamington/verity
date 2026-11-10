@@ -1,0 +1,72 @@
+// P10 go/no-go and Phase H link acceptance: a genuine Memory Link. Console 0 runs Black 2 and hosts;
+// console 1 boots the DS menu with White inserted and downloads the Memory Link program over DS
+// Download Play. `make emu-link` runs this and checks the save with check_memlink.py.
+{
+  "instances": [
+    {
+      "rom": "../../../roms/black2.nds",
+      "bios_dir": "../../../bios",
+      "save": "../../../corpus/real/pkhex-avalonia/gen5_white2.sav",
+      "steps": [
+        {"wait": 1850},
+        {"press": ["Start"], "frames": 2},
+        {"wait": 120},
+        {"press": ["A"], "frames": 2},
+        {"wait": 300},
+        {"screenshot": "a-continue.png"},
+        {"press": ["Down"], "frames": 4},
+        {"wait": 30},
+        {"press": ["Down"], "frames": 4},
+        {"wait": 30},
+        {"press": ["Down"], "frames": 4},
+        {"wait": 30},
+        {"press": ["A"], "frames": 4},
+        {"wait": 400},
+        {"press": ["Down"], "frames": 4},
+        {"wait": 30},
+        {"press": ["A"], "frames": 4},
+        {"wait": 300},
+        {"screenshot": "a-ml1.png"},
+        {"press": ["A"], "frames": 4},
+        {"wait": 300},
+        {"screenshot": "a-ml2.png"},
+        {"press": ["A"], "frames": 4},
+        {"wait": 300},
+        {"screenshot": "a-ml3.png"},
+        {"wait": 14400},
+        {"screenshot": "a-done.png"},
+        {"dump_save": "b2-after.sav"}
+      ]
+    },
+    {
+      "rom": "../../../roms/white.nds",
+      "bios_dir": "../../../bios",
+      "save": "../../../corpus/real/pkhex-avalonia/gen5_black.sav",
+      "direct_boot": false,
+      "steps": [
+        {"wait": 900},
+        {"touch": [128, 100], "frames": 4},
+        {"wait": 300},
+        {"touch": [172, 96], "frames": 4},
+        {"wait": 120},
+        {"screenshot": "b-dl1.png"},
+        {"touch": [172, 96], "frames": 4},
+        {"wait": 300},
+        {"screenshot": "b-dl2.png"},
+        {"wait": 3600},
+        {"screenshot": "b-found.png"},
+        {"press": ["A"], "frames": 4},
+        {"wait": 240},
+        {"screenshot": "b-p1.png"},
+        {"press": ["A"], "frames": 4},
+        {"wait": 240},
+        {"screenshot": "b-p2.png"},
+        {"press": ["A"], "frames": 4},
+        {"wait": 240},
+        {"screenshot": "b-p3.png"},
+        {"wait": 9000},
+        {"screenshot": "b-done.png"}
+      ]
+    }
+  ]
+}

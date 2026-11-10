@@ -5,11 +5,14 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Resume here
 
-All work is committed and pushed through the Poké Transfer commit (`2e02025`). Next is **M7**: the
-two-instance harness (PLAN "Phase H") and **P10** Memory Link + Key System, then **M8**: P11 in-game
-suite. Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
+Phase H is complete: two linked consoles run through `{"instances": [...]}` scripts, and
+`make emu-link` performs a genuine Memory Link (Black 2 host, White receiving over Download Play).
+That passes P10's go/no-go: the save changes only in `0x7E000..0x7EA1F`, and two runs give identical
+bytes, so differential runs can compare saves directly. Next is the rest of **P10** (decode the
+region, differential runs, `memlink::build`/`apply`, Key System), then **M8**: P11 in-game suite.
+Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
 
-Open items, none blocking M7:
+Open items, none blocking P10:
 
 - Japanese/Korean text has no font (shows "?"; the keyboard refuses those Pokémon). Needs a freely
   licensed font or ROM font loading; the user hasn't decided.
@@ -92,7 +95,7 @@ use has been whole-file reads of `analysis4.rs`, PKHeX sources and repeated scre
   deterministically (see `docs/research/emu-harness.md`). Use it for DS visual checks
   (`scripts/ui-boxes.json`, `make emu-ui`). Retail acceptance passes: Platinum and Black 2 boot to
   title and Continue with real saves, deterministically (`make emu-accept`). Two-instance
-  multiplayer is still open. Owner ROMs (Pt, HG, W, B2) and BIOS are in `roms/`, `bios/`.
+  multiplayer: see Resume here. Owner ROMs (Pt, HG, W, B2) and BIOS are in `roms/`, `bios/`.
 
 - M4 (started): HG/SS wild slots. `rng/method_k.rs` (PKHeX MethodK/SlotMethodK, incl. Safari
   and Bug-Catching Contest re-rolls), Ruins of Alph Unown (`unown4::alph_*`), Safari Ball at
