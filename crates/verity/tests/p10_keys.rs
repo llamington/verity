@@ -17,7 +17,11 @@ fn real(rel: &str) -> Option<Vec<u8>> {
 }
 
 fn state(unlocked: [bool; KEY_COUNT], enabled: [bool; KEY_COUNT], version: u8) -> KeyState {
-    KeyState { unlocked, enabled, version }
+    KeyState {
+        unlocked,
+        enabled,
+        version,
+    }
 }
 
 /// The save with its key info zeroed apart from the seed, as another version, with checksums fixed.
@@ -43,7 +47,9 @@ fn all_unlocked(save: &[u8], version: u8) -> Vec<u8> {
 
 #[test]
 fn p10_keys_read_real_saves() {
-    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else { return };
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
     let keys = read(&save).unwrap();
     assert!(keys.unlocked[0] && keys.enabled[0], "{keys:?}");
     assert_eq!(keys.version, WHITE2);
@@ -61,14 +67,23 @@ fn p10_keys_city_needs_the_other_version() {
 
 #[test]
 fn p10_keys_only_unlocked_keys_pass_and_enabled_ones_are_skipped() {
-    let partner = state([true, false, false, false, true], [false, true, true, true, false], BLACK2);
+    let partner = state(
+        [true, false, false, false, true],
+        [false, true, true, true, false],
+        BLACK2,
+    );
     let target = state([false; 5], [true, false, false, false, false], WHITE2);
-    assert_eq!(receivable(&target, &partner), [false, false, false, false, true]);
+    assert_eq!(
+        receivable(&target, &partner),
+        [false, false, false, false, true]
+    );
 }
 
 #[test]
 fn p10_keys_receive_enables_without_unlocking() {
-    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else { return };
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
     let mut target = blank(&save, WHITE2);
     let partner = all_unlocked(&save, BLACK2);
     let before = partner.clone();
@@ -83,7 +98,9 @@ fn p10_keys_receive_enables_without_unlocking() {
 
 #[test]
 fn p10_keys_received_keys_cannot_be_passed_on() {
-    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else { return };
+    let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
+        return;
+    };
     let mut middle = blank(&save, WHITE2);
     receive(&mut middle, &all_unlocked(&save, BLACK2)).unwrap();
     let mut last = blank(&save, BLACK2);
@@ -99,7 +116,10 @@ fn p10_keys_refuse_other_games_and_corrupt_saves() {
         return;
     };
     let mut target = b2w2.clone();
-    assert_eq!(receive(&mut target, &bw), Err(MemLinkError::NotBlack2White2));
+    assert_eq!(
+        receive(&mut target, &bw),
+        Err(MemLinkError::NotBlack2White2)
+    );
     let mut corrupt = b2w2.clone();
     corrupt[KEY_INFO] ^= 1;
     assert_eq!(read(&corrupt), Err(MemLinkError::NotBlack2White2));

@@ -17,7 +17,10 @@ fn main() {
     let mut data = fs::read(&a[2]).unwrap();
     if a[1] != "-" {
         let linked = build(&fs::read(&a[1]).unwrap()).unwrap();
-        let seeds = Seeds { gifts: 0x5A, key_info: 0x1234_5678 };
+        let seeds = Seeds {
+            gifts: 0x5A,
+            key_info: 0x1234_5678,
+        };
         println!("{:?}", apply(&mut data, &linked, seeds, false).unwrap());
     }
     data[EVENT_FLAGS + FLAG / 8] |= 1 << (FLAG % 8);

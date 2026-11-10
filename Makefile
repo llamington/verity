@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova
 
 all: nds
 
@@ -37,6 +37,16 @@ emu-flashback: emu-harness
 # P10: retail Black 2's Key System settings on a save that received keys (needs roms/, bios/).
 emu-keys: emu-harness
 	python3 tools/emu-harness/key_system_check.py
+
+# P10: the DS screen links a save and writes it to the SD card (needs corpus/real).
+emu-unova: emu-harness nds
+	cargo build -q --release -p verity --example keys_receive
+	rm -rf build/emu/unova-sd build/emu/unova-sd.img build/emu/unova-sd.img.idx build/emu/ui-unova
+	mkdir -p build/emu/unova-sd/saves
+	cp corpus/real/pkhex-avalonia/gen5_white2.sav "corpus/real/pkmds-blazor/Black - Full Completion.sav" build/emu/unova-sd/saves/
+	target/release/examples/keys_receive corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/unova-sd/saves/partner.sav partner
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-unova.json --out build/emu/ui-unova
+	python3 tools/emu-harness/check_unova.py corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/unova-sd/saves/gen5_white2.sav
 
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and

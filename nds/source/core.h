@@ -41,6 +41,9 @@ void box_name(uint32_t box_index, char* out, int cap);
 void remember(const char* path);
 bool last(char* out, int cap);
 
+// Reads a whole save file; the caller frees it. nullptr if it cannot be read.
+uint8_t* read_save_file(const char* path, size_t* len);
+
 const char* game_name(uint8_t kind);
 
 // The version whose wild slots the add-Pokémon wizard offers for this save (10/11/12).

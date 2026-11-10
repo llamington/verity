@@ -12,6 +12,7 @@ use core::slice;
 pub mod edit;
 pub mod events;
 pub mod ui;
+pub mod unova;
 
 /// The blob registry is global and single-threaded by contract; tests that touch it take this.
 #[cfg(test)]
