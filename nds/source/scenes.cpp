@@ -1511,6 +1511,9 @@ private:
     ListView ribbons_;
     ListView pick_;
     char status_[48] = "";
+    verity_legality_report report_{};
+    uint8_t issue_ = 0;
+    bool preview_ok_ = false;
 
     static int count(uint32_t cat)
     {
@@ -1672,6 +1675,7 @@ private:
         if (key_page_ >= page_count())
             key_page_ = 0;
         typing_ = true;
+        ui::bar(0, 0, false);  // the editor's row highlight
         if (e_.mask & 2048)
             memcpy(name_, e_.nickname, sizeof(name_));
         else
@@ -1775,9 +1779,17 @@ private:
     {
         char text[48];
         ui::utf16_to_text(name_, text, sizeof(text));
-        at(bottom(), 0, 0, " Nickname (%d/%d)", name_len_, max_name());
-        at(bottom(), 0, 2, " %s_", text);
-        at(bottom(), 0, 3, "%s", "");
+        ui::frame_clear(bottom());
+        ui::title(bottom(), "Nickname");
+        char n[12];
+        snprintf(n, sizeof(n), "%d/%d", name_len_, max_name());
+        ui::title_right(bottom(), n);
+        ui::panel(bottom(), 1, 2, 30, 2);
+        at(bottom(), 1, 2, "%s_", text);
+        at(bottom(), 1, 3, UI_MUTED "%s", layout() == 1 ? "Japanese (Y: next page)"
+                                          : layout() == 2 ? "Korean (Y: next page)"
+                                                          : "Y: next page");
+        ui::panel(bottom(), 0, kKeyTop, 32, kKeyRows * 2 - 1);  // keys span the full width
         for (int r = 0; r < kKeyRows; r++)
         {
             uint16_t line[33];
@@ -1794,17 +1806,13 @@ private:
                     k = k == kDakuten ? u'"' : u'o';
                 line[x + 1] = k;
                 if (r == key_row_ && c == key_col_)
-                {
-                    line[x] = '[';
-                    line[x + 2] = ']';
-                }
+                    ui::key_highlight(bottom(), x, kKeyTop + r * 2);
             }
             char text_line[128];
             ui::utf16_to_text(line, text_line, sizeof(text_line));
             at(bottom(), 0, kKeyTop + r * 2, "%s", text_line);
         }
-        at(bottom(), 0, 14, " A key  B erase  Y next page");
-        at(bottom(), 0, 15, " X species name  Start done");
+        ui::hints(bottom(), "A:Key|B:Erase|Y:Page|START:Done");
     }
 
     // ---- ribbons ---------------------------------------------------------------------------
@@ -1886,11 +1894,20 @@ private:
 
     void draw_ribbons()
     {
-        at(bottom(), 0, 0, " Ribbons (%d set)  A toggle", ribbon_count());
+        ui::frame_clear(bottom());
+        ui::title(bottom(), "Ribbons");
+        char n[16];
+        snprintf(n, sizeof(n), "%d set", ribbon_count());
+        ui::title_right(bottom(), n);
+        ui::panel(bottom(), 0, 2, 32, ribbons_.rows);
+        ui::hints(bottom(), "A:Toggle|L/R:Page|B:Done");
         for (int r = 0; r < ribbons_.rows; r++)
         {
             int i = ribbons_.scroll + r;
-            at(bottom(), 0, 2 + r, " [%c] %s", ribbon_on(i) ? 'x' : ' ', ribbon_name(i));
+            if (ribbon_on(i))
+                at(bottom(), 0, 2 + r, " [x]  %s", ribbon_name(i));
+            else
+                at(bottom(), 0, 2 + r, " " UI_MUTED "[ ]  %s", ribbon_name(i));
         }
     }
 
@@ -1922,6 +1939,7 @@ private:
             return;
         }
         showing_fix_ = true;
+        ui::bar(0, 0, false);
         draw_fix();
     }
 
@@ -1929,14 +1947,25 @@ private:
     {
         static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
         ui::clear(bottom());
-        at(bottom(), 0, 0, " Closest legal IVs");
-        at(bottom(), 0, 1, " %u point%s away", fix_.distance, fix_.distance == 1 ? "" : "s");
+        ui::frame_clear(bottom());
+        ui::title(bottom(), "Closest legal IVs");
+        char d[24];
+        snprintf(d, sizeof(d), "%u point%s away", fix_.distance, fix_.distance == 1 ? "" : "s");
+        ui::title_right(bottom(), d);
+        ui::panel(bottom(), 1, 2, 30, 7);
+        at(bottom(), 1, 2, UI_MUTED "        Yours   Legal");
         for (int i = 0; i < 6; i++)
-            at(bottom(), 0, 3 + i, " %-3s %2u -> %2u%s", st[i], e_.ivs[i], fix_.ivs[i],
-               e_.ivs[i] == fix_.ivs[i] ? "" : "  *");
-        at(bottom(), 0, 11, " Its PID changes too; nature,");
-        at(bottom(), 0, 12, " gender and ability stay.");
-        at(bottom(), 0, 14, " A: use these   B: keep mine");
+        {
+            if (e_.ivs[i] == fix_.ivs[i])
+                at(bottom(), 1, 3 + i, UI_MUTED "%-3s      %2u      %2u", st[i], e_.ivs[i], fix_.ivs[i]);
+            else
+                at(bottom(), 1, 3 + i, UI_MUTED "%-3s" UI_MUTED "      %2u  ->  %2u   " UI_MUTED "changes",
+                   st[i], e_.ivs[i], fix_.ivs[i]);
+        }
+        ui::panel(bottom(), 1, 12, 30, 2);
+        at(bottom(), 1, 12, "Its PID changes too; nature,");
+        at(bottom(), 1, 13, "gender and ability stay.");
+        ui::hints(bottom(), "A:Use these|B:Keep mine");
     }
 
     bool update_fix(const ui::Input& in)
@@ -2034,12 +2063,18 @@ private:
     {
         uint32_t cat = picking_ == 1 ? (gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5)
                                      : VERITY_NAME_MOVES;
-        at(bottom(), 0, 0, picking_ == 1 ? " Held item" : " Move %d", picking_ - 1);
+        ui::frame_clear(bottom());
+        if (picking_ == 1)
+            ui::title(bottom(), "Held item");
+        else
+            ui::title(bottom(), "Move %d", picking_ - 1);
+        ui::panel(bottom(), 0, 2, 32, pick_.rows);
+        ui::hints(bottom(), "A:Choose|L/R:Page|B:Cancel");
         for (int r = 0; r < pick_.rows; r++)
         {
             int i = pick_.scroll + r;
             if (i < pick_.count)
-                at(bottom(), 0, 2 + r, " %3d %s", i, i ? ui::name(cat, i) : "(none)");
+                at(bottom(), 0, 2 + r, " " UI_MUTED "%3d" UI_MUTED "  %s", i, i ? ui::name(cat, i) : "(none)");
             else
                 at(bottom(), 0, 2 + r, "%s", "");
         }
@@ -2063,94 +2098,126 @@ private:
         preview();
     }
 
+    // Recomputes the verdict for the edit as it stands, then shows it.
     void preview()
     {
-        verity_legality_report r;
-        uint8_t issue = 0;
-        memset(&r, 0, sizeof(r));
-        if (verity_edit_preview(core::doc().buf, core::doc().len, verity_loc{box_, slot_}, &e_, &r,
-                                &issue) != VERITY_OK)
+        memset(&report_, 0, sizeof(report_));
+        issue_ = 0;
+        preview_ok_ = verity_edit_preview(core::doc().buf, core::doc().len, verity_loc{box_, slot_},
+                                          &e_, &report_, &issue_) == VERITY_OK;
+        show_preview();
+    }
+
+    void show_preview()
+    {
+        ui::panel(top(), 1, 17, 30, 4);
+        for (int r = 17; r < 21; r++)
+            at(top(), 1, r, "%s", "");
+        at(top(), 1, 17, UI_MUTED "If applied now");
+        if (!preview_ok_)
         {
-            at(top(), 0, 19, "preview unavailable");
+            at(top(), 1, 18, "Preview unavailable");
             return;
         }
-        at(top(), 0, 19, "Game-safe: %s", issue ? verity_issue_text(issue) : "OK");
+        at(top(), 1, 18, UI_MUTED "Game-safe");
+        if (issue_)
+        {
+            int c = ui::badge(top(), 11, 18, ui::Badge::Invalid, "NO");
+            at(top(), c, 18, "%.18s", verity_issue_text(issue_));
+        }
+        else
+            ui::badge(top(), 11, 18, ui::Badge::Legal, "OK");
+        const verity_legality_report& r = report_;
+        at(top(), 1, 19, UI_MUTED "Legality");
         if (r.status == 1)
-            at(top(), 0, 20, "Legality:  LEGAL");
+            ui::badge(top(), 11, 19, ui::Badge::Legal, "LEGAL");
         else if (r.status == 2)
         {
             char list[40] = "";
-            for (int i = 0; i < r.check_count && strlen(list) < 20; i++)
+            for (int i = 0; i < r.check_count && strlen(list) < 26; i++)
             {
                 strcat(list, i ? " " : "");
                 strcat(list, core::check_name(r.checks[i]));
             }
             bool mv = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            at(top(), 0, 20, "Legality:  ILLEGAL %s%s", list, mv ? " Moves" : "");
+            ui::badge(top(), 11, 19, ui::Badge::Invalid, "ILLEGAL");
+            at(top(), 1, 20, "%s%s", list, mv ? " Moves" : "");
         }
         else
-            at(top(), 0, 20, "Legality:  not checked yet");
+            ui::badge(top(), 11, 19, ui::Badge::Fishy, "NOT CHECKED");
     }
 
     void draw()
     {
         char nick[32];
         ui::utf16_to_text(orig_.nickname, nick, sizeof(nick));
-        at(top(), 0, 0, "Edit: %s (%s)", nick, ui::name(VERITY_NAME_SPECIES, orig_.species));
-        at(top(), 0, 1, "Mode: %s  (Select)", legal_mode_ ? "Legal" : "Game-safe");
-        at(top(), 0, 3, "L/R tab  Left/Right change");
-        at(top(), 0, 4, "Y+Left/Right x10  A pick list");
-        at(top(), 0, 5, "Start/tap bottom: apply  B: back");
-        at(top(), 0, 6, "%s", tab_ == 1 && gen4_ ? "X: closest legal IVs" : "");
-        at(top(), 0, 7, "%s%s", e_.mask ? "* edited, not applied" : "", "");
-        at(top(), 0, 22, "%s", status_);
+        ui::clear(top());
+        ui::frame_clear(top());
+        ui::title(top(), "Edit  %s", nick);
+        ui::title_right(top(), ui::name(VERITY_NAME_SPECIES, orig_.species));
+        ui::panel(top(), 1, 2, 30, 2);
+        int c = ui::badge(top(), 1, 2, legal_mode_ ? ui::Badge::Legal : ui::Badge::Safe,
+                          legal_mode_ ? "Legal mode" : "Game-safe mode");
+        at(top(), c + 1, 2, UI_MUTED "SELECT switches");
+        at(top(), 1, 3, UI_MUTED "%s", legal_mode_ ? "Refuses edits that make it illegal."
+                                                  : "Allows anything the game accepts.");
+        ui::panel(top(), 1, 6, 30, 2);
+        at(top(), 1, 6, "%s", e_.mask ? "* Edited, not applied yet" : "No changes yet");
+        at(top(), 1, 7, UI_MUTED "%s", status_[0] ? status_ : "START applies, B goes back.");
+        ui::panel(top(), 1, 10, 30, 4);
+        at(top(), 1, 10, UI_MUTED "Left/Right" UI_MUTED "  change the value");
+        at(top(), 1, 11, UI_MUTED "Y+Left/Right" UI_MUTED "  in tens");
+        at(top(), 1, 12, UI_MUTED "A" UI_MUTED "  pick from a list (item, moves)");
+        at(top(), 1, 13, UI_MUTED "%s", tab_ == 1 && gen4_ ? "X  closest legal IVs" : "Tap a row twice to step it");
+        show_preview();
 
         static const char* tabs[kTabs] = {"Main", "Stats", "Moves", "Met", "Misc"};
-        char head[48] = "";
-        for (int t = 0; t < kTabs; t++)
-        {
-            char one[14];
-            snprintf(one, sizeof(one), t == tab_ ? "[%s]" : " %s ", tabs[t]);
-            strcat(head, one);
-        }
-        at(bottom(), 0, 0, "%s", head);
-        for (int r = 0; r < 14; r++)
-            at(bottom(), 0, 3 + r, "%s", "");
+        ui::clear(bottom());
+        ui::frame_clear(bottom());
+        ui::tabs(bottom(), tabs, kTabs, tab_);
+        int rows = tab_rows();
+        ui::panel(bottom(), 0, 3, 32, tab_ == 1 ? 14 : rows < 2 ? 2 : (tab_ == 3 ? 8 : rows));
+        ui::hints(bottom(), tab_ == 1 && gen4_ ? "L/R:Tab|X:Closest IVs|START:Apply"
+                                               : "L/R:Tab|A:List|START:Apply|B:Back");
         uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
         if (tab_ == 0)
         {
-            at(bottom(), 0, 3, " Item       < %s >", e_.held_item ? ui::name(items, e_.held_item) : "-");
-            at(bottom(), 0, 4, " Level      < %u >", e_.level);
-            at(bottom(), 0, 5, " Friendship < %u >", e_.friendship);
+            at(bottom(), 0, 3, " " UI_MUTED "Item" UI_MUTED "         < %s >",
+               e_.held_item ? ui::name(items, e_.held_item) : "-");
+            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "         < %u >", e_.level);
+            at(bottom(), 0, 5, " " UI_MUTED "Friendship" UI_MUTED "   < %u >", e_.friendship);
         }
         else if (tab_ == 1)
         {
             static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
             for (int i = 0; i < 6; i++)
-                at(bottom(), 0, 3 + i, " IV %-3s     < %2u >", st[i], e_.ivs[i]);
+                at(bottom(), 0, 3 + i, " " UI_MUTED "IV" UI_MUTED "  %-3s       < %2u >   " UI_MUTED "%s",
+                   st[i], e_.ivs[i], e_.ivs[i] == 31 ? "max" : "");
             int total = 0;
             for (int i = 0; i < 6; i++)
             {
-                at(bottom(), 0, 9 + i, " EV %-3s     < %3u >", st[i], e_.evs[i]);
+                at(bottom(), 0, 9 + i, " " UI_MUTED "EV" UI_MUTED "  %-3s       < %3u >", st[i], e_.evs[i]);
                 total += e_.evs[i];
             }
-            at(bottom(), 0, 16, " EV total %d / 510", total);
+            at(bottom(), 0, 16, " " UI_MUTED "EV total" UI_MUTED "  %d / 510%s", total,
+               total > 510 ? "  (over the limit)" : "");
         }
         else if (tab_ == 2)
         {
             for (int m = 0; m < 4; m++)
-                at(bottom(), 0, 3 + m, " Move %d  < %s >", m + 1,
+                at(bottom(), 0, 3 + m, " " UI_MUTED "Move %d" UI_MUTED "      < %s >", m + 1,
                    e_.moves[m] ? ui::name(VERITY_NAME_MOVES, e_.moves[m]) : "-");
         }
         else if (tab_ == 3)
         {
-            at(bottom(), 0, 3, " Ball     < %s >", ball_name(e_.ball));
-            at(bottom(), 0, 4, " Location < %s >", ui::location(gen4_ ? 4 : 5, e_.met_location));
-            at(bottom(), 0, 5, " Met lv   < %u >", e_.met_level);
-            at(bottom(), 0, 6, " Year     < %u >", 2000 + e_.met_date[0]);
-            at(bottom(), 0, 7, " Month    < %u >", e_.met_date[1]);
-            at(bottom(), 0, 8, " Day      < %u >", e_.met_date[2]);
-            at(bottom(), 0, 10, " OT ID %05u / %05u", orig_.tid, orig_.sid);
+            at(bottom(), 0, 3, " " UI_MUTED "Ball" UI_MUTED "         < %s >", ball_name(e_.ball));
+            at(bottom(), 0, 4, " " UI_MUTED "Location" UI_MUTED "   < %s >",
+               ui::location(gen4_ ? 4 : 5, e_.met_location));
+            at(bottom(), 0, 5, " " UI_MUTED "Met level" UI_MUTED "   < %u >", e_.met_level);
+            at(bottom(), 0, 6, " " UI_MUTED "Year" UI_MUTED "         < %u >", 2000 + e_.met_date[0]);
+            at(bottom(), 0, 7, " " UI_MUTED "Month" UI_MUTED "        < %u >", e_.met_date[1]);
+            at(bottom(), 0, 8, " " UI_MUTED "Day" UI_MUTED "           < %u >", e_.met_date[2]);
+            at(bottom(), 0, 10, " " UI_MUTED "OT ID  %05u / %05u", orig_.tid, orig_.sid);
         }
         else
         {
@@ -2162,12 +2229,11 @@ private:
                 snprintf(nick2, sizeof(nick2), "%s", ui::name(VERITY_NAME_SPECIES, orig_.species));
             else
                 ui::utf16_to_text(orig_.nickname, nick2, sizeof(nick2));
-            at(bottom(), 0, 3, " Nickname   %s  (A)", nick2);
+            at(bottom(), 0, 3, " " UI_MUTED "Nickname" UI_MUTED "    %s   " UI_MUTED "A to type", nick2);
             for (int i = 0; i < 6; i++)
-                at(bottom(), 0, 4 + i, " %-6s     < %3u >", cs[i], e_.contest[i]);
-            at(bottom(), 0, 10, " Ribbons    %d set  (A)", ribbon_count());
+                at(bottom(), 0, 4 + i, " " UI_MUTED "%-6s" UI_MUTED "       < %3u >", cs[i], e_.contest[i]);
+            at(bottom(), 0, 10, " " UI_MUTED "Ribbons" UI_MUTED "     %d set   " UI_MUTED "A to list", ribbon_count());
         }
-        at(bottom(), 0, 23, " %s", "[ Apply ]");
     }
 };
 

@@ -80,6 +80,10 @@ void frame_clear(Surface* c);
 // Row 0 as a dark bar with a title (and optional right-aligned text).
 void title(Surface* c, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
 void title_right(Surface* c, const char* text);
+// Row 0 as a tab bar: n equal segments, the active one a cream chip.
+void tabs(Surface* c, const char* const* names, int n, int active);
+// A 3-cell peach pill on a panel behind a selected key.
+void key_highlight(Surface* c, int col, int row);
 // Row 23 as a dark bar of button hints: "A:Open|B:Back|L/R:Box".
 void hints(Surface* c, const char* spec);
 // A cream panel over cells [col, col+w) x [row, row+h) (w, h >= 2); its border is drawn just
