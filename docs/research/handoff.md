@@ -8,8 +8,10 @@ and gaps are in `docs/research/p5-plan.md`.
 Phase H is complete: two linked consoles run through `{"instances": [...]}` scripts, and
 `make emu-link` performs a genuine Memory Link (Black 2 host, White receiving over Download Play).
 That passes P10's go/no-go: the save changes only in `0x7E000..0x7EA1F`, and two runs give identical
-bytes, so differential runs can compare saves directly. Next is the rest of **P10** (decode the
-region, differential runs, `memlink::build`/`apply`, Key System), then **M8**: P11 in-game suite.
+bytes, so differential runs can compare saves directly. What is decoded so far is in
+`docs/memlink-findings.md`; `memlink_run.py` and `bw_hybrid.py` drive differential runs. Next in
+**P10**: flashback bit rules (needs early-progress BW saves), block 1, then `memlink::build`/`apply`
+and the Key System, then **M8**: P11 in-game suite. BW_tool source is in `~/src/BW_tool`.
 Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
 
 Open items, none blocking P10:
