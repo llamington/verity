@@ -365,14 +365,18 @@ public:
     void enter() override
     {
         ui::clear(bottom());
-        at(bottom(), 0, 0, " Mystery gifts");
+        ui::title(bottom(), "Mystery gifts");
+        ui::hints(bottom(), "A:Deliver|L/R:Page|B:Back");
         if (!core::ensure_events_data())
         {
             ui::clear(top());
-            at(top(), 0, 0, "Gift data is missing.");
-            at(top(), 0, 21, "B: back");
+            ui::title(top(), "Mystery gifts");
+            ui::panel(top(), 1, 2, 30, 2);
+            at(top(), 1, 2, "Gift data is missing.");
+            at(top(), 1, 3, UI_MUTED "B goes back.");
             return;
         }
+        ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
         refresh();
         draw_list();
         draw_top();
@@ -448,7 +452,8 @@ private:
             {
                 char t[37];
                 title_of(events_[i], t, sizeof(t));
-                at(bottom(), 0, list_.first_row + r, "%c%.30s", events_[i].status ? '-' : ' ', t);
+                // Gifts that can't be delivered now are muted.
+                at(bottom(), 0, list_.first_row + r, events_[i].status ? " " UI_MUTED "%.30s" : " %.30s", t);
             }
             else
                 at(bottom(), 0, list_.first_row + r, "%s", "");
@@ -475,34 +480,44 @@ private:
     void draw_top()
     {
         ui::clear(top());
-        at(top(), 0, 0, "Mystery gifts for this save");
-        at(top(), 0, 1, "%d available to this game", count_);
+        ui::frame_clear(top());
+        ui::title(top(), "Mystery gifts");
+        char n[20];
+        snprintf(n, sizeof(n), "%d for this game", count_);
+        ui::title_right(top(), n);
         if (count_ == 0)
         {
-            at(top(), 0, 3, "None for this language.");
-            at(top(), 0, 21, "B: back");
+            ui::panel(top(), 1, 2, 30, 2);
+            at(top(), 1, 2, "None for this language.");
+            at(top(), 1, 3, UI_MUTED "B goes back.");
             return;
         }
         const auto& e = events_[list_.selected];
         char t[37];
         title_of(e, t, sizeof(t));
-        at(top(), 0, 3, "%.32s", t);
-        at(top(), 0, 5, "Type     %s", kind_name(e.gift_type));
+        ui::panel(top(), 1, 2, 30, 7);
+        at(top(), 1, 2, "%.32s", t);
+        at(top(), 1, 4, UI_MUTED "Type" UI_MUTED "       %s", kind_name(e.gift_type));
         if (e.species)
-            at(top(), 0, 6, "Pokemon  %s", ui::name(VERITY_NAME_SPECIES, e.species));
+            at(top(), 1, 5, UI_MUTED "Pokemon" UI_MUTED "   %s", ui::name(VERITY_NAME_SPECIES, e.species));
         static const char* regions[] = {"", "North America", "United Kingdom", "Australia",
                                         "Europe"};
         if (e.region >= 1 && e.region <= 4)
-            at(top(), 0, 7, "Region   %s", regions[e.region]);
+            at(top(), 1, 6, UI_MUTED "Region" UI_MUTED "     %s", regions[e.region]);
         if (e.card_id)
-            at(top(), 0, 8, "Card     %u", e.card_id);
-        at(top(), 0, 10, "Status   %s", verity_event_status_text(e.status));
+            at(top(), 1, 7, UI_MUTED "Card" UI_MUTED "        %u", e.card_id);
+        at(top(), 1, 8, UI_MUTED "Status");
+        ui::badge(top(), 7, 8, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
+                  verity_event_status_text(e.status));
         if (message_[0])
-            at(top(), 0, 12, "> %s", message_);
-        at(top(), 0, 19, "Collect in-game from the");
-        at(top(), 0, 20, core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
-                                                          : "deliveryman in any Poke Mart.");
-        at(top(), 0, 22, "A: deliver   B: back");
+        {
+            ui::panel(top(), 1, 12, 30, 2);
+            at(top(), 1, 12, "%s", message_);
+        }
+        ui::panel(top(), 1, 19, 30, 2);
+        at(top(), 1, 19, UI_MUTED "Collect it in-game from the");
+        at(top(), 1, 20, UI_MUTED "%s", core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
+                                                                         : "deliveryman in any Poke Mart.");
     }
 };
 
@@ -629,17 +644,23 @@ private:
     {
         ui::clear(top());
         ui::clear(bottom());
-        at(top(), 0, 0, "Memory Link and keys");
+        ui::frame_clear(top());
+        ui::frame_clear(bottom());
+        ui::title(top(), "Memory Link and keys");
         if (other_ || enabling_)
             draw_preview();
         else
         {
-            at(top(), 0, 2, "Pick a Black or White save for");
-            at(top(), 0, 3, "Memory Link, or a Black 2 or");
-            at(top(), 0, 4, "White 2 save to receive its keys.");
-            at(top(), 0, 5, "Or enable every key, no partner.");
+            ui::panel(top(), 1, 2, 30, 4);
+            at(top(), 1, 2, "Pick a Black or White save for");
+            at(top(), 1, 3, "Memory Link, or a Black 2 or");
+            at(top(), 1, 4, "White 2 save to receive its keys.");
+            at(top(), 1, 5, UI_MUTED "Or enable every key, no partner.");
             if (message_[0])
-                at(top(), 0, 8, "%s", message_);
+            {
+                ui::panel(top(), 1, 8, 30, 2);
+                at(top(), 1, 8, "%s", message_);
+            }
             draw_list();
         }
     }
@@ -651,41 +672,48 @@ private:
         if (other_)
         {
             const char* slash = strrchr(other_path_, '/');
-            at(top(), 0, 2, "%.30s", slash ? slash + 1 : other_path_);
-            at(top(), 0, 3, "Trainer  %s", trainer_);
+            ui::panel(top(), 1, 2, 30, 2);
+            at(top(), 1, 2, "%.30s", slash ? slash + 1 : other_path_);
+            at(top(), 1, 3, UI_MUTED "Trainer" UI_MUTED "  %s", trainer_);
         }
         ui::bar(0, 0, false);
+        ui::panel(top(), 1, 6, 30, 9);
         if (preview_.status != 0)
-            at(top(), 0, 5, "%s", verity_unova_status_text(preview_.status));
+            ui::badge(top(), 1, 6, ui::Badge::Invalid, verity_unova_status_text(preview_.status));
         else if (preview_.mode == 1)
         {
-            at(top(), 0, 5, "Memory Link");
-            at(top(), 0, 6, preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
+            at(top(), 1, 6, "Memory Link");
+            at(top(), 1, 7, UI_MUTED "%s", preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
             if (replace_)
-                at(top(), 0, 8, "%s", verity_unova_status_text(1));
+                at(top(), 1, 9, "%s", verity_unova_status_text(1));
         }
         else
         {
-            at(top(), 0, 5, preview_.mode == 3 ? "Keys this will enable:" : "Keys this save will receive:");
+            at(top(), 1, 6, preview_.mode == 3 ? "Keys this will enable:" : "Keys this save will receive:");
             if (preview_.mode == 3)
-                at(top(), 0, 12, "These can't be sent to other games.");
-            int row = 6;
+                at(top(), 1, 14, UI_MUTED "These can't be sent to other games.");
+            int row = 7;
             for (int i = 0; i < 5; i++)
                 if (preview_.keys[i])
-                    at(top(), 1, row++, "%s", kKeys[i]);
+                    ui::badge(top(), 2, row++, ui::Badge::Legal, kKeys[i]);
         }
-        at(bottom(), 0, 0, " Link");
-        at(bottom(), 0, 3, preview_.status == 0 ? " A: link   B: back" : " B: back");
+        ui::title(bottom(), "Link");
+        ui::panel(bottom(), 1, 3, 30, 2);
+        at(bottom(), 1, 3, "%s", preview_.status == 0 ? "Ready." : "Can't link these saves.");
+        at(bottom(), 1, 4, UI_MUTED "Nothing changes until you link.");
+        ui::hints(bottom(), preview_.status == 0 ? "A:Link|B:Back" : "B:Back");
     }
 
     void draw_list()
     {
-        at(bottom(), 0, 0, " Link with");
+        ui::title(bottom(), "Link with");
+        ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
+        ui::hints(bottom(), "A:Choose|L/R:Page|B:Back");
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r - 1;
             if (i < 0)
-                at(bottom(), 0, list_.first_row + r, " Enable all keys");
+                at(bottom(), 0, list_.first_row + r, " Enable all keys   " UI_MUTED "no partner");
             else if (i < count_)
             {
                 const char* slash = strrchr(files_[i], '/');
@@ -1286,55 +1314,69 @@ private:
     {
         ui::clear(top());
         ui::clear(bottom());
+        ui::frame_clear(top());
+        ui::frame_clear(bottom());
         if (!supported_)
         {
-            at(top(), 0, 0, "Add Pokemon");
-            at(top(), 0, 2, "Only Gen 4 saves for now");
-            at(top(), 0, 3, "(D/P/Pt wild encounters).");
-            at(bottom(), 0, 0, " B: back");
+            ui::title(top(), "Add Pokemon");
+            ui::panel(top(), 1, 2, 30, 2);
+            at(top(), 1, 2, "Only Gen 4 saves for now");
+            at(top(), 1, 3, UI_MUTED "(D/P/Pt wild encounters).");
+            ui::hints(bottom(), "B:Back");
             return;
         }
-        at(top(), 0, 0, "Add %s  (legal, %s)", egg_ ? "Egg" : "Pokemon", game_name(version_));
-        at(top(), 0, 1, "to %s %u", box_ == 0xFF ? "party slot" : "box slot",
+        ui::title(top(), "Add %s", egg_ ? "Egg" : "Pokemon");
+        char g[32];
+        snprintf(g, sizeof(g), "legal, %s", game_name(version_));
+        ui::title_right(top(), g);
+        ui::panel(top(), 1, 2, 30, 2);
+        at(top(), 1, 2, UI_MUTED "To" UI_MUTED "  %s %u", box_ == 0xFF ? "party slot" : "box slot",
            (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
+        at(top(), 1, 3, UI_MUTED "Step %d of 3", step_ + 1);
+        ui::panel(top(), 1, 6, 30, 4);
         if (step_ == 0)
         {
-            at(top(), 0, 3, egg_ ? "1. Egg species (%d)" : "1. Species (%d with wild slots)",
-               species_count_);
-            at(top(), 0, 5, "%s", other_game() ? "Select: switch game" : "");
-            at(top(), 0, 6, "%s", gen5() ? "" : egg_ ? "Y: wild encounter instead" : "Y: bred egg instead");
+            at(top(), 1, 6, egg_ ? "Egg species" : "Species");
+            at(top(), 1, 7, UI_MUTED "%d %s", species_count_, egg_ ? "can be bred here" : "with wild slots");
+            at(top(), 1, 8, UI_MUTED "%s", other_game() ? "SELECT switches game" : "");
+            at(top(), 1, 9, UI_MUTED "%s", gen5() ? "" : egg_ ? "Y: wild encounter instead" : "Y: bred egg instead");
             draw_list();
         }
         else if (step_ == 1)
         {
-            at(top(), 0, 3, "2. Encounter: %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            at(top(), 1, 6, "Encounter");
+            at(top(), 1, 7, UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
             draw_list();
         }
         else
         {
-            at(top(), 0, 3, "3. Options: %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            at(top(), 1, 6, "Options");
+            at(top(), 1, 7, UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
             draw_options();
         }
-        at(top(), 0, 22, "A next  B back  Start generate");
+        ui::hints(bottom(), step_ == 2 ? "A:Next|B:Back|START:Generate" : "A:Next|L/R:Page|B:Back");
     }
 
     void draw_list()
     {
         if (step_ == 0)
         {
-            at(bottom(), 0, 0, " Species");
+            ui::title(bottom(), "Species");
+            ui::panel(bottom(), 0, 2, 32, list_.rows);
             for (int r = 0; r < list_.rows; r++)
             {
                 int i = list_.scroll + r;
                 if (i < species_count_)
-                    at(bottom(), 0, 2 + r, " #%03u %s", species_[i], ui::name(VERITY_NAME_SPECIES, species_[i]));
+                    at(bottom(), 0, 2 + r, " " UI_MUTED "#%03u" UI_MUTED "  %s", species_[i],
+                       ui::name(VERITY_NAME_SPECIES, species_[i]));
                 else
                     at(bottom(), 0, 2 + r, "%s", "");
             }
         }
         else
         {
-            at(bottom(), 0, 0, " Encounter");
+            ui::title(bottom(), "Encounter");
+            ui::panel(bottom(), 0, 2, 32, enc_list_.rows);
             for (int r = 0; r < enc_list_.rows; r++)
             {
                 int i = enc_list_.scroll + r - 1;
@@ -1348,7 +1390,7 @@ private:
                         snprintf(lv, sizeof(lv), "%u", e.level_min);
                     else
                         snprintf(lv, sizeof(lv), "%u-%u", e.level_min, e.level_max);
-                    at(bottom(), 0, 2 + r, " %-15.15s %-8.8s %s",
+                    at(bottom(), 0, 2 + r, " %-14.14s  " UI_MUTED "%-7.7s" UI_MUTED "  %s",
                        ui::location(gen5() ? 5 : 4, e.location),
                        gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type), lv);
                 }
@@ -1360,13 +1402,18 @@ private:
 
     void draw_egg_options()
     {
-        at(bottom(), 0, 0, " Options");
-        at(bottom(), 0, 2, " Nature   < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
-        at(bottom(), 0, 3, " Gender   < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
-        at(bottom(), 0, 4, " Shiny    < %s >", shiny_ ? "Yes" : "No");
-        at(bottom(), 0, 5, " Hatched  < %s >", hatched_ ? "Yes" : "No");
+        ui::title(bottom(), "Options");
+        ui::panel(bottom(), 0, 2, 32, 5);
+        at(bottom(), 0, 2, " " UI_MUTED "Nature" UI_MUTED "     < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        at(bottom(), 0, 3, " " UI_MUTED "Gender" UI_MUTED "     < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+        at(bottom(), 0, 4, " " UI_MUTED "Shiny" UI_MUTED "       < %s >", shiny_ ? "Yes" : "No");
+        at(bottom(), 0, 5, " " UI_MUTED "Hatched" UI_MUTED "    < %s >", hatched_ ? "Yes" : "No");
         at(bottom(), 0, 6, " Generate and place");
-        at(bottom(), 0, 8, " %s", status_);
+        if (status_[0])
+        {
+            ui::panel(bottom(), 1, 10, 30, 2);
+            at(bottom(), 1, 10, "%s", status_);
+        }
     }
 
     void draw_options()
@@ -1376,19 +1423,27 @@ private:
             draw_egg_options();
             return;
         }
-        at(bottom(), 0, 0, " Options");
-        at(bottom(), 0, 2, " Nature  < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
-        at(bottom(), 0, 3, " Shiny   < %s >", shiny_ ? "Yes" : "No");
+        ui::title(bottom(), "Options");
+        ui::panel(bottom(), 0, 2, 32, 7);
+        at(bottom(), 0, 2, " " UI_MUTED "Nature" UI_MUTED "    < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        at(bottom(), 0, 3, " " UI_MUTED "Shiny" UI_MUTED "      < %s >", shiny_ ? "Yes" : "No");
         if (level_)
-            at(bottom(), 0, 4, " Level   < %d >", level_);
+            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "      < %d >", level_);
         else
-            at(bottom(), 0, 4, " Level   < Any >");
-        at(bottom(), 0, 5, " Gender  < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
-        at(bottom(), 0, 6, gen5() ? " Lead    Not used in Gen 5" : " Lead    < %s >", lead_name(lead_));
-        at(bottom(), 0, 7, " Ball    < %s >",
+            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "      < Any >");
+        at(bottom(), 0, 5, " " UI_MUTED "Gender" UI_MUTED "    < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+        if (gen5())
+            at(bottom(), 0, 6, " " UI_MUTED "Lead        not used in Gen 5");
+        else
+            at(bottom(), 0, 6, " " UI_MUTED "Lead" UI_MUTED "       < %s >", lead_name(lead_));
+        at(bottom(), 0, 7, " " UI_MUTED "Ball" UI_MUTED "        < %s >",
            ball_ ? ui::name(VERITY_NAME_ITEMS4, kBalls[ball_ - 1]) : "Default");
         at(bottom(), 0, 8, " Generate and place");
-        at(bottom(), 0, 10, " %s", status_);
+        if (status_[0])
+        {
+            ui::panel(bottom(), 1, 12, 30, 2);
+            at(bottom(), 1, 12, "%s", status_);
+        }
     }
 };
 
@@ -2178,7 +2233,7 @@ private:
         int rows = tab_rows();
         ui::panel(bottom(), 0, 3, 32, tab_ == 1 ? 14 : rows < 2 ? 2 : (tab_ == 3 ? 8 : rows));
         ui::hints(bottom(), tab_ == 1 && gen4_ ? "L/R:Tab|X:Closest IVs|START:Apply"
-                                               : "L/R:Tab|A:List|START:Apply|B:Back");
+                                               : "L/R:Tab|A:List|START:Apply");
         uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
         if (tab_ == 0)
         {
