@@ -24,7 +24,7 @@ and gaps are in `docs/research/p5-plan.md`.
   with stand-in ROMs; `make emu-ui` runs without ROMs and missed it. DS heap is getting tight:
   watch large allocations.
 - Seen, not fixed: the save overview shows "Checksums BAD" for an edited save before it's saved
-  (checksums are only recomputed on save), e.g. `ui-misc-tabs` 10-overview.
+  (probably because checksums are recomputed only on save; not checked), e.g. `ui-misc-tabs` 10-overview.
 - **Move descriptions:** from the ROM's message bank into the move cache (version 2, so old
   caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
   the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`
