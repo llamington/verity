@@ -192,7 +192,7 @@ uint8_t verity_event_inject(uint8_t *buf, size_t len, uint8_t blob, uint16_t rec
 const char *verity_event_status_text(uint8_t code);
 
 /** What linking another save into the open B2W2 save would do. mode: 0 unusable, 1 Memory Link
-    (Black or White save), 2 keys (Black 2 or White 2 save). status: 0 ready, 1 replaces another
+    (Black or White save), 2 keys (Black 2 or White 2 save), 3 enable all keys. status: 0 ready, 1 replaces another
     player's link, else see verity_unova_status_text. keys: Easy, Challenge, City, Iron, Iceberg. */
 typedef struct verity_unova_preview_t {
     uint8_t mode;
@@ -206,6 +206,9 @@ void verity_unova_preview(const uint8_t *buf, size_t len, const uint8_t *other, 
 /** Returns 0 on success, else a status code. The save is not finalised. */
 uint8_t verity_unova_apply(uint8_t *buf, size_t len, const uint8_t *other, size_t other_len,
                            bool replace, uint32_t seed);
+/** Enabling every key without a partner save; mode is 3. Returns 0 on success, else a status. */
+void verity_unova_enable_preview(const uint8_t *buf, size_t len, verity_unova_preview_t *out);
+uint8_t verity_unova_enable_all(uint8_t *buf, size_t len);
 const char *verity_unova_status_text(uint8_t status);
 
 /** Fixes block checksums before writing the save out. */

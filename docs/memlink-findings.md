@@ -128,6 +128,16 @@ Keys are earned at the end of the story or in the Underground Ruins, and verity 
 there must be a partner save that earned the key. `make emu-keys` confirms the difficulty, city and
 chamber settings unlock in retail Black 2 for all five keys, against a save with none.
 
+### Enabling keys without a partner
+
+"Enable all keys" (`keys::enable_all`, user request 2026-11-10) goes beyond the exchange: it sets
+*enabled* for all five with no partner save. It never sets *unlocked*, so the result is the state an
+exchange leaves and the keys can't be sent on. `make emu-keys-all` starts a new game in retail
+Black 2, saves it before the first Pokémon, enables the keys on the DS build, then picks Challenge
+Mode in retail Black 2 and checks the value the game stores. An untouched copy keeps its padlocks.
+Only the settings were tested: no battle on the changed difficulty, and neither the other city nor
+the Iron or Iceberg chamber was visited.
+
 ## DS screen
 
 On a B2W2 save, "Memory Link and keys" lists the other saves on the SD card. A Black or White save
