@@ -287,7 +287,8 @@ enum : uint16_t
     T_SLOT = 28,      // 3 styles x 16
     T_CHIP = 76,      // left, middle, right, single
     T_BADGE = 80,     // 4 colours x (left, middle, right)
-    T_COUNT = 92,
+    T_BETWEEN = 92,   // 5: one panel's bottom ring over the next one's top ring, in one row
+    T_COUNT = 97,
 };
 
 uint16_t* g_fmap[2];
@@ -301,11 +302,16 @@ uint8_t ink_for(Surface* c, int x, int y)
     int col = x / 8, row = y / 8;
     uint8_t k = (col >= 0 && col < 32 && row >= 0 && row < 24) ? g_kind[screen_of(c)][row * 32 + col]
                                                                : K_BACK;
-    bool dark = k == K_PANEL || k == K_CHIP || k == K_FISHY || k == K_SLOT;
+    // Verdict words are coloured text on cream (amber is too light for text: burnt orange).
+    if (k == K_LEGAL)
+        return C_LEGAL;
+    if (k == K_INVALID)
+        return C_INVALID;
+    if (k == K_FISHY || k == K_SAFE)
+        return C_SAFE;
+    bool dark = k == K_PANEL || k == K_CHIP || k == K_SLOT;
     if (g_muted)
         return dark ? C_MUTED : C_MUTED_L;
-    if (k == K_LEGAL || k == K_INVALID || k == K_SAFE)
-        return C_WHITE;
     return dark ? C_INK : C_CREAM;
 }
 
@@ -351,21 +357,31 @@ void make_frame_tiles(uint16_t* tiles)
         px[i] = backdrop(i / 8);
     put_tile(tiles, T_BACK, px);
     solid(T_BAR, C_INK);
-    // Panel: content cells 1..3 of a 5x5 grid; 2 px border just outside them, inset shadow.
+    // Panel: content cells 1..3 of a 5x5 grid. The ring cells around them hold 2 px of cream
+    // padding, then the 2 px border (so text never touches it), with an inset shadow at the bottom.
+    auto panel_px = [](int X, int Y) -> uint8_t {
+        int v = rounded(X, Y, 4, 4, 36, 36, 6, 2, C_CREAM, C_INK);
+        if (v == C_CREAM && Y >= 32)
+            v = C_SHADOW;
+        return v < 0 ? backdrop(Y) : (uint8_t)v;
+    };
     for (int ty = 0; ty < 5; ty++)
         for (int tx = 0; tx < 5; tx++)
         {
             for (int y = 0; y < 8; y++)
                 for (int x = 0; x < 8; x++)
-                {
-                    int X = tx * 8 + x, Y = ty * 8 + y;
-                    int v = rounded(X, Y, 6, 6, 34, 34, 5, 2, C_CREAM, C_INK);
-                    if (v == C_CREAM && Y >= 30)
-                        v = C_SHADOW;
-                    px[y * 8 + x] = v < 0 ? backdrop(y) : (uint8_t)v;
-                }
+                    px[y * 8 + x] = panel_px(tx * 8 + x, ty * 8 + y);
             put_tile(tiles, T_PANEL + ty * 5 + tx, px);
         }
+    // Between two panels one row apart: the bottom ring (its upper half) over the top ring (its
+    // lower half).
+    for (int tx = 0; tx < 5; tx++)
+    {
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+                px[y * 8 + x] = y < 4 ? panel_px(tx * 8 + x, 32 + y) : panel_px(tx * 8 + x, y);
+        put_tile(tiles, T_BETWEEN + tx, px);
+    }
     // Slots (32x32): filled, empty, selected.
     const uint8_t fill[3] = {C_CREAM, C_EMPTY, C_PEACH}, edge[3] = {C_INK, C_EMPTY_EDGE, C_ORANGE};
     for (int st = 0; st < 3; st++)
@@ -392,19 +408,18 @@ void make_frame_tiles(uint16_t* tiles)
             }
         put_tile(tiles, T_CHIP + t, px);
     }
-    // Badges on a cream panel: pills in the four verdict colours.
+    // Verdict dots on a cream panel (the verdict word follows in its colour).
     const uint8_t badge[4] = {C_LEGAL, C_FISHY, C_INVALID, C_SAFE};
     for (int b = 0; b < 4; b++)
-        for (int t = 0; t < 3; t++)
-        {
-            for (int y = 0; y < 8; y++)
-                for (int x = 0; x < 8; x++)
-                {
-                    int v = rounded(t * 8 + x, y, 0, 0, 24, 8, 3, 1, badge[b], C_INK);
-                    px[y * 8 + x] = v < 0 ? C_CREAM : (uint8_t)v;
-                }
-            put_tile(tiles, T_BADGE + b * 3 + t, px);
-        }
+    {
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                int v = rounded(x, y, 2, 1, 8, 7, 3, 1, badge[b], C_INK);
+                px[y * 8 + x] = v < 0 ? C_CREAM : (uint8_t)v;
+            }
+        put_tile(tiles, T_BADGE + b * 3, px);
+    }
 }
 
 void set_cell(Surface* c, int col, int row, uint16_t tile, uint8_t kind)
@@ -615,20 +630,28 @@ void panel(Surface* c, int col, int row, int w, int h)
             int s = screen_of(c);
             if (!inner && x >= 0 && x < 32 && y >= 0 && y < 24 && g_kind[s][y * 32 + x] == K_BAR)
                 continue;
-            set_cell(c, x, y, T_PANEL + cy * 5 + cx, inner ? K_PANEL : K_BACK);
+            uint16_t tile = T_PANEL + cy * 5 + cx;
+            // A top ring meeting another panel's bottom ring (or the reverse) shares the row.
+            if ((cy == 0 || cy == 4) && x >= 0 && x < 32 && y >= 0 && y < 24)
+            {
+                uint16_t old = g_fmap[s][y * 32 + x];
+                uint16_t other = T_PANEL + (cy == 0 ? 4 : 0) * 5 + cx;
+                if (old == other || old == T_BETWEEN + cx)
+                    tile = T_BETWEEN + cx;
+            }
+            set_cell(c, x, y, tile, inner ? K_PANEL : K_BACK);
         }
 }
 
-void badge(Surface* c, int col, int row, int cells, Badge b, const char* text)
+int badge(Surface* c, int col, int row, Badge b, const char* text)
 {
-    if (cells < 2)
-        cells = 2;
     static const uint8_t kinds[4] = {K_LEGAL, K_FISHY, K_INVALID, K_SAFE};
-    for (int k = 0; k < cells; k++)
-        set_cell(c, col + k, row, T_BADGE + (int)b * 3 + (k == 0 ? 0 : k == cells - 1 ? 2 : 1),
-                 kinds[(int)b]);
-    int w = draw_text(nullptr, 0, 0, text);
-    draw_text(c, col * 8 + (cells * 8 - w) / 2 - 1, row * 8, text);
+    int cells = 1 + (draw_text(nullptr, 0, 0, text) + 9) / 8;
+    set_cell(c, col, row, T_BADGE + (int)b * 3, K_PANEL);
+    for (int k = 1; k < cells; k++)
+        set_cell(c, col + k, row, T_PANEL + 2 * 5 + 2, kinds[(int)b]);
+    draw_text(c, (col + 1) * 8, row * 8, text);
+    return col + cells;
 }
 
 void slot(Surface* c, int col, int row, int style)
