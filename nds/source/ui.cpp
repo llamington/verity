@@ -284,11 +284,11 @@ enum : uint16_t
     T_BACK = 1,
     T_BAR,
     T_PANEL = 3,      // 25: the 5x5 slices of a canonical panel (ring, corners, edges, middle)
-    T_SLOT = 28,      // 3 styles x 16
-    T_CHIP = 76,      // left, middle, right, single
-    T_BADGE = 80,     // 4 colours x (left, middle, right)
-    T_BETWEEN = 92,   // 5: one panel's bottom ring over the next one's top ring, in one row
-    T_COUNT = 97,
+    T_SLOT = 28,      // 3 styles x 20 (5x4 cells, 40x32 px)
+    T_CHIP = 88,      // left, middle, right, single
+    T_BADGE = 92,     // 4 verdict dots (stride 3)
+    T_BETWEEN = 104,  // 5: one panel's bottom ring over the next one's top ring, in one row
+    T_COUNT = 109,
 };
 
 uint16_t* g_fmap[2];
@@ -382,19 +382,20 @@ void make_frame_tiles(uint16_t* tiles)
                 px[y * 8 + x] = y < 4 ? panel_px(tx * 8 + x, 32 + y) : panel_px(tx * 8 + x, y);
         put_tile(tiles, T_BETWEEN + tx, px);
     }
-    // Slots (32x32): filled, empty, selected.
+    // Slots (40x32, 4 px apart): filled, empty, selected. Icon frames are 32x32 with the
+    // Pokemon drawn low, so the slot is wider than the frame and the icon sits 4 px up in it.
     const uint8_t fill[3] = {C_CREAM, C_EMPTY, C_PEACH}, edge[3] = {C_INK, C_EMPTY_EDGE, C_ORANGE};
     for (int st = 0; st < 3; st++)
-        for (int t = 0; t < 16; t++)
+        for (int t = 0; t < 20; t++)
         {
             for (int y = 0; y < 8; y++)
                 for (int x = 0; x < 8; x++)
                 {
-                    int X = (t % 4) * 8 + x, Y = (t / 4) * 8 + y;
-                    int v = rounded(X, Y, 1, 1, 31, 31, 5, st == 2 ? 3 : 2, fill[st], edge[st]);
+                    int X = (t % 5) * 8 + x, Y = (t / 5) * 8 + y;
+                    int v = rounded(X, Y, 2, 0, 38, 32, 6, st == 2 ? 3 : 2, fill[st], edge[st]);
                     px[y * 8 + x] = v < 0 ? backdrop(y) : (uint8_t)v;
                 }
-            put_tile(tiles, T_SLOT + st * 16 + t, px);
+            put_tile(tiles, T_SLOT + st * 20 + t, px);
         }
     // Key chips on a dark bar: a 24 px pill (left, middle, right) and an 8 px round one.
     for (int t = 0; t < 4; t++)
@@ -656,8 +657,8 @@ int badge(Surface* c, int col, int row, Badge b, const char* text)
 
 void slot(Surface* c, int col, int row, int style)
 {
-    for (int t = 0; t < 16; t++)
-        set_cell(c, col + t % 4, row + t / 4, T_SLOT + (style % 3) * 16 + t, K_SLOT);
+    for (int t = 0; t < 20; t++)
+        set_cell(c, col + t % 5, row + t / 5, T_SLOT + (style % 3) * 20 + t, K_SLOT);
 }
 
 int text_width(const char* s) { return draw_text(nullptr, 0, 0, s); }

@@ -88,8 +88,10 @@ void panel(Surface* c, int col, int row, int w, int h);
 // A verdict on a panel: a coloured dot, then `text` in the verdict's colour. Returns the first
 // column after it.
 int badge(Surface* c, int col, int row, Badge b, const char* text);
-// A 32x32 box slot at a cell: style 0 filled, 1 empty, 2 selected.
+// A box slot, 5x4 cells (40x32 px) at a cell: style 0 filled, 1 empty, 2 selected. Draw the
+// game's icon at kSlotIconX/Y from the slot's corner (its frames draw the Pokemon low).
 void slot(Surface* c, int col, int row, int style);
+constexpr int kSlotIconX = 4, kSlotIconY = -4;
 // Width in pixels of text as drawn.
 int text_width(const char* s);
 
