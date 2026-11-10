@@ -1,7 +1,27 @@
-# Handoff (2026-11-02)
+# Handoff (2026-11-09)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
+
+## Resume here
+
+All work is committed and pushed through the Poké Transfer commit (`2e02025`). Next is **M7**: the
+two-instance harness (PLAN "Phase H") and **P10** Memory Link + Key System, then **M8**: P11 in-game
+suite. Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
+
+Open items, none blocking M7:
+
+- Japanese/Korean text has no font (shows "?"; the keyboard refuses those Pokémon). Needs a freely
+  licensed font or ROM font loading; the user hasn't decided.
+- Colosseum/XD origins stay "not checked yet" (the user deferred them), in Gen 4 and Gen 5 saves.
+- The Gen 5 wizard makes wild Pokémon only. Gen 5 eggs and statics aren't planned in it yet.
+- `Test-Save-White-2.sav` can't be saved from the DS: its Moltres (box slot 145) has an impossible
+  met location and the whole-save validator refuses it. That is intended.
+- On hatched gift eggs that are already illegal, PKHeX can blame different checks after Poké
+  Transfer; the verdict is the same. The test accepts this only for the `egg` source.
+
+Working economically: read narrowly (`grep`, `offset`/`limit`) and cap command output. Most token
+use has been whole-file reads of `analysis4.rs`, PKHeX sources and repeated screenshots.
 
 ## Environment
 
@@ -20,6 +40,22 @@ and gaps are in `docs/research/p5-plan.md`.
   of `sd/` in `build/emu/sd`. Screenshots land in `build/emu/<script>/`; look at them with Read.
   `tools/emu/melon.py` drives the GUI melonDS (X11 mode) if needed.
 - Oracle extras: `gen-wild4` (PKHeX-generated legal wild PK4s), `legality-batch`, `sav-dump`.
+- Oracle for Gen 5: `gen-origin5 <n> <seed> <dir> <mode>`, `convert5 <in> <out> <seed>` (PKHeX's Poké
+  Transfer, then random level-ups and evolutions), `sav-gifts5 <sav>`. Rebuild after editing:
+  `DOTNET_ROOT=$HOME/.dotnet dotnet build tools/pkhex-oracle -c Release -v q --nologo`.
+- Blobs after changing exports or `data/*.tsv`: `cargo run -q -p datagen -- build data/exports data/blobs`.
+- Events: `~/src/EventsGallery` is a sparse checkout; `scripts/gen-events{4,5}-manifest.py` regenerate
+  the committed `data/events{4,5}.tsv`.
+- Key tests (`crates/verity/tests/p5_fuzz.rs`): `p9_transfer*`, `p9_transfer_1e4` (ignored, 86,086
+  Pokémon), `p9_transfer_corpus`, `p6_gen5_wild_legal*`, `p5_parity_*gen5*`; `p8_gen5_gifts.rs`.
+- Test gotcha: PKHeX reads a 136-byte file with a met location below 0x4000 and version below 0x10 as
+  a PK4, so mutated Poké Transfer files must keep a high met location.
+- Harness gotchas: reset `build/emu/sd` before a run (`make emu-ui` does). The DS file picker order
+  is gen5_white2 (0), Test-Save-White-2 (1), HeartGold (2), JP HeartGold (3), Black Full (4). The
+  box view drops quick presses: use 4-frame presses with 30-frame waits. Saving needs about 240
+  frames. `gen5_white2`'s last box is full.
+- In-game Gen 5 check (Black 2, `Test-Save-White-2`): the save starts upstairs in a Pokémon Center.
+  The deliveryman is the blue-capped man near the entrance; he needs a free party slot.
 - Gate before committing: `cargo fmt --all`, `cargo test --workspace`,
   `cargo clippy --workspace --all-targets -- -D warnings`, `cargo build-ds`. Commit only once
   these pass. Don't chain commits after test commands.
@@ -144,9 +180,8 @@ for it yet (P9.1).
    refuses Japanese and Korean Pokémon). That needs a font with a suitable licence, or the
    plan's stretch goal of loading fonts from the user's ROM. The closest-IV search blocks the UI;
    a search that runs out of budget is untimed on the DS.
-3. M5 Gen 5 in progress. `analysis5.rs` covers Pokémon that originated in B/W and B2/W2: wild slots,
+3. M5 Gen 5 is done. `analysis5.rs` covers Pokémon that originated in B/W and B2/W2: wild slots,
    statics, Dream World, Dream Radar, N, in-game trades, bred eggs and PGF events. Wild generation (`gen/wild5.rs`, the wizard), Wonder Card
    delivery (`gift/inject5.rs`, see `events-region.md`) and Poké Transfer origins are done: `analyze_transfer4`
    reuses the Gen 3/4 matching with `Inputs.fmt5` set and `Evo4::transfer_history`. Colosseum/XD transfers stay
-   unchecked, as on Gen 4. After that M7 two-instance harness + P10 Memory Link,
-   M8 P11 in-game suite.
+   unchecked, as on Gen 4. On a Gen 5 save the DS loads Gen 3, 4 and 5 data together.
