@@ -11,8 +11,7 @@ That passes P10's go/no-go: the save changes only in `0x7E000..0x7EA1F`, and two
 bytes, so differential runs can compare saves directly. `verity::memlink` (`build`/`apply`) matches 17 of 17 genuine links byte for byte: run
 `tools/emu-harness/memlink_accept.py`, then `cargo test -p verity --test p10_memlink`. See
 `docs/memlink-findings.md`. The `fuddlesworth/pokebw2` decompilation is the reference for field
-meanings, read for facts only and proved against genuine links. Next in **P10**: the in-game flashback check
-first (it tests the whole result in the real game), then the Key System and a DS screen, then **M8**:
+meanings, read for facts only and proved against genuine links. The in-game check passes (`make emu-flashback`: retail Black 2 plays Bianca's flashback from a verity-linked save, an unlinked control doesn't). Next in **P10**: the Key System and a DS screen, then **M8**:
 P11 in-game suite. Refusal policy (user, 2026-11-09): match the game where it is sensible, don't copy
 anything silly, and don't add complexity. See "Refusals" in the findings.
 Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
