@@ -288,7 +288,8 @@ enum : uint16_t
     T_CHIP = 88,      // left, middle, right, single
     T_BADGE = 92,     // 4 verdict dots (stride 3)
     T_BETWEEN = 104,  // 5: one panel's bottom ring over the next one's top ring, in one row
-    T_COUNT = 109,
+    T_KEYSEL = 109,   // 3: a selected key on a panel (peach pill, orange edge)
+    T_COUNT = 112,
 };
 
 uint16_t* g_fmap[2];
@@ -408,6 +409,17 @@ void make_frame_tiles(uint16_t* tiles)
                 px[y * 8 + x] = v < 0 ? C_INK : (uint8_t)v;
             }
         put_tile(tiles, T_CHIP + t, px);
+    }
+    // A selected key on a cream panel.
+    for (int t = 0; t < 3; t++)
+    {
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                int v = rounded(t * 8 + x, y, 0, 0, 24, 8, 3, 1, C_PEACH, C_ORANGE);
+                px[y * 8 + x] = v < 0 ? C_CREAM : (uint8_t)v;
+            }
+        put_tile(tiles, T_KEYSEL + t, px);
     }
     // Verdict dots on a cream panel (the verdict word follows in its colour).
     const uint8_t badge[4] = {C_LEGAL, C_FISHY, C_INVALID, C_SAFE};
@@ -615,6 +627,39 @@ void hints(Surface* c, const char* spec)
             x = draw_text(c, x, row * 8, label);
         col = (x + 9) / 8;
     }
+}
+
+void tabs(Surface* c, const char* const* names, int n, int active)
+{
+    for (int col = 0; col < 32; col++)
+        set_cell(c, col, 0, T_BAR, K_BAR);
+    memset(c->tiles, 0, 32 * 32);
+    // n equal segments (taps map by segment); the active tab is a cream chip.
+    for (int t = 0; t < n; t++)
+    {
+        int x0 = t * 256 / n, x1 = (t + 1) * 256 / n;
+        int w = draw_text(nullptr, 0, 0, names[t]);
+        if (t == active)
+        {
+            int cells = (w + 9) / 8;
+            int col = (x0 + x1) / 16 - cells / 2;
+            for (int k = 0; k < cells; k++)
+                set_cell(c, col + k, 0, T_CHIP + (k == 0 ? 0 : k == cells - 1 ? 2 : 1), K_CHIP);
+            draw_text(c, col * 8 + (cells * 8 - w) / 2 - 1, 0, names[t]);
+        }
+        else
+        {
+            char muted[32];
+            snprintf(muted, sizeof(muted), "\x01%s", names[t]);
+            draw_text(c, (x0 + x1) / 2 - w / 2 - 2, 0, muted);
+        }
+    }
+}
+
+void key_highlight(Surface* c, int col, int row)
+{
+    for (int k = 0; k < 3; k++)
+        set_cell(c, col + k, row, T_KEYSEL + k, K_PANEL);
 }
 
 void panel(Surface* c, int col, int row, int w, int h)

@@ -76,6 +76,7 @@ emu-ui: emu-harness nds
 	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json --out build/emu/ui-boxes
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-touch.json --out build/emu/ui-touch
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add.json --out build/emu/ui-add
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-edit.json --out build/emu/ui-edit
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add-hgss.json --out build/emu/ui-add-hgss
