@@ -38,8 +38,9 @@ finding menu paths before freezing a script. `direct_boot` (default true) skips 
 Each console runs its steps on its own thread through melonDS's `LocalMP`, because its receive calls
 block on semaphores. PLAN §7's single-threaded lockstep can't work with that. Linked runs aren't
 deterministic, so scripts need generous waits (pressing A before the host appears does nothing).
+Linked runs raise LocalMP's receive timeout to 150 ms, because 25 ms drops links under load.
 An instance more than 8 frames ahead pauses for at most 2 ms. An unbounded pause stalls the link:
-the paused console can't reply, and each unanswered command costs the sender a 25 ms timeout.
+the paused console can't reply, and each unanswered command costs the sender a full receive timeout.
 A Memory Link takes about 2.5 minutes. `"direct_boot": false` boots to the DS menu.
 
 ## Notes

@@ -84,7 +84,7 @@ struct Shared
 
 // Unthrottled threads would drift apart in emulated time, so an instance that gets this many frames
 // ahead pauses briefly. The pause must stay bounded: a paused console can't answer the other's
-// wireless commands, and each unanswered command costs the sender LocalMP's 25 ms timeout.
+// wireless commands, and each unanswered command costs the sender a full receive timeout.
 constexpr u64 kMaxFrameLead = 8;
 constexpr int kMaxLeadWaitUs = 2000;
 
@@ -479,7 +479,10 @@ int run_linked(const json::Value& cfg, const std::string& base, const std::strin
     if (insts.size() != 2)
         throw std::runtime_error("instances must list exactly two consoles");
 
+    // melonDS's default 25 ms suits one console per real-time frame; unthrottled, loaded threads
+    // miss it and Memory Link drops mid-download.
     LocalMP mp;
+    mp.SetRecvTimeout(150);
     Platform::set_local_mp(&mp);
     Shared shared;
     Ctx ctx[2];
