@@ -60,8 +60,14 @@ void clear(Surface* c);
 // printf at the 8x8 cell (col, row); clears to the end of the line. Runs of two or more spaces
 // are table gaps and line the next text up with the cell grid.
 void at(Surface* c, int col, int row, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
-// UTF-16 to the console font (ASCII; common accented letters folded, others '?').
-void utf16_to_ascii(const uint16_t* s, char* out, int cap);
+// UTF-16 to drawable UTF-8: ASCII as is; other characters as UTF-8 when the ROM font has them,
+// otherwise common accented letters folded and the rest '?'. Cut short rather than split one.
+void utf16_to_text(const uint16_t* s, char* out, int cap);
+// The font cache built from the user's ROM (stays owned by the caller), or null for none.
+void set_rom_font(const uint8_t* cache, size_t len);
+bool has_rom_font();
+// Characters (not bytes) in UTF-8 text, for centring.
+int text_len(const char* s);
 // A name from the strings blob as ASCII ("?" when unknown).
 const char* name(uint32_t category, uint32_t id);
 // A location name as ASCII ("Loc <id>" when unknown).

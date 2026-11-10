@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font
 
 all: nds
 
@@ -59,6 +59,17 @@ emu-unova: emu-harness nds
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
 # the harness clock is fixed, so a reused image would not sync rewritten files back).
+# ROM font (M8): first boot builds the font cache from a ROM on the SD card. Runs once with a
+# Gen 5 ROM and once with a Gen 4 ROM (stand-ins holding only the font, see font_rom.py).
+emu-font: emu-harness nds
+	for g in black2 platinum; do \
+	  rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx && mkdir -p build/emu && \
+	  cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds && mkdir -p build/emu/sd/roms && \
+	  python3 tools/emu-harness/font_rom.py roms/$$g.nds build/emu/sd/roms/$$g.nds && \
+	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-rom-font.json --out build/emu/ui-rom-font-$$g && \
+	  test -s build/emu/sd/_nds/verity/font.vfnt || exit 1; \
+	done
+
 emu-ui: emu-harness nds
 	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
 	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds

@@ -319,6 +319,32 @@ verity_err verity_save_probe(uint8_t *buf, size_t len, verity_save_info *out);
  */
 void verity_on_panic(void);
 
+/* ---- ROM font (crates/verity-ffi/src/rom.rs, docs/research/rom-font.md) ---- */
+
+/* Reads len bytes at offset of the ROM file into buf; false on failure. */
+typedef bool (*verity_read_fn)(void *ctx, uint32_t offset, uint8_t *buf, uint32_t len);
+
+/* How good a ROM's font is (3 any Gen 5, 2 Korean Gen 4, 1 other Gen 4, 0 unsupported), from the
+ * 4-letter game code at header offset 0x0C. */
+uint8_t verity_rom_font_rank(const uint8_t *code);
+/* Builds the font cache file from a ROM; free the result with verity_rom_free. Null on failure. */
+uint8_t *verity_rom_build_font_cache(verity_read_fn read, void *ctx, size_t *out_len);
+void verity_rom_free(uint8_t *p, size_t len);
+
+/* Bit x of rows[y] is an ink pixel (stroke or shadow); ink starts at column 0 and is width wide.
+ * left is where the game would place it after the pen (verity uses 1 px gaps instead). */
+typedef struct verity_glyph {
+    uint8_t left;
+    uint8_t width;
+    uint8_t advance;
+    uint8_t height;
+    uint16_t rows[16];
+} verity_glyph;
+
+/* True if the buffer is a usable font cache; call once after reading the file. */
+bool verity_font_check(const uint8_t *p, size_t len);
+bool verity_font_glyph(const uint8_t *p, size_t len, uint16_t c, verity_glyph *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1,0 +1,21 @@
+// M8 ROM font: first boot builds /_nds/verity/font.vfnt from a ROM on the SD card, then the JP
+// HeartGold save's trainer and Pokémon names draw in kana. Run by `make emu-font`.
+{
+  "rom": "../../../nds/verity.nds",
+  "sd_dir": "../../../build/emu/sd",
+  "sd_image": "../../../build/emu/sd.img",
+  "steps": [
+    {"wait": 120},
+    {"hold": ["L"], "frames": 40}, {"wait": 2},
+    {"screenshot": "00-picker.png"},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
+    {"press": ["A"], "frames": 2},
+    {"wait": 90},
+    {"screenshot": "01-overview.png"},
+    {"press": ["A"], "frames": 2},
+    {"wait": 60},
+    {"screenshot": "02-box1.png"}
+  ]
+}

@@ -1,0 +1,12 @@
+[package]
+name = "verity-rom"
+description = "Reads fonts and graphics from the user's own Gen 4/5 ROM at runtime (no Nintendo assets are shipped)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Used only by verity-ffi (the DS build). The core `verity` crate must never depend on this.
+
+[dependencies]
