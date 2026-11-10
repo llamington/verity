@@ -42,3 +42,4 @@ tools/emu-harness/build/
 
 # Generated NitroFS data (copied from data/blobs)
 nds/nitrofiles/data/
+__pycache__/
