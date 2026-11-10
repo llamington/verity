@@ -236,6 +236,9 @@ bool ensure_gen5_data()
     ok &= attach(VERITY_BLOB_ENC_DR, "enc_dr.bin");
     ok &= attach(VERITY_BLOB_NAMES5, "names5.bin");
     attach(VERITY_BLOB_GIFTS5, "gifts5.bin"); // Optional: Wonder Card Pokémon stay unchecked.
+    // Poké Transfer: Gen 3/4 origins. Optional, they stay unchecked without it.
+    if (ok)
+        ensure_gen4_data();
     return ok;
 }
 

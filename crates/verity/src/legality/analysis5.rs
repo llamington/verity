@@ -629,7 +629,28 @@ impl Context5<'_> {
         }
     }
 
-    fn verify_moves(
+    /// `LearnGroup5.Check` over a history.
+    pub(super) fn check_history(
+        &self,
+        result: &mut [MoveResult; 4],
+        current: &[u16; 4],
+        form: u8,
+        history: &[EvoCriteria],
+    ) {
+        for evo in history {
+            if matches!(evo.species, 386 | 487 | 492) {
+                let fc = self.b2w2.species_form(evo.species, evo.form).form_count();
+                for f in 0..fc {
+                    let e = EvoCriteria { form: f, ..*evo };
+                    self.check_internal(result, current, &e, form);
+                }
+            } else {
+                self.check_internal(result, current, evo, form);
+            }
+        }
+    }
+
+    pub(super) fn verify_moves(
         &self,
         pk: &Pkm,
         enc_species: u16,
@@ -667,21 +688,7 @@ impl Context5<'_> {
                 }
             }
         }
-        for evo in history {
-            if matches!(evo.species, 386 | 487 | 492) {
-                let fc = self.b2w2.species_form(evo.species, evo.form).form_count();
-                for f in 0..fc {
-                    self.check_internal(
-                        &mut result,
-                        &current,
-                        &EvoCriteria { form: f, ..*evo },
-                        pk.form(),
-                    );
-                }
-            } else {
-                self.check_internal(&mut result, &current, evo, pk.form());
-            }
-        }
+        self.check_history(&mut result, &current, pk.form(), history);
         if let Some((species, form)) = egg {
             let table = self.egg_table(pk.version());
             let idx = table.form_index(species, form);
@@ -1424,6 +1431,11 @@ fn hidden_possible(species: u16) -> bool {
 }
 
 fn verify_form(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, report: &mut Report) {
+    verify_form_only(ctx, pk, report);
+    let _ = (e_species, enc);
+}
+
+pub(super) fn verify_form_only(ctx: &Context5, pk: &Pkm, report: &mut Report) {
     let species = pk.species();
     let form = pk.form();
     let pi = ctx.b2w2.species_form(species, form);
@@ -1441,7 +1453,6 @@ fn verify_form(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, rep
         report.flag(CheckId::Form);
         return;
     }
-    let _ = (e_species, enc);
     let item = pk.held_item();
     let bad = match species {
         487 => (form == 1) != (item == 112),

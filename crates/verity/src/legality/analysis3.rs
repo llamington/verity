@@ -7,9 +7,10 @@
 use alloc::vec::Vec;
 
 use super::analysis4::{
-    inputs, invalid_moves3, verify_common_origin3, CheckId, Context4, Inputs, Matched, Origin3,
-    Report,
+    inputs_for, invalid_moves3, transfer_evolution_valid, transfer_moves, verify_common_origin3,
+    CheckId, Context4, Inputs, Matched, Origin3, Report,
 };
+use super::analysis5::Context5;
 use super::enc4::{Deferral, Enc4, MatchPkm, Rating};
 use super::evo::{Evo4, EvoCriteria};
 use super::moves4::MoveResult;
@@ -406,8 +407,32 @@ fn defer_update<'a>(cur: &mut Option<(Deferral, Enc4<'a>)>, d: Deferral, e: Enc4
 
 /// Lists the candidates `EncounterGenerator3.GetEncounters` yields, then chooses one.
 pub fn analyze3<'a>(ctx: &'a Context4<'a>, g3: &'a Context3<'a>, pk: &Pkm) -> Report<'a> {
-    let inp = inputs(ctx, pk);
-    let chain = ctx.evo.encounter_origin_chain3(&g3.evo, &inp.evo);
+    analyze3_inner(ctx, g3, None, pk)
+}
+
+/// A Gen 3 origin now in the Gen 5 format.
+pub fn analyze3_transfer<'a>(
+    ctx: &'a Context4<'a>,
+    g3: &'a Context3<'a>,
+    c5: &'a Context5<'a>,
+    pk: &Pkm,
+) -> Report<'a> {
+    analyze3_inner(ctx, g3, Some(c5), pk)
+}
+
+fn analyze3_inner<'a>(
+    ctx: &'a Context4<'a>,
+    g3: &'a Context3<'a>,
+    c5: Option<&'a Context5<'a>>,
+    pk: &Pkm,
+) -> Report<'a> {
+    let inp = inputs_for(ctx, c5, pk);
+    let chain = match c5 {
+        Some(c) => c
+            .evo
+            .transfer_origin_chain((&ctx.evo, Some(&g3.evo)), &inp.evo),
+        None => ctx.evo.encounter_origin_chain3(&g3.evo, &inp.evo),
+    };
     let ratio = |s: u16| ctx.ratio(s);
     let pidiv = analyze(&inp.analyze, ratio);
     let mut direct: Vec<(Enc4<'a>, LeadSeed, bool)> = Vec::new();
@@ -467,7 +492,7 @@ pub fn analyze3<'a>(ctx: &'a Context4<'a>, g3: &'a Context3<'a>, pk: &Pkm) -> Re
                 Bounds {
                     min,
                     max,
-                    format: 4,
+                    format: if c5.is_some() { 5 } else { 4 },
                 },
                 pk.version() == VERSION_E,
                 gender,
@@ -543,6 +568,21 @@ fn enc_level3(e: &Enc4) -> u8 {
     }
 }
 
+/// How a candidate's moves started.
+fn start_of(g3: &Context3, e: &Enc4) -> Start3 {
+    match e {
+        Enc4::Egg3 { species, version } => Start3::Egg {
+            species: *species,
+            version: *version,
+        },
+        Enc4::Data(d) if d.is_slot() => g3.enc.swarm_moves(d).map_or(Start3::Wild, Start3::Fixed),
+        Enc4::Data(d) if d.has(crate::data::encounters::flag::HAS_MOVES) => d
+            .template()
+            .map_or(Start3::Wild, |t| Start3::Fixed(t.moves())),
+        _ => Start3::Wild,
+    }
+}
+
 /// `LearnVerifier` for a candidate: the fixed moves of a static or swarm, a hatched egg's moves.
 fn moves_for(
     ctx: &Context4,
@@ -553,17 +593,7 @@ fn moves_for(
 ) -> [MoveResult; 4] {
     let pk = &inp.pk;
     let species = enc_species3(e);
-    let start = match e {
-        Enc4::Egg3 { species, version } => Start3::Egg {
-            species: *species,
-            version: *version,
-        },
-        Enc4::Data(d) if d.is_slot() => g3.enc.swarm_moves(d).map_or(Start3::Wild, Start3::Fixed),
-        Enc4::Data(d) if d.has(crate::data::encounters::flag::HAS_MOVES) => d
-            .template()
-            .map_or(Start3::Wild, |t| Start3::Fixed(t.moves())),
-        _ => Start3::Wild,
-    };
+    let start = start_of(g3, e);
     ctx.learn
         .verify3(&g3.learn, pk.moves(), pk.form(), species, history, start)
 }
@@ -603,23 +633,32 @@ fn evolution_ok(
 }
 
 /// `EncounterVerifier.VerifyEncounterEgg3Transfer`.
-fn egg_transfer_ok(pk: &Pkm) -> bool {
+fn egg_transfer_ok(pk: &Pkm, f5: bool) -> bool {
     !pk.is_egg()
         && pk.met_level() >= EGG_LEVEL
         && pk.egg_location() == 0
-        && pk.met_location() == PAL_PARK
+        && pk.met_location() == transfer_location(f5)
 }
 
-/// `EncounterVerifier.VerifyEncounter` for a Gen 3 origin in the Gen 4 format.
-fn encounter_ok(pk: &Pkm, e: &Enc4) -> bool {
+/// Where a Gen 3 origin was "met": Pal Park (Gen 4 format) or Poké Transfer (Gen 5 format).
+fn transfer_location(f5: bool) -> u16 {
+    if f5 {
+        30001
+    } else {
+        PAL_PARK
+    }
+}
+
+/// `EncounterVerifier.VerifyEncounter` for a Gen 3 origin after leaving Gen 3.
+fn encounter_ok(pk: &Pkm, e: &Enc4, f5: bool) -> bool {
     match e {
-        Enc4::Egg3 { .. } => egg_transfer_ok(pk),
+        Enc4::Egg3 { .. } => egg_transfer_ok(pk, f5),
         Enc4::Data(d)
             if d.kind() == Some(EncounterKind::Gift3)
                 && d.has(crate::data::encounters::flag::EGG)
                 && !pk.is_egg() =>
         {
-            egg_transfer_ok(pk)
+            egg_transfer_ok(pk, f5)
         }
         Enc4::Data(d) if d.kind() == Some(EncounterKind::Static3) => {
             let japanese = pk.language() == 1;
@@ -627,7 +666,7 @@ fn encounter_ok(pk: &Pkm, e: &Enc4) -> bool {
                 || (d.species() == 386 && d.location() == 200 && japanese))
                 && (pk.is_egg()
                     || !d.has(crate::data::encounters::flag::EGG)
-                    || egg_transfer_ok(pk))
+                    || egg_transfer_ok(pk, f5))
         }
         _ => true,
     }
@@ -642,22 +681,49 @@ fn choose3<'a>(
     report: &mut Report<'a>,
 ) {
     let pk = &inp.pk;
+    let f5 = inp.fmt5.is_some();
     let mut chosen = None;
     let n = list.len();
     for (i, c) in list.iter().enumerate() {
         let last = i + 1 == n;
-        if !encounter_ok(pk, &c.encounter) && !last {
+        if !encounter_ok(pk, &c.encounter, f5) && !last {
             continue;
         }
         let species = enc_species3(&c.encounter);
-        let (gen3, gen4) =
-            ctx.evo
-                .chain_for_encounter3(&g3.evo, &inp.evo, species, enc_level3(&c.encounter));
-        let moves = moves_for(ctx, g3, inp, &c.encounter, (&gen4, &gen3));
+        let level = enc_level3(&c.encounter);
+        let [gen3, gen4, gen5] = match inp.fmt5 {
+            Some(c5) => {
+                c5.evo
+                    .transfer_history((&ctx.evo, Some(&g3.evo)), &inp.evo, species, level)
+            }
+            None => {
+                let (a, b) = ctx
+                    .evo
+                    .chain_for_encounter3(&g3.evo, &inp.evo, species, level);
+                [a, b, Vec::new()]
+            }
+        };
+        let (moves, ev) = match inp.fmt5 {
+            Some(c5) => {
+                let (fixed, egg3) = match start_of(g3, &c.encounter) {
+                    Start3::Fixed(m) => (Some(m), None),
+                    Start3::Egg { species, version } => (None, Some((species, version))),
+                    Start3::Wild => (None, None),
+                };
+                let h = [gen3.clone(), gen4.clone(), gen5.clone()];
+                let learn = Some((&g3.learn, egg3));
+                let m = transfer_moves(ctx, c5, pk, pk.moves(), species, &h, fixed, None, learn);
+                let ev = transfer_evolution_valid(ctx, c5, inp, species, &h, None, Some(&g3.learn));
+                (m, ev)
+            }
+            None => (
+                moves_for(ctx, g3, inp, &c.encounter, (&gen4, &gen3)),
+                evolution_ok(ctx, g3, inp, species, (&gen4, &gen3)),
+            ),
+        };
         if !moves.iter().all(|m| m.valid()) && !last {
             continue;
         }
-        let ev = evolution_ok(ctx, g3, inp, species, (&gen4, &gen3));
         if !ev && !last {
             continue;
         }
@@ -668,12 +734,24 @@ fn choose3<'a>(
         if !ev {
             report.flag(CheckId::Evolution);
         }
-        chosen = Some((c, gen3, gen4));
+        chosen = Some((c, gen3, gen4, gen5));
         break;
     }
-    let Some((c, gen3, gen4)) = chosen else {
+    let Some((c, gen3, gen4, gen5)) = chosen else {
         report.flag(CheckId::Encounter);
-        report.moves = invalid_moves3(ctx, g3, inp);
+        report.moves = match inp.fmt5 {
+            Some(c5) => {
+                let h = c5.evo.transfer_history(
+                    (&ctx.evo, Some(&g3.evo)),
+                    &inp.evo,
+                    pk.species(),
+                    pk.met_level(),
+                );
+                let learn = Some((&g3.learn, None));
+                transfer_moves(ctx, c5, pk, pk.moves(), pk.species(), &h, None, None, learn)
+            }
+            None => invalid_moves3(ctx, g3, inp),
+        };
         verify_common_origin3(ctx, inp, None, None, None, report);
         return;
     };
@@ -681,6 +759,7 @@ fn choose3<'a>(
         g3,
         gen3: &gen3,
         gen4: &gen4,
+        gen5: &gen5,
     };
     match c.encounter {
         Enc4::Data(encounter) => {
@@ -700,7 +779,7 @@ fn choose3<'a>(
         report.flag(CheckId::PID);
     }
     // EncounterVerifier's Gen 3 rules, then TransferVerifier.VerifyTransferLegalityG3.
-    if !encounter_ok(pk, &c.encounter) || pk.met_location() != PAL_PARK {
+    if !encounter_ok(pk, &c.encounter, f5) || pk.met_location() != transfer_location(f5) {
         report.flag(CheckId::Encounter);
     }
     // PIDVerifier.VerifyEggPID, including VerifyEggGender8000 (gender from PID bit 15).

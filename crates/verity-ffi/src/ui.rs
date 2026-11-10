@@ -533,16 +533,24 @@ pub(crate) mod legal {
     }
 
     fn check5(pk: &Pkm, out: &mut VerityLegality) {
-        // Pokémon sent from Gen 4 aren't modelled yet.
-        if !verity::legality::analysis5::is_gen5_version(pk.version()) {
-            out.unsupported = 2;
-            return;
-        }
         let Some(ctx) = context5() else {
             out.unsupported = 3;
             return;
         };
-        let r = analyze5(ctx, pk);
+        let r = if verity::legality::analysis5::is_gen5_version(pk.version()) {
+            analyze5(ctx, pk)
+        } else {
+            // Poké Transfer: judged with the Gen 3 and 4 data. Colosseum and XD are out of scope.
+            let Some(c4) = context() else {
+                out.unsupported = 3;
+                return;
+            };
+            if pk.version() == 15 {
+                out.unsupported = 2;
+                return;
+            }
+            verity::legality::analysis4::analyze_transfer4(c4, ctx, pk)
+        };
         if matches!(r.matched, Matched::Invalid) {
             out.unsupported = 6;
             return;

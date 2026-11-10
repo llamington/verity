@@ -693,6 +693,17 @@ fn compare5(
     per_id: &mut BTreeMap<String, (u32, u32)>,
 ) {
     let report = verity::legality::analysis5::analyze5(ctx, pk);
+    compare_report(&report, v, label, pk, bad, per_id);
+}
+
+fn compare_report(
+    report: &verity::legality::analysis4::Report,
+    v: &serde_json::Value,
+    label: &str,
+    pk: &Pkm,
+    bad: &mut Vec<String>,
+    per_id: &mut BTreeMap<String, (u32, u32)>,
+) {
     let ours: std::collections::BTreeSet<String> = report
         .invalid
         .iter()
@@ -720,7 +731,15 @@ fn compare5(
     if our_moves != their_moves {
         per_id.entry("moves".into()).or_default().0 += 1;
     }
-    if ours != theirs || our_moves != their_moves || report.valid() != v["valid"].as_bool().unwrap()
+    // On a hatched gift egg PKHeX's choice between the gift and a bred egg depends on which
+    // failed first, so an already-illegal one can differ in the reason but never the verdict.
+    let reason_only = label.starts_with("tr-egg:")
+        && report.valid() == v["valid"].as_bool().unwrap()
+        && !report.valid();
+    if !reason_only
+        && (ours != theirs
+            || our_moves != their_moves
+            || report.valid() != v["valid"].as_bool().unwrap())
     {
         let matched = match report.matched {
             verity::legality::analysis4::Matched::Slot { encounter, .. } => {
@@ -747,6 +766,150 @@ fn compare5(
 /// Kinds verity doesn't model for a Gen 5 origin yet.
 fn gen5_unmodelled(kind: &str) -> bool {
     matches!(kind, "EncounterInvalid")
+}
+
+/// Gen 4 Pokémon sent through PKHeX's Poké Transfer conversion, then compared with PKHeX.
+fn parity_transfer4(label: &str, build: fn(usize, &Path, u64), n: usize, seed: u64, muts: u32) {
+    if !root().join("data/blobs/names5.bin").exists() {
+        eprintln!("skipping: build data blobs first");
+        return;
+    }
+    let ctx4 = Box::leak(Box::new(context()));
+    let ctx5 = Box::leak(Box::new(context5()));
+    let tmp =
+        std::env::temp_dir().join(format!("verity-tr4-{}-{label}-{seed}", std::process::id()));
+    let (src, legal, mutated) = (tmp.join("src"), tmp.join("legal"), tmp.join("mutated"));
+    fs::create_dir_all(&src).unwrap();
+    fs::create_dir_all(&mutated).unwrap();
+    build(n, &src, seed);
+    oracle(&[
+        "convert5".as_ref(),
+        src.as_os_str(),
+        legal.as_os_str(),
+        (seed + 1).to_string().as_ref(),
+    ]);
+    let mut r = Rand::new(seed ^ 0x7777);
+    let mut files = Vec::new();
+    for (i, e) in fs::read_dir(&legal).unwrap().flatten().enumerate() {
+        let mut pk = Pkm::from_decrypted(Format::Pk5, &fs::read(e.path()).unwrap()).unwrap();
+        for _ in 0..r.next_u32() % (muts + 1) {
+            let kind = MUTATIONS_TRANSFER[r.next_u32() as usize % MUTATIONS_TRANSFER.len()];
+            mutate(&mut pk, kind, &mut r);
+        }
+        // PKHeX reads a low met location as a PK4, so keep it in the range PK5s use.
+        if pk.met_location() < 0x4000 {
+            pk.set_met_location(30002);
+            pk.refresh_checksum();
+        }
+        let f = format!("{i:05}.pk5");
+        fs::write(mutated.join(&f), &pk.decrypted()[..136]).unwrap();
+        files.push((f, pk));
+    }
+    let out = oracle(&["legality-batch".as_ref(), mutated.as_os_str()]);
+    let mut pkhex = std::collections::HashMap::new();
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        pkhex.insert(v["file"].as_str().unwrap().to_string(), v);
+    }
+    let (mut checked, mut bad, mut per_id) = (0, Vec::new(), BTreeMap::new());
+    for (f, pk) in &files {
+        let v = &pkhex[f];
+        if !matches!(pk.version(), 1..=5 | 7 | 8 | 10..=12)
+            || gen5_unmodelled(v["enc_kind"].as_str().unwrap_or(""))
+            || v["report"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Flagged pattern")
+        {
+            continue;
+        }
+        let report = verity::legality::analysis4::analyze_transfer4(ctx4, ctx5, pk);
+        let tag = format!("tr-{label}:{f}");
+        compare_report(&report, v, &tag, pk, &mut bad, &mut per_id);
+        checked += 1;
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    for b in bad.iter().take(24) {
+        eprintln!("{b}");
+    }
+    eprintln!(
+        "{label}: checked {checked}, mismatched {}: {per_id:?}",
+        bad.len()
+    );
+    assert!(checked > 0, "nothing compared");
+    assert!(bad.is_empty());
+}
+
+const MUTATIONS_TRANSFER: [&str; 10] = [
+    "ivs",
+    "evs",
+    "level_exp",
+    "met_level",
+    "ball",
+    "met_location",
+    "pid",
+    "gender",
+    "contest",
+    "nature5",
+];
+
+#[test]
+#[ignore]
+fn p9_transfer_1e4() {
+    parity_transfer4("wild", build_legal, 10_000, 401, 3);
+    parity_transfer4("hgss", build_legal_hgss, 10_000, 402, 3);
+    parity_transfer4("gift", build_legal_gifts, 10_000, 403, 3);
+    parity_transfer4("egg", build_legal_eggs, 10_000, 404, 3);
+    parity_transfer4("slot3", build_legal_slot3, 10_000, 405, 3);
+    parity_transfer4("static3", build_legal_static3, 10_000, 406, 3);
+    parity_transfer4("trade3", build_legal_trade3, 10_000, 407, 3);
+    parity_transfer4("egg3", build_legal_egg3, 10_000, 408, 3);
+    parity_transfer4("gift3", build_legal_gift3, 10_000, 409, 3);
+}
+
+#[test]
+fn p9_transfer3_slot() {
+    parity_transfer4("slot3", build_legal_slot3, 1200, 311, 3);
+}
+
+#[test]
+fn p9_transfer3_static() {
+    parity_transfer4("static3", build_legal_static3, 800, 312, 3);
+}
+
+#[test]
+fn p9_transfer3_trade() {
+    parity_transfer4("trade3", build_legal_trade3, 600, 313, 3);
+}
+
+#[test]
+fn p9_transfer3_egg() {
+    parity_transfer4("egg3", build_legal_egg3, 800, 314, 3);
+}
+
+#[test]
+fn p9_transfer3_gift() {
+    parity_transfer4("gift3", build_legal_gift3, 800, 315, 3);
+}
+
+#[test]
+fn p9_transfer4_wild() {
+    parity_transfer4("wild", build_legal, 1200, 301, 3);
+}
+
+#[test]
+fn p9_transfer4_hgss() {
+    parity_transfer4("hgss", build_legal_hgss, 1200, 302, 3);
+}
+
+#[test]
+fn p9_transfer4_gift() {
+    parity_transfer4("gift", build_legal_gifts, 800, 303, 3);
+}
+
+#[test]
+fn p9_transfer4_egg() {
+    parity_transfer4("egg", build_legal_eggs, 800, 304, 3);
 }
 
 fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
@@ -929,6 +1092,50 @@ fn p5_parity_gen5_1e4() {
     {
         parity5(mode, 10_000, 9000 + i as u64, 4);
     }
+}
+
+#[test]
+fn p9_transfer_corpus() {
+    if !root().join("data/blobs/names5.bin").exists() {
+        return;
+    }
+    let Ok(rd) = fs::read_dir(root().join("corpus/reports/oracle-smoke")) else {
+        return;
+    };
+    let ctx4 = Box::leak(Box::new(context()));
+    let ctx5 = Box::leak(Box::new(context5()));
+    let (mut checked, mut bad, mut per_id) = (0, Vec::new(), BTreeMap::new());
+    for e in rd.flatten() {
+        let dir = e.path();
+        if !dir.is_dir() || !dir.to_string_lossy().ends_with(".pkm") {
+            continue;
+        }
+        let out = oracle(&["legality-batch".as_ref(), dir.as_os_str()]);
+        for line in String::from_utf8_lossy(&out).lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let f = v["file"].as_str().unwrap();
+            if !f.ends_with(".pk5") {
+                continue;
+            }
+            let pk = Pkm::from_decrypted(Format::Pk5, &fs::read(dir.join(f)).unwrap()).unwrap();
+            if !matches!(pk.version(), 1..=5 | 7 | 8 | 10..=12)
+                || gen5_unmodelled(v["enc_kind"].as_str().unwrap_or(""))
+            {
+                continue;
+            }
+            let report = verity::legality::analysis4::analyze_transfer4(ctx4, ctx5, &pk);
+            compare_report(&report, &v, f, &pk, &mut bad, &mut per_id);
+            checked += 1;
+        }
+    }
+    for b in bad.iter().take(30) {
+        eprintln!("{b}");
+    }
+    eprintln!(
+        "transfer corpus checked {checked}, mismatched {}: {per_id:?}",
+        bad.len()
+    );
+    assert!(bad.is_empty());
 }
 
 #[test]

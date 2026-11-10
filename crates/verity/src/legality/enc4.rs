@@ -3,6 +3,7 @@
 //! `EncounterEnumerator4.TryGetNext/TryGetNextSub`, `EncounterSlot4.IsMatchExact/GetMatchRating/
 //! IsCompatible`, `RNG/ClassicEra/LeadEncounter.cs` and `CuteCharm4.IsValid`.
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::evo::EvoCriteria;
@@ -44,6 +45,10 @@ pub struct MatchPkm {
     /// The Unown form is possible at its met location (PKHeX `IsUnownFormValid`). It depends on
     /// the PID, IVs and location, not the slot, so it is worked out once per Pokémon.
     pub unown_form_ok: bool,
+    /// The Unown form is possible at the Ruins of Alph, for a Pokémon whose met location is gone.
+    pub unown_alph_ok: bool,
+    /// The Pokémon has left Gen 4, which loses its met location and original met level.
+    pub format5: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -107,7 +112,12 @@ pub fn rating(e: &Encounter, pk: &MatchPkm) -> Rating {
         return Rating::PartialMatch;
     }
     // D/P/Pt Unown only appear in the Solaceon Ruins (PKHeX `EncounterArea4.IsUnownFormValid`).
-    if e.species() == UNOWN && !pk.unown_form_ok {
+    let unown_ok = if pk.format5 && e.location() == crate::rng::unown4::RUINS_OF_ALPH {
+        pk.unown_alph_ok
+    } else {
+        pk.unown_form_ok
+    };
+    if e.species() == UNOWN && !unown_ok {
         return Rating::PartialMatch;
     }
     Rating::Match
@@ -121,7 +131,11 @@ fn is_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
         return false;
     }
     let ml = pk.analyze.met_level;
-    if !(e.level_min()..=e.level_max()).contains(&ml)
+    if pk.format5 {
+        if evo.level_max < e.level_min() {
+            return false;
+        }
+    } else if !(e.level_min()..=e.level_max()).contains(&ml)
         && !(e.slot_type() == SlotType4::Grass as u8 && ml == e.pressure_level())
     {
         return false;
@@ -295,6 +309,11 @@ pub(crate) fn form_changeable(species: u16) -> bool {
     matches!(species, 412 | 479 | 386 | 483 | 484 | 487 | 492 | 493)
 }
 
+/// PKHeX `Locations.IsPtHGSSLocationEgg`.
+fn is_pt_hgss_egg_location(location: u16) -> bool {
+    (2011..3000).contains(&location)
+}
+
 /// PKHeX `EncounterStatic4.IsMatchExact` (format 4).
 fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     let Some(t) = e.template() else {
@@ -306,6 +325,16 @@ fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
         if pk.egg_location != 0 {
             return false;
         }
+    } else if pk.format5 {
+        // Poké Transfer turns Pt/HG/SS egg locations into Faraway Place.
+        let expect = if is_pt_hgss_egg_location(t.egg_location()) {
+            3002
+        } else {
+            t.egg_location()
+        };
+        if pk.egg_location != 2002 && pk.egg_location != expect {
+            return false;
+        }
     } else if !pk.is_egg {
         if pk.egg_location != t.egg_location() && pk.egg_location != 2002 {
             return false;
@@ -314,7 +343,7 @@ fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
         return false;
     }
     // IsMatchLocation
-    if !is_egg_enc {
+    if !is_egg_enc && !pk.format5 {
         let met = pk.met_location;
         let ok = if e.has(crate::data::encounters::flag::ROAMING) {
             roamer_location_ok(e.location(), met, pk.ground_tile)
@@ -327,7 +356,11 @@ fn static_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     }
     // IsMatchLevel
     let want = if is_egg_enc { 0 } else { e.level_min() };
-    if pk.analyze.met_level != want {
+    if pk.format5 {
+        if e.level_min() > evo.level_max {
+            return false;
+        }
+    } else if pk.analyze.met_level != want {
         return false;
     }
     if t.gender() != GENDER_RANDOM && pk.analyze.gender != t.gender() {
@@ -343,10 +376,12 @@ fn is_walker(e: &Encounter) -> bool {
 /// PKHeX `EncounterStatic4Pokewalker.IsMatchExact` (format 4; `IsMatchGender` always passes
 /// apart from an Azurill quirk that also returns true).
 fn walker_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
-    pk.egg_location == 0
-        && pk.met_location == e.location()
-        && pk.analyze.met_level == e.level_min()
-        && !(e.form() != evo.form && !form_changeable(e.species()))
+    let at_place = if pk.format5 {
+        evo.level_max >= e.level_min()
+    } else {
+        pk.met_location == e.location() && pk.analyze.met_level == e.level_min()
+    };
+    pk.egg_location == 0 && at_place && !(e.form() != evo.form && !form_changeable(e.species()))
 }
 
 /// PKHeX `PokewalkerRNG.GetLeastEffortSeed(...).Type != None`: the mic test reaches any seed,
@@ -400,7 +435,9 @@ fn trade_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     };
     let a = &pk.analyze;
     let met_unset = t.met_location() == 0;
-    let level_ok = if met_unset {
+    let level_ok = if pk.format5 {
+        evo.level_max >= e.level_min()
+    } else if met_unset {
         a.met_level >= e.level_min()
     } else {
         a.met_level == e.level_min()
@@ -410,7 +447,7 @@ fn trade_match_exact(e: &Encounter, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     // IndividualValueSet order HP, Atk, Def, Spe, SpA, SpD (same as the PK4 IV32 order).
     level_ok
         && (a.sid as u32) << 16 | a.tid as u32 == (t.sid() as u32) << 16 | t.tid() as u32
-        && pk.met_location == e.location()
+        && (pk.format5 || pk.met_location == e.location())
         && ivs == t_ivs
         && a.pid == t.pid()
         && (a.pid % 25) as u8 == t.nature()
@@ -511,7 +548,13 @@ pub fn wild_slots<'a>(
         }
     };
     let push_slots = |seq: &mut Vec<(Enc4<'a>, bool)>, partial: &mut Option<(Enc4<'a>, u8)>| {
-        for e in ed.slots_at(group, pk.met_location) {
+        // Poké Transfer loses the met location, so every area has to be tried.
+        let areas: Box<dyn Iterator<Item = Encounter<'a>>> = if pk.format5 {
+            Box::new(ed.group(group).filter(|e| e.is_slot()))
+        } else {
+            Box::new(ed.slots_at(group, pk.met_location))
+        };
+        for e in areas {
             let Some(evo) = evo_of(e.species()) else {
                 continue;
             };
@@ -629,7 +672,13 @@ pub fn wild_slots<'a>(
             }
             continue;
         }
-        if e.ground_tile() & (1u32 << pk.ground_tile) == 0 {
+        // Pokéwalker encounters aren't IGroundTypeTile: the tile just has to be empty.
+        let tile_ok = if is_walker(&e) {
+            pk.ground_tile == 0
+        } else {
+            e.ground_tile() & (1u32 << pk.ground_tile) != 0
+        };
+        if !tile_ok {
             defer(Deferral::Tile, Enc4::Data(e));
             continue;
         }
@@ -664,11 +713,22 @@ pub fn wild_slots<'a>(
         let Some(slot) = Slot4::from_encounter(&e) else {
             continue;
         };
-        let ml = pk.analyze.met_level;
-        let lead = if matches!(pk.analyze.version, 7 | 8) {
-            crate::rng::method_k::lead_info4_hgss(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio)
+        // LeadFinder.GetLevelConstraint.
+        let (lo, hi, format) = if pk.format5 {
+            let evo = evo_of(e.species()).copied().unwrap_or_default();
+            (
+                evo.level_min.max(e.level_min()),
+                evo.level_max.min(e.level_max()),
+                5,
+            )
         } else {
-            method_j::lead_info4_dppt(&pk.analyze, &slot, pidiv, ml, ml, 4, &ratio)
+            let ml = pk.analyze.met_level;
+            (ml, ml, 4)
+        };
+        let lead = if matches!(pk.analyze.version, 7 | 8) {
+            crate::rng::method_k::lead_info4_hgss(&pk.analyze, &slot, pidiv, lo, hi, format, &ratio)
+        } else {
+            method_j::lead_info4_dppt(&pk.analyze, &slot, pidiv, lo, hi, format, &ratio)
         };
         if !lead.is_valid() {
             defer(Deferral::SlotNumber, Enc4::Data(e));
