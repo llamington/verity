@@ -49,7 +49,11 @@ pub fn pcjp_language(language: u8) -> bool {
 }
 
 fn ot_text(pk: &Pkm, out: &mut [u16; 8]) -> usize {
-    crate::text::decode4(&pk.ot_name_raw(), out)
+    if pk.format() == crate::pkm::Format::Pk5 {
+        crate::text::decode5(&pk.ot_name_raw(), out)
+    } else {
+        crate::text::decode4(&pk.ot_name_raw(), out)
+    }
 }
 
 fn eq_str(a: &[u16], s: &str) -> bool {

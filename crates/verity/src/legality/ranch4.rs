@@ -111,12 +111,17 @@ pub fn is_match_exact(g: &RanchGift, pk: &MatchPkm, evo: &EvoCriteria) -> bool {
     } else {
         a.pid == g.pid
     };
-    a.met_level == g.met_level
+    let (level_ok, location_ok) = if pk.format5 {
+        (evo.level_max >= g.level, true)
+    } else {
+        (a.met_level == g.met_level, pk.met_location == g.location)
+    };
+    level_ok
         && a.tid == TID
         && a.sid == g.sid
         && a.gender == g.gender
         && shiny_ok
-        && pk.met_location == g.location
+        && location_ok
         && !(evo.form != g.form && !super::enc4::form_changeable(g.species))
         && a.ot_gender == g.ot_gender
         && pk.egg_location == g.egg_location

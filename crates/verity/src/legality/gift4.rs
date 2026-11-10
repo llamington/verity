@@ -16,8 +16,8 @@ const MILOTIC: u16 = 350;
 const LINK_TRADE4: u16 = 2002;
 const RANGER4: u16 = 3001;
 
-/// PKHeX `PGT.IsRangerManaphy` (format 4).
-pub fn is_ranger_manaphy(pk: &Pkm) -> bool {
+/// PKHeX `PGT.IsRangerManaphy`. `format5` is whether `pk` has left Gen 4, which an egg can't.
+pub fn is_ranger_manaphy(pk: &Pkm, format5: bool) -> bool {
     if pk.species() != MANAPHY {
         return false;
     }
@@ -28,22 +28,29 @@ pub fn is_ranger_manaphy(pk: &Pkm) -> bool {
     if !pk.is_egg() {
         return matches!(egg, LINK_TRADE4 | RANGER4);
     }
-    egg == RANGER4 && matches!(pk.met_location(), LINK_TRADE4 | 0)
+    !format5 && egg == RANGER4 && matches!(pk.met_location(), LINK_TRADE4 | 0)
 }
 
-fn decoded_ot(pk: &Pkm, buf: &mut [u16; 8]) -> usize {
-    crate::text::decode4(&pk.ot_name_raw(), buf)
+fn decoded_ot(pk: &Pkm, buf: &mut [u16; 8], format5: bool) -> usize {
+    if format5 {
+        crate::text::decode5(&pk.ot_name_raw(), buf)
+    } else {
+        crate::text::decode4(&pk.ot_name_raw(), buf)
+    }
 }
 
 /// PKHeX `PCD.IsMatchExact` for a PK4 in the Gen 4 format. `t` is the gift's template PK4 and
 /// `t_level` its `CurrentLevel` (from EXP and the species' growth rate).
-pub fn match_exact(t: &Pkm, t_level: u8, pk: &Pkm, evo: &EvoCriteria) -> bool {
+pub fn match_exact(t: &Pkm, t_level: u8, pk: &Pkm, evo: &EvoCriteria, format5: bool) -> bool {
     if !t.is_egg() {
         if t.tid() != pk.tid() || t.sid() != pk.sid() {
             return false;
         }
         let (mut a, mut b) = ([0u16; 8], [0u16; 8]);
-        let (na, nb) = (decoded_ot(t, &mut a), decoded_ot(pk, &mut b));
+        let (na, nb) = (
+            decoded_ot(t, &mut a, false),
+            decoded_ot(pk, &mut b, format5),
+        );
         if a[..na] != b[..nb] {
             return false;
         }
@@ -53,11 +60,18 @@ pub fn match_exact(t: &Pkm, t_level: u8, pk: &Pkm, evo: &EvoCriteria) -> bool {
         if t.language() != 0 && t.language() != pk.language() {
             return false;
         }
-        if t.egg_location() as u32 + 3000 != pk.met_location() as u32 {
-            return false;
-        }
-        if t_level != pk.met_level() {
-            return false;
+        if format5 {
+            // The met location is checked with the other transfer rules.
+            if t_level > pk.met_level() || pk.egg_location() != 0 {
+                return false;
+            }
+        } else {
+            if t.egg_location() as u32 + 3000 != pk.met_location() as u32 {
+                return false;
+            }
+            if t_level != pk.met_level() {
+                return false;
+            }
         }
     } else {
         if t.egg_location() as u32 + 3000 != pk.egg_location() as u32
@@ -65,7 +79,7 @@ pub fn match_exact(t: &Pkm, t_level: u8, pk: &Pkm, evo: &EvoCriteria) -> bool {
         {
             return false;
         }
-        if t_level != pk.met_level() {
+        if t_level != pk.met_level() || (format5 && pk.is_egg()) {
             return false;
         }
     }
@@ -140,6 +154,7 @@ pub fn search<'a>(
     pk: &Pkm,
     chain: &[EvoCriteria],
     level_of: impl Fn(&Pkm) -> u8,
+    format5: bool,
 ) -> EventSearch<'a> {
     let mut out = EventSearch {
         matches: Vec::new(),
@@ -151,7 +166,7 @@ pub fn search<'a>(
             continue;
         };
         let t = g.pk();
-        if !match_exact(&t, level_of(&t), pk, evo) {
+        if !match_exact(&t, level_of(&t), pk, evo, format5) {
             continue;
         }
         if is_partial(&t, pk) {

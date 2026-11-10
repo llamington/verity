@@ -532,6 +532,124 @@ impl<'a> Evo4<'a> {
         (gen3, self.set_history(&chain))
     }
 
+    /// `GetOriginChain` for a Gen 3 or 4 origin in the Gen 5 format: `self` is the Gen 5 tree,
+    /// walked first, then `g4` (`EvolutionGroup4.Devolve` caps levels at the met level, which for
+    /// a PK5 is the level it left Gen 4) and `g3`.
+    fn transfer_chain(
+        &self,
+        (g4, g3): (&Evo4<'a>, Option<&Evo4<'a>>),
+        pk: &EvoPkm,
+        level_min: u8,
+        enc_species: u16,
+        discard: bool,
+    ) -> Vec<EvoCriteria> {
+        let mut result = [EvoCriteria::default(); MAX_EVOLUTIONS];
+        if pk.is_egg {
+            result[0] = EvoCriteria {
+                species: pk.species,
+                form: pk.form,
+                level_max: pk.current_level,
+                level_min: pk.current_level,
+                ..Default::default()
+            };
+            return result[..1].to_vec();
+        }
+        result[0] = EvoCriteria {
+            species: pk.species,
+            form: pk.form,
+            level_max: pk.current_level,
+            ..Default::default()
+        };
+        self.devolve(&mut result, pk, level_min, false);
+        if pk.species == 493 {
+            result[0].form = 0;
+        }
+        for e in result.iter_mut() {
+            if e.species == 0 {
+                break;
+            }
+            e.level_max = e.level_max.min(pk.met_level);
+        }
+        g4.devolve(&mut result, pk, 1, false);
+        let oldest = match g3 {
+            Some(g) => {
+                g.devolve(&mut result, pk, level_min, false);
+                g
+            }
+            None => g4,
+        };
+        if discard {
+            oldest.discard(&mut result);
+        }
+        let count = if enc_species != 0 {
+            result
+                .iter()
+                .position(|e| e.species == enc_species)
+                .map_or(0, |i| i + 1)
+        } else {
+            result.iter().take_while(|e| e.species != 0).count()
+        };
+        let mut chain = result[..count].to_vec();
+        clean_devolve(&mut chain, level_min);
+        chain
+    }
+
+    /// `EncounterOrigin.GetOriginChain` for a Gen 3 or 4 origin in the Gen 5 format.
+    pub fn transfer_origin_chain(
+        &self,
+        groups: (&Evo4<'a>, Option<&Evo4<'a>>),
+        pk: &EvoPkm,
+    ) -> Vec<EvoCriteria> {
+        let min = if groups.1.is_none() && pk.egg_location != 0 {
+            1
+        } else {
+            2
+        };
+        let mut chain = self.transfer_chain(groups, pk, min, 0, true);
+        // EvolutionUtil.ConditionEncounterNoMet
+        for i in 0..chain.len().saturating_sub(1) {
+            if is_level_up_required(chain[i].method) {
+                chain[i].level_min = chain[i + 1].level_min + chain[i].level_up_required;
+            }
+        }
+        chain
+    }
+
+    /// `GetEvolutionChainsAllGens` in the Gen 5 format, for a Gen 3 or 4 encounter: the chains
+    /// while in Gen 3, Gen 4 and Gen 5. `self` is the Gen 5 tree.
+    pub fn transfer_history(
+        &self,
+        groups: (&Evo4<'a>, Option<&Evo4<'a>>),
+        pk: &EvoPkm,
+        enc_species: u16,
+        enc_level_min: u8,
+    ) -> [Vec<EvoCriteria>; 3] {
+        let (g4, g3) = groups;
+        let mut chain = self.transfer_chain(groups, pk, enc_level_min, enc_species, false);
+        if chain.is_empty() {
+            return [Vec::new(), Vec::new(), Vec::new()];
+        }
+        for e in chain.iter_mut() {
+            if e.species == enc_species {
+                break;
+            }
+            e.method = SENTINEL_NOT_REACHED;
+        }
+        let gen3 = g3.map_or(Vec::new(), |g| {
+            g.evolve_stage(&mut chain, pk, pk.met_level);
+            g.set_history(&chain)
+        });
+        g4.evolve_stage(&mut chain, pk, pk.met_level);
+        let gen4 = g4.set_history(&chain);
+        // EvolutionGroup5.Evolve, EvolutionUtil.UpdateFloor
+        chain[0].level_max = pk.current_level;
+        for e in chain.iter_mut() {
+            e.level_min = e.level_min.max(pk.met_level);
+        }
+        self.evolve_stage(&mut chain, pk, pk.current_level);
+        [gen3, gen4, self.set_history(&chain)]
+    }
+
     /// The loop shared by `EvolutionGroup3.Evolve` and `EvolutionGroup4.Evolve`.
     fn evolve_stage(&self, chain: &mut [EvoCriteria], pk: &EvoPkm, max: u8) {
         for i in (1..chain.len()).rev() {

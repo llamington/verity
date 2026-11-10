@@ -145,6 +145,8 @@ for it yet (P9.1).
    plan's stretch goal of loading fonts from the user's ROM. The closest-IV search blocks the UI;
    a search that runs out of budget is untimed on the DS.
 3. M5 Gen 5 in progress. `analysis5.rs` covers Pokémon that originated in B/W and B2/W2: wild slots,
-   statics, Dream World, Dream Radar, N, in-game trades, bred eggs and PGF events. Still to do: Poké Transfer origins (Gen 3/4 Pokémon in a
-   Gen 5 save stay unchecked), generation, then PGF delivery. After that M7 two-instance harness + P10 Memory Link,
+   statics, Dream World, Dream Radar, N, in-game trades, bred eggs and PGF events. Wild generation (`gen/wild5.rs`, the wizard), Wonder Card
+   delivery (`gift/inject5.rs`, see `events-region.md`) and Poké Transfer origins are done: `analyze_transfer4`
+   reuses the Gen 3/4 matching with `Inputs.fmt5` set and `Evo4::transfer_history`. Colosseum/XD transfers stay
+   unchecked, as on Gen 4. After that M7 two-instance harness + P10 Memory Link,
    M8 P11 in-game suite.

@@ -100,6 +100,7 @@ impl<'a> Learn4<'a> {
     }
 
     /// `GetCanLearn` for one game; `pi_game` selects the personal table used for TM/HM and tutors.
+    #[allow(clippy::too_many_arguments)]
     fn can_learn(
         &self,
         g: Game,
@@ -108,6 +109,7 @@ impl<'a> Learn4<'a> {
         current_form: u8,
         mv: u16,
         src: Sources,
+        transferred: bool,
     ) -> Option<MoveResult> {
         let Sources {
             level_up,
@@ -135,12 +137,13 @@ impl<'a> Learn4<'a> {
                     .map(|i| (i, MOVE_WHIRLPOOL)),
                 _ => self.list_index(mt::G4_HM_DPPT, mv).map(|i| (i, MOVE_DEFOG)),
             };
-            // `pk.Format == Generation` holds for every PK4, so the special-case move is moot.
-            if let Some((i, _)) = hm {
+            // `pk.Format == Generation`: once transferred, only the special-case HM can still be
+            // on the Pokémon, because Poké Transfer refuses the others.
+            if let Some((i, keep)) = hm {
                 let ok = match g {
                     // LearnSource4DP.GetIsHM reads GetIsLearnTM(92 + i), which is always false.
                     Game::Dp => false,
-                    _ => i < 8 && pi.tmhm(92 + i),
+                    _ => (!transferred || mv == keep) && i < 8 && pi.tmhm(92 + i),
                 };
                 if ok {
                     return Some(MoveResult::Machine);
@@ -188,24 +191,61 @@ impl<'a> Learn4<'a> {
         evo: &EvoCriteria,
         current_form: u8,
     ) {
+        self.check_learned(result, current, evo, current_form, false);
+    }
+
+    fn check_learned(
+        &self,
+        result: &mut [MoveResult; 4],
+        current: &[u16; 4],
+        evo: &EvoCriteria,
+        current_form: u8,
+        transferred: bool,
+    ) {
         for i in (0..4).rev() {
             if result[i].valid() {
                 continue;
             }
             let mv = current[i];
-            if let Some(r) = self.can_learn(Game::Hgss, Game::Hgss, evo, current_form, mv, ALL) {
+            let t = transferred;
+            if let Some(r) = self.can_learn(Game::Hgss, Game::Hgss, evo, current_form, mv, ALL, t) {
                 result[i] = r;
                 continue;
             }
             if let Some(r) =
-                self.can_learn(Game::Pt, Game::Pt, evo, current_form, mv, LEVEL_MACHINE)
+                self.can_learn(Game::Pt, Game::Pt, evo, current_form, mv, LEVEL_MACHINE, t)
             {
                 result[i] = r;
                 continue;
             }
-            if let Some(r) = self.can_learn(Game::Dp, Game::Pt, evo, current_form, mv, LEVEL) {
+            if let Some(r) = self.can_learn(Game::Dp, Game::Pt, evo, current_form, mv, LEVEL, t) {
                 result[i] = r;
             }
+        }
+    }
+
+    /// `LearnGroup4.Check` for a Pokémon now in the Gen 5 format.
+    pub(super) fn check_transferred(
+        &self,
+        result: &mut [MoveResult; 4],
+        current: &[u16; 4],
+        current_form: u8,
+        enc_species: u16,
+        history: &[EvoCriteria],
+    ) {
+        for evo in history {
+            if matches!(evo.species, 386 | 487 | 492) {
+                let fc = self.hgss.species_form(evo.species, evo.form).form_count();
+                for f in 0..fc {
+                    let e = EvoCriteria { form: f, ..*evo };
+                    self.check_learned(result, current, &e, current_form, true);
+                }
+            } else {
+                self.check_learned(result, current, evo, current_form, true);
+            }
+        }
+        if enc_species == NINCADA && history.len() == 2 && history[0].species == SHEDINJA {
+            self.check_nincada4(result, current, history[history.len() - 1]);
         }
     }
 
@@ -441,7 +481,12 @@ impl Learn3<'_> {
     }
 
     /// `LearnGroup3.Check` over one history entry, marking moves still unexplained.
-    fn check(&self, result: &mut [MoveResult; 4], current: &[u16; 4], evo: &EvoCriteria) {
+    pub(super) fn check(
+        &self,
+        result: &mut [MoveResult; 4],
+        current: &[u16; 4],
+        evo: &EvoCriteria,
+    ) {
         use crate::data::game_table as gt;
         let species = evo.species;
         if species as usize >= self.data.personal_count() {
@@ -496,7 +541,7 @@ impl Learn3<'_> {
         matches!((mv, species), (307, 6) | (308, 9) | (338, 3))
     }
 
-    fn nincada_moves(
+    pub(super) fn nincada_moves(
         &self,
         result: &mut [MoveResult; 4],
         current: &[u16; 4],

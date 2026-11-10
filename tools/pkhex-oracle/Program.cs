@@ -49,6 +49,7 @@ public static class Program
                 "gen-origin5" => HandleGenOrigin5(args),
                 "export-gifts5" => HandleExportGifts5(args),
                 "sav-gifts5" => HandleSavGifts5(args),
+                "convert5" => HandleConvert5(args),
                 "version" => HandleVersion(),
                 _ => UnknownCommand(command)
             };
@@ -463,6 +464,52 @@ public static class Program
             list.Add(converted);
         }
         return list;
+    }
+
+    // Sends .pk3/.pk4 files through Poke Transfer to .pk5, sometimes levelling them up afterwards.
+    private static int HandleConvert5(string[] args)
+    {
+        var rng = new Random(int.Parse(args[3]));
+        Directory.CreateDirectory(args[2]);
+        int n = 0;
+        foreach (var f in Directory.EnumerateFiles(args[1]).OrderBy(x => x, StringComparer.Ordinal))
+        {
+            var data = File.ReadAllBytes(f);
+            PK4 p4 = Path.GetExtension(f) == ".pk3" ? new PK3(data).ConvertToPK4() : new PK4(data);
+            if (p4.IsEgg) // Poke Transfer refuses eggs: hatch it first.
+            {
+                p4.IsEgg = false;
+                p4.IsNicknamed = false;
+                p4.Nickname = SpeciesName.GetSpeciesNameGeneration(p4.Species, p4.Language, 4);
+                p4.MetLocation = 16;
+                p4.MetLevel = 0;
+            }
+            var p5 = p4.ConvertToPK5();
+            if (rng.Next(2) == 0 && p5.CurrentLevel < 100)
+                p5.CurrentLevel = (byte)rng.Next(p5.CurrentLevel, 101);
+            // Sometimes evolve it afterwards; PKHeX judges whether that was possible.
+            if (rng.Next(3) == 0)
+            {
+                var next = EvolutionTree.Evolves5.Forward.GetForward(p5.Species, p5.Form).Span;
+                if (next.Length != 0)
+                {
+                    var m = next[rng.Next(next.Length)];
+                    if (m.Species != 0)
+                    {
+                        if (m.Level > p5.CurrentLevel)
+                            p5.CurrentLevel = m.Level;
+                        var nicknamed = p5.IsNicknamed;
+                        p5.Species = m.Species;
+                        if (!nicknamed)
+                            p5.Nickname = SpeciesName.GetSpeciesNameGeneration(p5.Species, p5.Language, 5);
+                    }
+                }
+            }
+            p5.RefreshChecksum();
+            File.WriteAllBytes(Path.Combine(args[2], $"{n++:05}.pk5"), p5.DecryptedBoxData);
+        }
+        Console.WriteLine(n);
+        return 0;
     }
 
     // Reads a Gen 5 save's Wonder Card album the way PKHeX does.
