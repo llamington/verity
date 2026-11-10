@@ -1020,7 +1020,8 @@ void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* col
         uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
         dst[i] = (uint16_t)((lo ? kBase + lo : 0) | (hi ? kBase + hi : 0) << 8);
     }
-    oamSet(oam, kId, x, y, 2, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
+    // Priority 0: above the row highlight bar, which crosses the icon on the Item row.
+    oamSet(oam, kId, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
            false, false, false, false);
 }
 
