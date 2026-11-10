@@ -160,6 +160,7 @@ public:
                         list_.selected = i;
             list_.clamp();
         }
+        framed_ = false;
         draw_top("");
         draw_list();
     }
@@ -190,39 +191,65 @@ private:
     char files_[kMaxFiles][kPathLen];
     int count_ = 0;
     bool scanned_ = false;
+    bool framed_ = false;
     ListView list_;
 
     void draw_top(const char* message)
     {
         ui::clear(top());
-        at(top(), 0, 0, "verity");
-        at(top(), 0, 1, "Gen 4/5 save editor");
-        at(top(), 0, 3, "%d save file(s) found", count_);
+        ui::frame_clear(top());
+        ui::title(top(), "verity");
+        ui::title_right(top(), "Gen 4/5 save editor");
+        ui::panel(top(), 1, 2, 30, message[0] ? 6 : 4);
+        at(top(), 1, 3, "%d save file%s found", count_, count_ == 1 ? "" : "s");
         if (core::doc().loaded())
-            at(top(), 0, 5, "Open: %.26s", strrchr(core::doc().path, '/') + 1);
+            at(top(), 1, 4, UI_MUTED "Open" UI_MUTED "  %.26s", strrchr(core::doc().path, '/') + 1);
         if (message[0])
-            at(top(), 0, 8, "! %s", message);
+            at(top(), 1, 6, "! %s", message);
+        ui::panel(top(), 1, 17, 30, 4);
         if (ui::has_rom_font())
-            at(top(), 0, 18, "Font: from your ROM (%s)", core::font_game());
+        {
+            at(top(), 1, 18, "Names and icons come from");
+            at(top(), 1, 19, "your ROM " UI_MUTED "(%s)", core::font_game());
+        }
         else
         {
-            at(top(), 0, 17, "Put a Gen 4/5 ROM (.nds) on the SD");
-            at(top(), 0, 18, "card to show Japanese/Korean names.");
+            at(top(), 1, 18, "Put a Gen 4/5 ROM (.nds) on the SD");
+            at(top(), 1, 19, "card for JP/KR names and icons.");
         }
-        at(top(), 0, 21, "A / tap twice: open");
-        at(top(), 0, 22, "Up/Down/L/R or drag: scroll");
+        at(top(), 1, 22, UI_MUTED "Drag or L/R to scroll the list");
     }
 
     void draw_list()
     {
-        at(bottom(), 0, 0, " Saves");
+        if (!framed_)
+        {
+            framed_ = true;
+            ui::frame_clear(bottom());
+            ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
+            ui::hints(bottom(), "A:Open|L/R:Page|Drag:Scroll");
+        }
+        ui::title(bottom(), "Choose a save");
+        char n[16];
+        snprintf(n, sizeof(n), "%d", count_);
+        ui::title_right(bottom(), n);
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r;
             if (i < count_)
             {
+                // File name, then its folder as a muted label at the right.
                 const char* slash = strrchr(files_[i], '/');
-                at(bottom(), 0, list_.first_row + r, " %.30s", slash ? slash + 1 : files_[i]);
+                const char* name = slash ? slash + 1 : files_[i];
+                char dir[24] = "";
+                if (slash && slash > files_[i])
+                {
+                    const char* d = slash - 1;
+                    while (d > files_[i] && *d != '/' && *d != ':')
+                        d--;
+                    snprintf(dir, sizeof(dir), "%.*s", (int)(slash - d - 1), d + 1);
+                }
+                at(bottom(), 0, list_.first_row + r, " %-23.23s  " UI_MUTED "%.7s", name, dir);
             }
             else
                 at(bottom(), 0, list_.first_row + r, "%s", "");
@@ -242,23 +269,34 @@ public:
         char ot[32];
         ui::utf16_to_text(i.ot_name, ot, sizeof(ot));
         ui::clear(top());
-        at(top(), 0, 0, "%.32s", strrchr(d.path, '/') + 1);
-        at(top(), 0, 2, "Game     %s", core::game_name(i.kind));
-        at(top(), 0, 3, "Trainer  %s", ot);
-        at(top(), 0, 4, "ID       %05u / %05u", i.tid, i.sid);
-        at(top(), 0, 5, "Played   %u:%02u:%02u", i.played_hours, i.played_minutes,
+        ui::frame_clear(top());
+        ui::title(top(), "%.30s", strrchr(d.path, '/') + 1);
+        ui::panel(top(), 1, 2, 30, 8);
+        at(top(), 1, 2, "%s", ot);
+        at(top(), 1, 3, UI_MUTED "%s", core::game_name(i.kind));
+        at(top(), 1, 5, UI_MUTED "ID" UI_MUTED "  %05u / %05u", i.tid, i.sid);
+        at(top(), 1, 6, UI_MUTED "Played" UI_MUTED "  %u:%02u:%02u", i.played_hours, i.played_minutes,
            i.played_seconds);
-        at(top(), 0, 6, "Party    %u", i.party_count);
-        at(top(), 0, 7, "Boxes    %lu", (unsigned long)d.boxes);
-        at(top(), 0, 8, "Checksum %s", i.checksums_valid ? "OK" : "BAD");
+        at(top(), 1, 7, UI_MUTED "Party" UI_MUTED "  %u   " UI_MUTED "Boxes" UI_MUTED "  %lu", i.party_count,
+           (unsigned long)d.boxes);
+        at(top(), 1, 9, UI_MUTED "Checksums");
+        ui::badge(top(), 12, 9, i.checksums_valid ? 3 : 4,
+                  i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
+                  i.checksums_valid ? "OK" : "BAD");
         if (!core::data_available())
-            at(top(), 0, 10, "(data missing: showing IDs)");
+            at(top(), 1, 12, "(data missing: showing IDs)");
         if (!message_[0] && d.dirty)
-            snprintf(message_, sizeof(message_), "unsaved changes");
+            snprintf(message_, sizeof(message_), "Unsaved changes");
         if (message_[0])
-            at(top(), 0, 12, "%s %s", d.dirty ? "*" : "-", message_);
+        {
+            ui::panel(top(), 1, 14, 30, 2);
+            at(top(), 1, 14, "%s %s", d.dirty ? "*" : "-", message_);
+        }
         ui::clear(bottom());
-        at(bottom(), 0, 0, " Save%s", d.dirty ? " *" : "");
+        ui::frame_clear(bottom());
+        ui::title(bottom(), "Save");
+        if (d.dirty)
+            ui::title_right(bottom(), "* unsaved");
         count_ = 0;
         items_[count_++] = kBoxes;
         items_[count_++] = kGifts;
@@ -266,8 +304,10 @@ public:
             items_[count_++] = kUnova;
         items_[count_++] = kSave;
         items_[count_++] = kClose;
+        ui::panel(bottom(), 0, list_.first_row, 32, count_);
         for (int r = 0; r < count_; r++)
             at(bottom(), 0, list_.first_row + r, " %s", kItems[items_[r]]);
+        ui::hints(bottom(), "A:Open|B:Files");
         list_.count = count_;
         list_.rows = count_;
     }
@@ -731,6 +771,7 @@ private:
 
     void cell_pos(int i, int* x, int* y) const
     {
+        // On the cell grid, so each slot's backing is whole frame tiles.
         if (party_)
         {
             *x = 56 + (i % 2) * 112;
@@ -738,8 +779,8 @@ private:
         }
         else
         {
-            *x = 12 + (i % 6) * 40;
-            *y = 20 + (i / 6) * 32;
+            *x = 8 + (i % 6) * 40;
+            *y = 16 + (i / 6) * 32;
         }
     }
 
@@ -777,21 +818,21 @@ private:
     void draw()
     {
         char name[64];
+        ui::clear(bottom());
+        ui::frame_clear(bottom());
         if (party_)
-        {
-            at(bottom(), 0, 0, "           Party");
-            at(bottom(), 0, 1, "%s", "");
-        }
+            ui::title(bottom(), "Party");
         else
         {
             core::box_name(box_, name, sizeof(name));
-            int pad = (32 - ui::text_len(name)) / 2 - 2;
-            at(bottom(), 0, 0, " <%*s%s%*s> ", pad > 0 ? pad : 0, "", name,
-               pad > 0 ? pad : 0, "");
-            at(bottom(), 26, 1, "%2d/%-2d", box_ + 1, (int)core::doc().boxes);
+            int pad = (30 - ui::text_len(name)) / 2 - 1;
+            ui::title(bottom(), "<%*s%s", pad > 0 ? pad : 0, "", name);
+            char n[12];
+            snprintf(n, sizeof(n), "%d/%d  >", box_ + 1, (int)core::doc().boxes);
+            ui::title_right(bottom(), n);
         }
-        at(bottom(), 0, 23, party_ ? " Select/tap: boxes A edit X add"
-                                   : " L/R box Sel party A edit X add");
+        ui::hints(bottom(), party_ ? "SEL:Boxes|A:Edit|X:Add|B:Back"
+                                   : "L/R:Box|SEL:Party|A:Edit|X:Add");
         ui::sprites_hide_all();
         int n = party_ ? 6 : 30;
         for (int i = 0; i < n; i++)
@@ -799,6 +840,7 @@ private:
             verity_pkm_view v = at_cell(i);
             int x, y;
             cell_pos(i, &x, &y);
+            ui::slot(bottom(), x / 8, y / 8, i == cur_ ? 2 : v.species ? 0 : 1);
             uint8_t tiles[512], pal;
             if (v.species != 0 &&
                 core::icon_tiles(v.species, v.form, v.gender == 1, v.is_egg, tiles, &pal))
@@ -806,8 +848,6 @@ private:
             else if (v.species != 0)
                 ui::icon(2 + 2 * i, x, y, v.types[0] == 0xFF ? 17 : v.types[0], v.is_egg,
                          v.is_shiny);
-            if (i == cur_)
-                ui::cursor(0, x, y);
         }
         details(at_cell(cur_));
     }
@@ -815,9 +855,13 @@ private:
     void details(const verity_pkm_view& v)
     {
         ui::clear(top());
+        ui::frame_clear(top());
         if (v.species == 0)
         {
-            at(top(), 0, 0, "(empty)");
+            ui::title(top(), "Empty slot");
+            ui::panel(top(), 1, 2, 30, 2);
+            at(top(), 1, 2, "Nothing here. " UI_MUTED "X or A adds a");
+            at(top(), 1, 3, "Pokémon to this slot.");
             return;
         }
         char nick[32], ot[32];
@@ -827,32 +871,42 @@ private:
         const char* g = v.gender == 0 ? "M" : v.gender == 1 ? "F" : "-";
         if (v.is_egg)
         {
-            at(top(), 0, 0, "Egg (%s)", sp);
-            at(top(), 0, 2, "OT %s  %05u/%05u", ot, v.tid, v.sid);
+            ui::title(top(), "Egg");
+            ui::panel(top(), 1, 2, 30, 3);
+            at(top(), 1, 2, "%s", sp);
+            at(top(), 1, 4, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
             legality_line();
             return;
         }
-        at(top(), 0, 0, "%s%s", nick, v.is_shiny ? " *" : "");
-        at(top(), 0, 1, "#%03u %s%s  %s  Lv %u", v.species, sp, v.form ? "-f" : "", g, v.level);
+        ui::title(top(), "%s%s", nick, v.is_shiny ? " *" : "");
+        char lv[12];
+        snprintf(lv, sizeof(lv), "Lv %u", v.level);
+        ui::title_right(top(), lv);
+        ui::panel(top(), 1, 2, 30, 5);
         if (v.form)
-            at(top(), 0, 1, "#%03u %s (form %u)  %s  Lv %u", v.species, sp, v.form, g, v.level);
-        at(top(), 0, 3, "Nature  %s", ui::name(VERITY_NAME_NATURES, v.nature));
-        at(top(), 0, 4, "Ability %s", ui::name(VERITY_NAME_ABILITIES, v.ability));
+            at(top(), 1, 2, "#%03u %s " UI_MUTED "form %u" UI_MUTED "  %s", v.species, sp, v.form, g);
+        else
+            at(top(), 1, 2, "#%03u %s  %s", v.species, sp, g);
+        at(top(), 1, 4, UI_MUTED "Nature" UI_MUTED "  %s", ui::name(VERITY_NAME_NATURES, v.nature));
+        at(top(), 1, 5, UI_MUTED "Ability" UI_MUTED "  %s", ui::name(VERITY_NAME_ABILITIES, v.ability));
         uint32_t items = core::doc().info.generation == 4 ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
-        at(top(), 0, 5, "Item    %s", v.held_item ? ui::name(items, v.held_item) : "-");
+        at(top(), 1, 6, UI_MUTED "Item" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "-");
+        ui::panel(top(), 1, 8, 30, 2);
         for (int m = 0; m < 4; m++)
-            at(top(), 0, 7 + m, "  %s", v.moves[m] ? ui::name(VERITY_NAME_MOVES, v.moves[m]) : "-");
-        at(top(), 0, 12, "      HP  At  Df  Sp  SA  SD");
-        at(top(), 0, 13, "IVs %4u%4u%4u%4u%4u%4u", v.ivs[0], v.ivs[1], v.ivs[2], v.ivs[3],
+            at(top(), 1 + (m % 2) * 15, 8 + m / 2, "%.14s",
+               v.moves[m] ? ui::name(VERITY_NAME_MOVES, v.moves[m]) : "-");
+        ui::panel(top(), 1, 11, 30, 3);
+        at(top(), 1, 11, UI_MUTED "      HP  At  Df  Sp  SA  SD");
+        at(top(), 1, 12, UI_MUTED "IVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.ivs[0], v.ivs[1], v.ivs[2], v.ivs[3],
            v.ivs[4], v.ivs[5]);
-        at(top(), 0, 14, "EVs %4u%4u%4u%4u%4u%4u", v.evs[0], v.evs[1], v.evs[2], v.evs[3],
+        at(top(), 1, 13, UI_MUTED "EVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.evs[0], v.evs[1], v.evs[2], v.evs[3],
            v.evs[4], v.evs[5]);
-        at(top(), 0, 16, "OT %s  %05u/%05u", ot, v.tid, v.sid);
-        at(top(), 0, 17, "Met %.20s Lv %u", ui::location(core::doc().info.generation, v.met_location),
-           v.met_level);
-        at(top(), 0, 18, "PID %08lX", (unsigned long)v.pid);
-        if (!v.checksum_ok)
-            at(top(), 0, 19, "! checksum mismatch");
+        ui::panel(top(), 1, 15, 30, 3);
+        at(top(), 1, 15, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
+        at(top(), 1, 16, UI_MUTED "Met" UI_MUTED "  %.20s Lv %u",
+           ui::location(core::doc().info.generation, v.met_location), v.met_level);
+        at(top(), 1, 17, UI_MUTED "PID" UI_MUTED "  %08lX%s", (unsigned long)v.pid,
+           v.checksum_ok ? "" : "  ! checksum mismatch");
         legality_line();
     }
 
@@ -864,8 +918,12 @@ private:
         static const char* why[] = {"",        "egg",       "origin game",
                                     "data missing", "Gen 5 save", "hatched",
                                     "event/trade/walker"};
+        ui::panel(top(), 1, 20, 30, 3);
         if (r.status == 1)
-            at(top(), 0, 21, "LEGAL  (%lu ms)", (unsigned long)ms);
+        {
+            ui::badge(top(), 1, 21, 5, ui::Badge::Legal, "LEGAL");
+            at(top(), 7, 21, UI_MUTED "checked in %lu ms", (unsigned long)ms);
+        }
         else if (r.status == 2)
         {
             char list[40] = "";
@@ -875,13 +933,14 @@ private:
                 strcat(list, core::check_name(r.checks[i]));
             }
             bool moves = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            at(top(), 0, 21, "ILLEGAL (%lu ms)", (unsigned long)ms);
-            at(top(), 0, 22, " %s%s", list, moves ? " Moves" : "");
+            ui::badge(top(), 1, 20, 6, ui::Badge::Invalid, "ILLEGAL");
+            at(top(), 8, 20, UI_MUTED "%lu ms", (unsigned long)ms);
+            at(top(), 1, 21, "%s%s", list, moves ? " Moves" : "");
         }
         else
         {
-            at(top(), 0, 21, "Not checked yet:");
-            at(top(), 0, 22, " %s", r.unsupported < 7 ? why[r.unsupported] : "?");
+            ui::badge(top(), 1, 20, 9, ui::Badge::Fishy, "NOT CHECKED");
+            at(top(), 1, 21, "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
         }
     }
 };
