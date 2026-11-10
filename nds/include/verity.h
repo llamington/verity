@@ -346,6 +346,13 @@ bool verity_icons_palette(const uint8_t *head, size_t len, uint8_t index, uint16
 bool verity_icons_find(const uint8_t *head, size_t len, uint16_t species, uint8_t form,
                        uint8_t female, uint8_t egg, uint8_t *palette, uint32_t *tiles_at);
 
+/* Ribbon images (one cache, from the best ROM; not Diamond/Pearl), kept whole in memory. index is
+ * the position in verity's ribbon list (Sinnoh set, Hoenn set, Sinnoh contests). */
+uint8_t *verity_rom_build_ribbon_cache(verity_read_fn read, void *ctx, size_t *out_len);
+bool verity_ribbons_check(const uint8_t *p, size_t len);
+bool verity_ribbon_icon(const uint8_t *cache, size_t len, uint8_t index, uint8_t *tiles,
+                        uint16_t *colors);
+
 /* Held item icons, one cache per generation (item IDs differ). The DS keeps the head
  * (verity_items_head_len bytes, from the first 16) in memory; verity_items_find gives the file
  * offsets of the item's 16 BGR555 colours and 512 tile bytes (4 bpp, 1D 32x32). */

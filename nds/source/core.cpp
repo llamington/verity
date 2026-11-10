@@ -375,6 +375,26 @@ int open_icons(const char* file)
     return file_rank(head + 12);
 }
 
+// ribbons.vrib, kept whole in memory (about 28 KB).
+uint8_t* g_ribbons = nullptr;
+size_t g_ribbons_len = 0;
+
+// Loads ribbons.vrib; returns its rank (0 for none).
+int load_ribbons(const char* file)
+{
+    free(g_ribbons);
+    size_t len = 0;
+    uint8_t* b = read_all(file, 64 * 1024, &len);
+    if (b && !verity_ribbons_check(b, len))
+    {
+        free(b);
+        b = nullptr;
+    }
+    g_ribbons = b;
+    g_ribbons_len = b ? len : 0;
+    return b ? file_rank(b + 12) : 0;
+}
+
 // Held item icon caches for Gen 4 and Gen 5 saves (items4.vitm, items5.vitm), kept open like the
 // box icons: the head (index) is in memory, colours and tiles are read per icon.
 FILE* g_item_file[2] = {nullptr, nullptr};
@@ -410,9 +430,10 @@ void open_items(int g, const char* file)
 
 void rom_assets_init()
 {
-    char font_file[80], icon_file[80];
+    char font_file[80], icon_file[80], ribbon_file[80];
     snprintf(font_file, sizeof(font_file), "%s/font.vfnt", config_path());
     snprintf(icon_file, sizeof(icon_file), "%s/icons.vicn", config_path());
+    snprintf(ribbon_file, sizeof(ribbon_file), "%s/ribbons.vrib", config_path());
     size_t len = 0;
     uint8_t* cached = read_all(font_file, 512 * 1024, &len);
     int font_rank = 0;
@@ -424,6 +445,7 @@ void rom_assets_init()
         cached = nullptr;
     }
     int icon_rank = open_icons(icon_file);
+    int ribbon_rank = load_ribbons(ribbon_file);
     char move_file[2][80], item_file[2][80];
     for (int g = 0; g < 2; g++)
     {
@@ -432,7 +454,7 @@ void rom_assets_init()
         snprintf(item_file[g], sizeof(item_file[g]), "%s/items%d.vitm", config_path(), 4 + g);
         open_items(g, item_file[g]);
     }
-    if (font_rank < 3 || icon_rank < 3 || !g_moves[0] || !g_moves[1] || !g_item_head[0] ||
+    if (font_rank < 3 || icon_rank < 3 || ribbon_rank < 3 || !g_moves[0] || !g_moves[1] || !g_item_head[0] ||
         !g_item_head[1])
     {
         RomScan scan;
@@ -462,7 +484,7 @@ void rom_assets_init()
         }
         const char* best = scan.best;
         int best_rank = scan.rank;
-        if (best_rank > font_rank || best_rank > icon_rank)
+        if (best_rank > font_rank || best_rank > icon_rank || best_rank > ribbon_rank)
         {
             FILE* f = fopen(best, "rb");
             if (f && best_rank > font_rank)
@@ -493,6 +515,13 @@ void rom_assets_init()
                     write_cache(icon_file, built, n);
                 open_icons(icon_file);
             }
+            if (f && best_rank > ribbon_rank)
+            {
+                size_t n = 0;
+                uint8_t* built = verity_rom_build_ribbon_cache(read_rom, f, &n);
+                if (built && write_cache(ribbon_file, built, n))
+                    load_ribbons(ribbon_file);
+            }
             if (f)
                 fclose(f);
         }
@@ -516,6 +545,12 @@ bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* 
         !verity_icons_find(g_icon_head, g_icon_head_len, species, form, female, egg, palette, &at))
         return false;
     return fseek(g_icon_file, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, g_icon_file) == 512;
+}
+
+bool ribbon_icon(int index, uint8_t* tiles, uint16_t* colors)
+{
+    return index >= 0 && index < 80 &&
+           verity_ribbon_icon(g_ribbons, g_ribbons_len, (uint8_t)index, tiles, colors);
 }
 
 bool item_icon(uint8_t generation, uint16_t item, uint8_t* tiles, uint16_t* colors)

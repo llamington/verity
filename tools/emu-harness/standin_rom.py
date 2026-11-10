@@ -9,13 +9,14 @@ import struct
 import sys
 
 KEEP = {b"CPU": ["graphic/pl_font.narc", "poketool/icongra/pl_poke_icon.narc", "poketool/waza/pl_waza_tbl.narc",
-                 "itemtool/itemdata/item_icon.narc", "msgdata/pl_msg.narc"],
+                 "itemtool/itemdata/item_icon.narc", "msgdata/pl_msg.narc",
+                 "graphic/pl_pst_gra.narc"],
         b"ADA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
                  "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
         b"APA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
                  "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
-        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7"]}
-GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5", "a/0/0/2"]
+        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9"]}
+GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5", "a/0/0/2", "a/0/7/7", "a/0/7/8"]
 
 
 def file_id(d, fnt, path):
@@ -68,6 +69,15 @@ def main():
         s, e = struct.unpack_from("<II", d, fat_off + 8 * fid)
         at = put(d[s:e])
         struct.pack_into("<II", fat, 8 * fid, at, at + e - s)
+    # ARM9 overlays (Gen 5 keeps the ribbon table in one): the table and every overlay file.
+    y9_off, y9_len = struct.unpack_from("<2I", d, 0x50)
+    if y9_len:
+        struct.pack_into("<I", h, 0x50, put(d[y9_off:y9_off + y9_len]))
+        for k in range(y9_len // 32):
+            fid = struct.unpack_from("<I", d, y9_off + 32 * k + 0x18)[0]
+            s, e = struct.unpack_from("<II", d, fat_off + 8 * fid)
+            at = put(d[s:e])
+            struct.pack_into("<II", fat, 8 * fid, at, at + e - s)
     body[new_fat - base:new_fat - base + fat_len] = fat
     struct.pack_into("<4I", h, 0x40, new_fnt, fnt_len, new_fat, fat_len)
     with open(out, "wb") as f:

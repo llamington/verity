@@ -68,12 +68,13 @@ emu-font: emu-harness nds
 	  python3 tools/emu-harness/standin_rom.py roms/$$g.nds build/emu/sd/roms/$$g.nds && \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-rom-font.json --out build/emu/ui-rom-font-$$g && \
 	  test -s build/emu/sd/_nds/verity/font.vfnt && test -s build/emu/sd/_nds/verity/icons.vicn && \
-	  ls build/emu/sd/_nds/verity/items?.vitm >/dev/null || exit 1; \
+	  ls build/emu/sd/_nds/verity/items?.vitm >/dev/null && test -s build/emu/sd/_nds/verity/ribbons.vrib || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-keyboard-jp.json --out build/emu/ui-keyboard-jp-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves.json --out build/emu/ui-moves-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves5.json --out build/emu/ui-moves5-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items.json --out build/emu/ui-items-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items5.json --out build/emu/ui-items5-$$g || exit 1; \
+	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons-$$g || exit 1; \
 	done
 
 emu-ui: emu-harness nds

@@ -124,7 +124,8 @@ pub fn blz_decompress_in_place(buf: &mut Vec<u8>) -> Result<()> {
                     buf[d] = buf[d + disp];
                 }
             } else {
-                if d <= s {
+                // d == s is fine: from there on the data is already in place.
+                if d < s {
                     return Err(bad);
                 }
                 s -= 1;

@@ -70,3 +70,25 @@ top-left 24x24) and its own NCLR (16 colours). The ARM9 table names both, per it
 
 verity finds the table by that start and reads it until a row points outside the archive, capped
 at the game's last item (PKHeX `MaxItemID_*`).
+
+## Ribbons
+
+`verity-rom::ribbons` extracts the summary screen's 80 ribbon images into
+`/_nds/verity/ribbons.vrib` (about 28 KB, kept whole in memory) from the best ROM, like the box
+icons. The editor's ribbon list shows the highlighted ribbon's image, name and state on the top
+screen. Diamond/Pearl aren't supported (no ROM to check).
+
+| Games | Table | Row | Archive | Palette member | Param bases (Sinnoh, Hoenn, contest) |
+| --- | --- | --- | --- | --- | --- |
+| Platinum | ARM9 (offset 1003948) | 12 | `graphic/pl_pst_gra.narc` (images 72-121) | 136 | 25, 78, 123 |
+| HeartGold/SoulSilver | ARM9 (offset 1069096) | 12 | `a/0/3/9` | 136 | 25, 78, 123 |
+| Black/White | overlay 131 | 16 | `a/0/7/8` | 6 | 25, 77, 120 |
+| Black 2/White 2 | overlay 207 | 16 | `a/0/7/7` (images from 18) | 8 | 25, 77, 120 |
+
+Rows are `{u32 param, u16 image, u16 palette, u16 name, u16 description}` (Gen 5 adds a category
+byte), found by row `k` naming text line `k` and description `80 + k`. A parameter minus its set's
+base is the bit in that ribbon set, which gives verity's list position. Palettes 0-4 of the
+palette NCLR colour the images (the contest ribbons share four images, one per rank, coloured by
+category). Member 69 of Platinum's archive looks like a candidate but isn't: its palettes 3-4 are
+empty. `nds::Rom::overlay` reads overlays; fixed along the way: BLZ refused a literal at the
+point where the output meets the input (White's overlay 131).
