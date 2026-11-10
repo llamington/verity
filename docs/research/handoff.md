@@ -5,28 +5,61 @@ and gaps are in `docs/research/p5-plan.md`.
 
 ## Resume here
 
-**M8 ROM font is done (2026-11-10); next: the rest of M8, then P12.** `crates/verity-rom` (used
-only by `verity-ffi`; the core crate doesn't depend on it) reads the NDS file system, NARCs, LZ10/11
-and both font formats; findings in `docs/research/rom-font.md`. Any Gen 5 ROM's font covers kana,
-kanji and Hangul; an English Gen 4 ROM covers kana only. On boot the DS loads
-`/_nds/verity/font.vfnt`, or scans the SD card (depth 3) for the best `.nds` (Gen 5 > Korean Gen 4 >
-Gen 4), builds the cache (~150 KB) and saves it; a better ROM later replaces a worse cache. ASCII
-still uses the console font; other characters come from the ROM font (Gen 4: stroke only, rows
-2..11; all glyphs fitted to 8 rows by merging similar rows). Without a ROM the picker says a ROM
-enables Japanese/Korean names. `make emu-font` checks both paths with stand-in ROMs that hold only
-the font (`tools/emu-harness/standin_rom.py`, written under `build/`).
+**Next tasks (user, 2026-11-10), in order:**
 
-Decisions behind it (user, 2026-11-10): no Nintendo assets in the repo or a release; the user never
-picks a ROM; a separate crate rather than a Cargo feature.
+1. **Held item icon in the editor.** Show the item's icon on the Main tab (next to "Item") and in
+   the held-item picker (top screen, like the move details panel). Same rules as box icons: from the
+   user's ROM, extracted once into a cache under `/_nds/verity/`, nothing without a ROM. Known: the
+   Platinum ROM has `itemtool/itemdata/item_icon.narc` (~400 KB, NCGR/NCLR pairs). Not yet checked:
+   how an item maps to its icon and palette (in pokeplatinum, look for the per-item archive-index
+   table in `src/item.c`; it is probably code data like the icon palette table, see
+   `docs/research/rom-icons.md`), the HeartGold path, the Gen 5 path, and the icon size (24x24 in
+   Gen 4, probably 32x32 frames). Item IDs differ between Gen 4 and Gen 5, so key the cache by
+   generation as the move caches are.
+2. **Move descriptions.** Show a move's description in the move details panel (top screen, Moves
+   tab and move picker; `Editor::move_details` in `nds/source/scenes.cpp`). Text comes from the
+   ROM's message archive, in the save's generation and ideally the ROM's language. Not yet checked:
+   which archive and bank (Gen 4 `msgdata/pl_msg.narc` on Platinum; Gen 4 messages are encrypted per
+   string, see pokeplatinum `src/message.c` or PKHeX-adjacent tools; Gen 5 `a/0/0/2` or `a/0/0/3`,
+   plain UTF-16 with its own header). Descriptions are about 3 lines of 20 characters in-game: the
+   panel has 4 rows of about 30, so they fit as is or wrap.
+3. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
+   as Judge words ("Best" ... "No Good"). The user asked whether it should show EVs, IVs or both;
+   not answered yet. Ask before building it.
 
-The nickname keyboard follows the Pokémon's language (needs the ROM font): Japanese has hiragana,
-katakana and fullwidth Latin pages with ゛/゜ keys that change the last kana; Korean types jamo that
-compose into syllables (`verity-ffi/src/keyboard.rs`, unit-tested; a syllable Gen 4 can't store
-stays as separate jamo). `make emu-font` also runs `ui-keyboard-jp.json`. Korean has no in-emulator
-check (no Korean Pokémon in the test saves).
+**Done 2026-11-10 (all committed and pushed; latest `a97b0c4`):**
 
-Box icons from the ROM are done (`docs/research/rom-icons.md`): built into `icons.vicn` with the
-font, drawn in the box view, placeholders without a ROM.
+- **DS UI restyle** (inspired by the user's Claude Design artifact "Verity DS UI",
+  claude.ai/artifact/6wuwLfxbvrMiPk6YUKs1Pg; the user said not to copy its screens). A frame layer
+  (BG1) under the text: navy backdrop, dark title and hint bars with key chips, cream panels with a
+  rounded border and 2 px padding (panels at least two rows apart), verdict dots, 40x32 box slots.
+  Text picks dark or light ink from the frame cell (`ui.cpp` theme block); `UI_MUTED` toggles the
+  label shade (a macro so a following hex letter isn't eaten by `\x01`). The text layer is
+  scrolled 2 px right, so `plot` clips at x 254. Every scene is converted. Icons sit 4 px right and
+  4 px up in slots (the games draw Pokemon low in their 32x32 frames). Touch was re-checked
+  (`ui-touch.json`, in `make emu-ui`).
+- **Move details:** `verity-rom::moves` reads category, power and accuracy into
+  `moves4.vmov` / `moves5.vmov` from the best ROM of each generation (values differ: Tackle 35/95 in
+  Gen 4, 50/100 in Gen 5). Type and PP come from verity's data. ROM PP matches PKHeX for every move.
+  Files: Pt `poketool/waza/pl_waza_tbl.narc`, D/P `waza_tbl.narc`, HG/SS `a/0/1/1`, Gen 5
+  `a/0/2/1`. `make emu-font` runs `ui-moves.json`.
+- **Box icons, ROM font, JP/KR keyboard** (below).
+- An intermittent `cargo test --workspace` failure was seen twice in 8 runs, then 30 clean runs;
+  the failing output wasn't kept. If it recurs, save the log before rerunning.
+
+**Earlier M8 work:** `crates/verity-rom` (used only by `verity-ffi`; the core crate doesn't depend
+on it) reads the NDS file system, NARCs, LZ10/11, BLZ (in place) and the fonts; findings in
+`docs/research/rom-font.md`. On boot the DS loads its caches from `/_nds/verity/` (`font.vfnt`,
+`icons.vicn`, `moves4.vmov`, `moves5.vmov`) or scans the SD card (depth 3) for the best `.nds`
+(Gen 5 > Korean Gen 4 > Gen 4) plus the best of each generation, and builds them (2-4 s, reading
+each file whole). `make emu-font` checks it with stand-in ROMs holding only what verity reads
+(`tools/emu-harness/standin_rom.py`, written under `build/`). Decisions (user): no Nintendo assets
+in the repo or a release; the user never picks a ROM; a separate crate rather than a Cargo feature.
+
+The nickname keyboard follows the Pokemon's language (needs the ROM font): Japanese kana pages
+with voicing-mark keys, Korean jamo composing into syllables (`verity-ffi/src/keyboard.rs`).
+
+Box icons from the ROM: `docs/research/rom-icons.md`.
 
 Rest of M8: battle sprites (summary screen) are not planned yet; decide whether they're worth it
 before P12 (the DS has no screen that shows one today).
