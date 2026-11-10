@@ -72,7 +72,7 @@ verity links what the game links, including a save without event flag 2400: the 
 of Fame part and the flashbacks that need that flag stay locked. It refuses:
 
 - a source that isn't a valid Black or White save, or a target that isn't a valid B2W2 save
-- corrupt gift or key blocks, which the game would silently clear
+- corrupt gift or key blocks, which the game would clear and start again
 - overwriting another player's data, unless `replace` is set (the game asks)
 
 Only finished saves with this one flag cleared were tested, not saves that are really early in the

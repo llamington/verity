@@ -105,4 +105,4 @@ PLAN P10 says `memlink::build` should refuse a BW save that hasn't reached minim
 region or language doesn't match. The game links a save with the Hall of Fame flag (2400) cleared,
 leaving out the Hall of Fame part, so `build` does too. The decompiled host code has no language
 check and verity adds none; other-language links are untested. verity is stricter than the game in
-one way: it refuses corrupt outside blocks, which the game silently clears.
+one way: it refuses corrupt outside blocks, which the game clears and starts again.
