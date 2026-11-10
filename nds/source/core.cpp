@@ -375,6 +375,37 @@ int open_icons(const char* file)
     return file_rank(head + 12);
 }
 
+// Held item icon caches for Gen 4 and Gen 5 saves (items4.vitm, items5.vitm), kept open like the
+// box icons: the head (index) is in memory, colours and tiles are read per icon.
+FILE* g_item_file[2] = {nullptr, nullptr};
+uint8_t* g_item_head[2] = {nullptr, nullptr};
+size_t g_item_head_len[2] = {0, 0};
+
+void open_items(int g, const char* file)
+{
+    if (g_item_file[g])
+        fclose(g_item_file[g]);
+    free(g_item_head[g]);
+    g_item_file[g] = nullptr;
+    g_item_head[g] = nullptr;
+    g_item_head_len[g] = 0;
+    FILE* f = fopen(file, "rb");
+    uint8_t h[16];
+    size_t n = f && fread(h, 1, 16, f) == 16 ? verity_items_head_len(h, 16) : 0;
+    uint8_t* head = n >= 16 && n < 16 * 1024 ? (uint8_t*)malloc(n) : nullptr;
+    if (!head || fseek(f, 0, SEEK_SET) != 0 || fread(head, 1, n, f) != n ||
+        verity_items_generation(head, n) != 4 + g)
+    {
+        free(head);
+        if (f)
+            fclose(f);
+        return;
+    }
+    g_item_file[g] = f;
+    g_item_head[g] = head;
+    g_item_head_len[g] = n;
+}
+
 }  // namespace
 
 void rom_assets_init()
@@ -393,29 +424,41 @@ void rom_assets_init()
         cached = nullptr;
     }
     int icon_rank = open_icons(icon_file);
-    char move_file[2][80];
+    char move_file[2][80], item_file[2][80];
     for (int g = 0; g < 2; g++)
     {
         snprintf(move_file[g], sizeof(move_file[g]), "%s/moves%d.vmov", config_path(), 4 + g);
         load_moves(g, move_file[g]);
+        snprintf(item_file[g], sizeof(item_file[g]), "%s/items%d.vitm", config_path(), 4 + g);
+        open_items(g, item_file[g]);
     }
-    if (font_rank < 3 || icon_rank < 3 || !g_moves[0] || !g_moves[1])
+    if (font_rank < 3 || icon_rank < 3 || !g_moves[0] || !g_moves[1] || !g_item_head[0] ||
+        !g_item_head[1])
     {
         RomScan scan;
         for (const char* root : {"sd:/", "fat:/"})
             scan_roms(root, 3, &scan);
         for (int g = 0; g < 2; g++)
         {
-            if (g_moves[g] || !scan.gen_rank[g])
+            if ((g_moves[g] && g_item_head[g]) || !scan.gen_rank[g])
                 continue;
             FILE* f = fopen(scan.gen[g], "rb");
             if (!f)
                 continue;
             size_t n = 0;
-            uint8_t* built = verity_rom_build_moves_cache(read_rom, f, &n);
+            if (!g_moves[g])
+            {
+                uint8_t* built = verity_rom_build_moves_cache(read_rom, f, &n);
+                if (built && write_cache(move_file[g], built, n))
+                    load_moves(g, move_file[g]);
+            }
+            if (!g_item_head[g])
+            {
+                uint8_t* built = verity_rom_build_items_cache(read_rom, f, &n);
+                if (built && write_cache(item_file[g], built, n))
+                    open_items(g, item_file[g]);
+            }
             fclose(f);
-            if (built && write_cache(move_file[g], built, n))
-                load_moves(g, move_file[g]);
         }
         const char* best = scan.best;
         int best_rank = scan.rank;
@@ -473,6 +516,16 @@ bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* 
         !verity_icons_find(g_icon_head, g_icon_head_len, species, form, female, egg, palette, &at))
         return false;
     return fseek(g_icon_file, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, g_icon_file) == 512;
+}
+
+bool item_icon(uint8_t generation, uint16_t item, uint8_t* tiles, uint16_t* colors)
+{
+    int g = generation == 5 ? 1 : 0;
+    uint32_t pal_at = 0, at = 0;
+    FILE* f = g_item_file[g];
+    return f && verity_items_find(g_item_head[g], g_item_head_len[g], item, &pal_at, &at) &&
+           fseek(f, (long)pal_at, SEEK_SET) == 0 && fread(colors, 2, 16, f) == 16 &&
+           fseek(f, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, f) == 512;
 }
 
 bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out)

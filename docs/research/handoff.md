@@ -7,28 +7,24 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Next tasks (user, 2026-11-10), in order:**
 
-1. **Held item icon in the editor.** Show the item's icon on the Main tab (next to "Item") and in
-   the held-item picker (top screen, like the move details panel). Same rules as box icons: from the
-   user's ROM, extracted once into a cache under `/_nds/verity/`, nothing without a ROM. Known: the
-   Platinum ROM has `itemtool/itemdata/item_icon.narc` (~400 KB, NCGR/NCLR pairs). Not yet checked:
-   how an item maps to its icon and palette (in pokeplatinum, look for the per-item archive-index
-   table in `src/item.c`; it is probably code data like the icon palette table, see
-   `docs/research/rom-icons.md`), the HeartGold path, the Gen 5 path, and the icon size (24x24 in
-   Gen 4, probably 32x32 frames). Item IDs differ between Gen 4 and Gen 5, so key the cache by
-   generation as the move caches are.
-2. **Move descriptions.** Show a move's description in the move details panel (top screen, Moves
+1. **Move descriptions.** Show a move's description in the move details panel (top screen, Moves
    tab and move picker; `Editor::move_details` in `nds/source/scenes.cpp`). Text comes from the
    ROM's message archive, in the save's generation and ideally the ROM's language. Not yet checked:
    which archive and bank (Gen 4 `msgdata/pl_msg.narc` on Platinum; Gen 4 messages are encrypted per
    string, see pokeplatinum `src/message.c` or PKHeX-adjacent tools; Gen 5 `a/0/0/2` or `a/0/0/3`,
    plain UTF-16 with its own header). Descriptions are about 3 lines of 20 characters in-game: the
    panel has 4 rows of about 30, so they fit as is or wrap.
-3. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
+2. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
    as Judge words ("Best" ... "No Good"). The user asked whether it should show EVs, IVs or both;
    not answered yet. Ask before building it.
 
-**Done 2026-11-10 (all committed and pushed; latest `a97b0c4`):**
+**Done 2026-11-10 (all committed and pushed):**
 
+- **Held item icons:** `verity-rom::items` builds `items4.vitm` / `items5.vitm` from the best ROM
+  of each generation; the editor shows the icon beside the Main tab's rows and in a top-screen
+  panel of the held-item picker. Research and files: `docs/research/rom-icons.md` (Item icons).
+  `make emu-font` runs `ui-items.json` and `ui-items5.json`. A Platinum ROM serving a HeartGold
+  save has no icons for items 468-536 (Apricorns etc.); they fall back to the note.
 - **DS UI restyle** (inspired by the user's Claude Design artifact "Verity DS UI",
   claude.ai/artifact/6wuwLfxbvrMiPk6YUKs1Pg; the user said not to copy its screens). A frame layer
   (BG1) under the text: navy backdrop, dark title and hint bars with key chips, cream panels with a
@@ -50,7 +46,7 @@ and gaps are in `docs/research/p5-plan.md`.
 **Earlier M8 work:** `crates/verity-rom` (used only by `verity-ffi`; the core crate doesn't depend
 on it) reads the NDS file system, NARCs, LZ10/11, BLZ (in place) and the fonts; findings in
 `docs/research/rom-font.md`. On boot the DS loads its caches from `/_nds/verity/` (`font.vfnt`,
-`icons.vicn`, `moves4.vmov`, `moves5.vmov`) or scans the SD card (depth 3) for the best `.nds`
+`icons.vicn`, `moves4.vmov`, `moves5.vmov`, `items4.vitm`, `items5.vitm`) or scans the SD card (depth 3) for the best `.nds`
 (Gen 5 > Korean Gen 4 > Gen 4) plus the best of each generation, and builds them (2-4 s, reading
 each file whole). `make emu-font` checks it with stand-in ROMs holding only what verity reads
 (`tools/emu-harness/standin_rom.py`, written under `build/`). Decisions (user): no Nintendo assets
@@ -86,6 +82,10 @@ Done this session (2026-11-10), all committed and pushed:
 
 Open items:
 
+- Gen 5 ROM font: "é" (Poké Ball) draws as a blob. The small Gen 5 font's shadow pixels are part
+  of the letter shape, and the DS text renderer is 1 bit, so é's shaded counter fills in. A fix
+  needs a second text shade for shadow pixels (`VerityGlyph` carries one mask). Found 2026-11-10,
+  not fixed.
 - Colosseum/XD origins stay "not checked yet" (the user deferred them), in Gen 4 and Gen 5 saves.
 - The Gen 5 wizard makes wild Pokémon only. Gen 5 eggs and statics aren't planned in it yet.
 - `Test-Save-White-2.sav` can't be saved from the DS: its Moltres (box slot 145) has an impossible

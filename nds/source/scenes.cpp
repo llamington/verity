@@ -2158,10 +2158,46 @@ private:
         at(top(), 1, row + 3, UI_MUTED "Power" UI_MUTED "  %s    " UI_MUTED "Accuracy" UI_MUTED "  %s", power, acc);
     }
 
+    // The held item's icon from a ROM of the save's generation, if there is one; false otherwise
+    // (the sprite is hidden).
+    bool show_item_icon(bool on_top, int x, int y, uint16_t item)
+    {
+        uint8_t tiles[512];
+        uint16_t colors[16];
+        bool ok = item && core::item_icon(gen4_ ? 4 : 5, item, tiles, colors);
+        ui::item_icon(on_top, x, y, ok ? tiles : nullptr, colors);
+        return ok;
+    }
+
+    // An item in a panel on the top screen (rows row..row+3): its icon, name and number.
+    void item_details(int row, uint16_t item)
+    {
+        ui::panel(top(), 1, row, 30, 4);
+        for (int r = row; r < row + 4; r++)
+            at(top(), 1, r, "%s", "");
+        // The art is the top-left 24x24 of the frame: centred in the panel's 32 px.
+        bool icon = show_item_icon(true, 12, row * 8 + 4, item);
+        if (item == 0)
+        {
+            at(top(), 1, row, UI_MUTED "No held item.");
+            return;
+        }
+        // Beside the icon, or at the top with a note when there is none.
+        int c = icon ? 5 : 1, r = icon ? row + 1 : row;
+        at(top(), c, r, "%s", ui::name(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5, item));
+        at(top(), c, r + 1, UI_MUTED "Item %u", item);
+        if (!icon)
+        {
+            at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen4_ ? 4 : 5);
+            at(top(), 1, row + 3, UI_MUTED "the item's icon.");
+        }
+    }
+
     void draw_picker()
     {
         uint32_t cat = picking_ == 1 ? (gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5)
                                      : VERITY_NAME_MOVES;
+        ui::item_icon(false, 0, 0, nullptr, nullptr);
         ui::frame_clear(bottom());
         if (picking_ == 1)
             ui::title(bottom(), "Held item");
@@ -2186,6 +2222,8 @@ private:
         }
         if (picking_ >= 2)
             move_details(10, (uint16_t)pick_.selected);
+        else
+            item_details(10, (uint16_t)pick_.selected);
     }
 
     void apply()
@@ -2272,6 +2310,7 @@ private:
         ui::panel(top(), 1, 6, 30, 2);
         at(top(), 1, 6, "%s", e_.mask ? "* Edited, not applied yet" : "No changes yet");
         at(top(), 1, 7, UI_MUTED "%s", status_[0] ? status_ : "START applies, B goes back.");
+        ui::item_icon(true, 0, 0, nullptr, nullptr);
         if (tab_ == 2)
             move_details(10, e_.moves[row_ < 4 ? row_ : 0]);
         else
@@ -2293,6 +2332,8 @@ private:
         ui::hints(bottom(), tab_ == 1 && gen4_ ? "L/R:Tab|X:Closest IVs|START:Apply"
                                                : "L/R:Tab|A:List|START:Apply");
         uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
+        // Beside the Main tab's three rows, at the panel's right edge.
+        show_item_icon(false, 228, 24, tab_ == 0 ? e_.held_item : 0);
         if (tab_ == 0)
         {
             at(bottom(), 0, 3, " " UI_MUTED "Item" UI_MUTED "         < %s >",

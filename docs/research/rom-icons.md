@@ -41,3 +41,32 @@ Manaphy's), which hold in all four games.
 
 Reading each file once (not per member) matters: thousands of seeks into a large ROM on a FAT card
 took 8-16 s for font and icons together; whole-file reads take 2-4 s (melonDS, Black 2 stand-in).
+
+## Item icons
+
+`verity-rom::items` extracts each held item's icon into `/_nds/verity/items4.vitm` or `items5.vitm`
+(item IDs differ between the generations), from the best ROM of that generation, as the move
+caches are. About 164 KB for Platinum; shared icons (the TM disc, Plates) are stored once. Format
+in `CachedItems`. The editor shows the icon beside the Main tab's rows and in a top-screen panel
+of the held-item picker; without a ROM of the save's generation the panel says so. `make emu-font`
+runs `ui-items.json` (Gen 4 save) and `ui-items5.json` (Gen 5 save) against both stand-in ROMs.
+
+| Games | Archive | Members | Table rows (items) |
+| --- | --- | --- | --- |
+| Diamond/Pearl | `itemtool/itemdata/item_icon.narc` | not checked (no ROM) | up to 464 |
+| Platinum | `itemtool/itemdata/item_icon.narc` | 711 | 468 (0-467) |
+| HeartGold/SoulSilver | `a/0/1/8` | 797 | 537 (0-536) |
+| Black/White | `a/0/2/5` | 1005 | 627 (0-626; the table ends there) |
+| Black 2/White 2 | `a/0/2/5` | 1025 | 639 (0-638) |
+
+Each item has its own icon NCGR (0x30 header, one 32x32 frame, 4 bpp, 1D; the art fills the
+top-left 24x24) and its own NCLR (16 colours). The ARM9 table names both, per item ID:
+
+- Gen 4 (pokeplatinum `src/item.c`, `sItemArchiveIDs`): `u16 {data, icon, palette, gen3 item}`.
+  Item 0 points at the empty icon past the others (Platinum `{0, 707, 708, 0}`), then
+  `{1, 2, 3, 1}`, `{2, 4, 5, 2}`. Platinum ARM9 offset 986308, HeartGold 1048980 (after BLZ).
+- Gen 5 (pokebw2 `src/system/pml_item.c`, `ITEM_GRAPHICS_CHARS_AND_PALETTES`): `u16 {icon,
+  palette}`. Item 0 is `{members - 4, members - 3}`, then `{2, 3}`, `{4, 5}`, `{6, 7}`.
+
+verity finds the table by that start and reads it until a row points outside the archive, capped
+at the game's last item (PKHeX `MaxItemID_*`).
