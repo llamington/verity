@@ -700,10 +700,22 @@ bool save_to_disk(const char** message)
         *message = "could not replace the file (temp kept)";
         return false;
     }
-    size_t len = 0;
-    uint8_t* back = read_all(g_doc.path, kMaxSave, &len);
-    bool same = back && len == g_doc.len && memcmp(back, g_doc.buf, len) == 0;
-    free(back);
+    // Read back in chunks: a second save-sized buffer may not fit next to the save, the game data
+    // and the ROM caches (a Gen 5 save is 512 KB).
+    bool same = false;
+    if (FILE* f = fopen(g_doc.path, "rb"))
+    {
+        static uint8_t chunk[4096];
+        size_t at = 0, n;
+        same = true;
+        while (same && (n = fread(chunk, 1, sizeof(chunk), f)) > 0)
+        {
+            same = at + n <= g_doc.len && memcmp(chunk, g_doc.buf + at, n) == 0;
+            at += n;
+        }
+        same = same && at == g_doc.len && !ferror(f);
+        fclose(f);
+    }
     if (!same)
     {
         *message = "verify failed: restore from .bak1";
