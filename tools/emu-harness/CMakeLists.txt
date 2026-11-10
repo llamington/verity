@@ -24,10 +24,12 @@ add_subdirectory(${MELONDS_DIR} melonds EXCLUDE_FROM_ALL)
 find_package(PNG REQUIRED)
 find_package(Threads REQUIRED)
 
-add_executable(emu-harness src/main.cpp src/platform.cpp src/json.cpp)
+# LocalMP alone: net-utils would also pull in LAN, slirp and enet.
+add_executable(emu-harness src/main.cpp src/platform.cpp src/json.cpp ${MELONDS_DIR}/src/net/LocalMP.cpp)
 target_link_libraries(emu-harness PRIVATE core PNG::PNG Threads::Threads)
 # melonDS defines GDBSTUB_ENABLED with directory-scoped add_definitions, and it changes class
 # layouts (NDS, ARM): the harness must see the same definition or objects are mis-sized.
 target_compile_definitions(emu-harness PRIVATE GDBSTUB_ENABLED)
-target_include_directories(emu-harness SYSTEM PRIVATE ${MELONDS_DIR}/src)
+target_include_directories(emu-harness SYSTEM PRIVATE ${MELONDS_DIR}/src ${MELONDS_DIR}/src/net)
 target_compile_options(emu-harness PRIVATE -Wall -Wextra)
+set_source_files_properties(${MELONDS_DIR}/src/net/LocalMP.cpp PROPERTIES COMPILE_OPTIONS -w)

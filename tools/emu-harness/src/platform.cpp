@@ -16,6 +16,7 @@
 
 #include "Platform.h"
 #include "SPI_Firmware.h"
+#include "LocalMP.h"
 
 namespace melonDS::Platform {
 
@@ -175,15 +176,21 @@ void WriteGBASave(const u8*, u32, u32, u32, void*) {}
 void WriteFirmware(const Firmware&, u32, u32, void*) {}
 void WriteDateTime(int, int, int, int, int, int, void*) {}
 
-void MP_Begin(void*) {}
-void MP_End(void*) {}
-int MP_SendPacket(u8*, int, u64, void*) { return 0; }
-int MP_RecvPacket(u8*, u64*, void*) { return 0; }
-int MP_SendCmd(u8*, int, u64, void*) { return 0; }
-int MP_SendReply(u8*, int, u64, u16, void*) { return 0; }
-int MP_SendAck(u8*, int, u64, void*) { return 0; }
-int MP_RecvHostPacket(u8*, u64*, void*) { return 0; }
-u16 MP_RecvReplies(u8*, u64, u16, void*) { return 0; }
+// Linked runs set the shared LocalMP; single-instance runs have no network. The core's userdata
+// is a pointer to the instance number (Ctx::inst).
+static LocalMP* g_mp = nullptr;
+void set_local_mp(LocalMP* mp) { g_mp = mp; }
+static int inst(void* userdata) { return *static_cast<int*>(userdata); }
+
+void MP_Begin(void* u) { if (g_mp) g_mp->Begin(inst(u)); }
+void MP_End(void* u) { if (g_mp) g_mp->End(inst(u)); }
+int MP_SendPacket(u8* d, int len, u64 ts, void* u) { return g_mp ? g_mp->SendPacket(inst(u), d, len, ts) : 0; }
+int MP_RecvPacket(u8* d, u64* ts, void* u) { return g_mp ? g_mp->RecvPacket(inst(u), d, ts) : 0; }
+int MP_SendCmd(u8* d, int len, u64 ts, void* u) { return g_mp ? g_mp->SendCmd(inst(u), d, len, ts) : 0; }
+int MP_SendReply(u8* d, int len, u64 ts, u16 aid, void* u) { return g_mp ? g_mp->SendReply(inst(u), d, len, ts, aid) : 0; }
+int MP_SendAck(u8* d, int len, u64 ts, void* u) { return g_mp ? g_mp->SendAck(inst(u), d, len, ts) : 0; }
+int MP_RecvHostPacket(u8* d, u64* ts, void* u) { return g_mp ? g_mp->RecvHostPacket(inst(u), d, ts) : 0; }
+u16 MP_RecvReplies(u8* d, u64 ts, u16 mask, void* u) { return g_mp ? g_mp->RecvReplies(inst(u), d, ts, mask) : 0; }
 
 int Net_SendPacket(u8*, int, void*) { return 0; }
 int Net_RecvPacket(u8*, void*) { return 0; }

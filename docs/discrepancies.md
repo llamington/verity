@@ -91,3 +91,10 @@ D/P/Pt (no card = 4) and from 0 on HG/SS (no card = 3). The Platinum decompilati
 0-based slot into a 2-bit field (`MysteryGift_TrySavePgt`), so `4` could not be stored. verity
 follows the decompilation on Platinum and PKHeX on D/P. Retail Platinum collected 11 of 11 gifts
 this way. See `docs/research/events-region.md`.
+
+## Linked harness runs are threaded (PLAN §7)
+
+PLAN §7 asks for two instances stepped in lockstep. melonDS's `LocalMP` waits on semaphores with a
+25 ms timeout, so each console needs its own thread, and the frame lead between them is only softly
+limited. Linked runs aren't deterministic; single-console runs still are. See
+`docs/research/emu-harness.md`.

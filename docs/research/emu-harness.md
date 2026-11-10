@@ -21,7 +21,7 @@ tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json [--o
 | Homebrew with a DLDI SD card synced from a folder | done (`sd_dir`/`sd_image`) |
 | Real BIOS7/BIOS9/firmware (`bios_dir`) | done (owner dumps in `bios/`) |
 | Retail ROMs; boot Platinum/B2W2 to title and Continue deterministically | **done**: `scripts/boot-pt.json`, `scripts/boot-b2.json` (`make emu-accept`); real saves load (Pt: RoC 74:10, 8 badges; B2 with a W2 save: Castelia City, 8 badges); two runs identical, screen hashes locked in the scripts |
-| Two instances with local multiplayer (Download Play) | not started; `MP_*` hooks are stubs |
+| Two instances with local multiplayer (Download Play) | **done**: `{"instances": [...]}` scripts, `make emu-link` runs a genuine Memory Link |
 | GDB stub passthrough | compiled in (`GDBSTUB_ENABLED`), not wired to script options yet |
 
 Speed: about 440 frames/s on this machine for the spike (7x real time).
@@ -32,6 +32,15 @@ Owner files (gitignored): `roms/platinum.nds` (CPUE), `roms/black2.nds` (IREO),
 
 Exploration step `{"every": N, "frames": M, "prefix": "p"}` screenshots every N frames, for
 finding menu paths before freezing a script. `direct_boot` (default true) skips the DS menu.
+
+## Linked runs
+
+Each console runs its steps on its own thread through melonDS's `LocalMP`, because its receive calls
+block on semaphores. PLAN §7's single-threaded lockstep can't work with that. Linked runs aren't
+deterministic, so scripts need generous waits (pressing A before the host appears does nothing).
+An instance more than 8 frames ahead pauses for at most 2 ms. An unbounded pause stalls the link:
+the paused console can't reply, and each unanswered command costs the sender a 25 ms timeout.
+A Memory Link takes about 2.5 minutes. `"direct_boot": false` boots to the DS menu.
 
 ## Notes
 

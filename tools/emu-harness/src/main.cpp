@@ -28,23 +28,36 @@
 //     ]
 //   }
 //
+// Two consoles on local wireless: {"instances": [{...}, {...}]}, each object in the format above
+// (with bios_dir; "direct_boot": false boots the DS menu, needed to receive Download Play). Each
+// instance runs its own steps on its own thread, and keeps running with no input once they end,
+// until the other one is done. {"sync": "name", "timeout": 60000} waits for the other instance to
+// reach the same name. Output goes to --out/inst0 and inst1. Linked runs are not deterministic:
+// melonDS's LocalMP waits on real-time semaphores.
+//
 // Outputs in --out (default: <script>.out/): screenshots, save dumps, and run.jsonl (one JSON
 // object per step with the frame number and screen hashes). Exit status 0 when every step passes.
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <png.h>
 #include <sys/stat.h>
 
 #include "Args.h"
+#include "LocalMP.h"
 #include "NDS.h"
 #include "NDSCart.h"
 #include "Platform.h"
@@ -54,12 +67,31 @@ using namespace melonDS;
 
 namespace melonDS::Platform {
 extern bool g_verbose;
+void set_local_mp(LocalMP* mp);
 }
 
 namespace {
 
+// State shared by the two instances of a linked run.
+struct Shared
+{
+    std::atomic<u64> frames[2]{};
+    std::atomic<bool> active[2]{};
+    std::atomic<bool> done[2]{};
+    std::mutex lock;
+    std::map<std::string, int> arrivals;
+};
+
+// Unthrottled threads would drift apart in emulated time, so an instance that gets this many frames
+// ahead pauses briefly. The pause must stay bounded: a paused console can't answer the other's
+// wireless commands, and each unanswered command costs the sender LocalMP's 25 ms timeout.
+constexpr u64 kMaxFrameLead = 8;
+constexpr int kMaxLeadWaitUs = 2000;
+
 struct Ctx
 {
+    int inst = 0;  // passed as the core's userdata; the Platform MP hooks read it
+    Shared* shared = nullptr;
     std::unique_ptr<NDS> nds;
     std::string base;  // script directory
     std::string out;
@@ -165,6 +197,13 @@ void write_png(Ctx& c, const std::string& path)
 
 void run_frame(Ctx& c, u32 keys, std::optional<std::pair<int, int>> touch)
 {
+    if (c.shared)
+    {
+        int other = 1 - c.inst;
+        for (int us = 0; us < kMaxLeadWaitUs && c.shared->active[other]
+                         && c.frame > c.shared->frames[other] + kMaxFrameLead; us += 50)
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
     c.nds->SetKeyMask(~keys & 0xFFF);
     if (touch)
         c.nds->TouchScreen(touch->first, touch->second);
@@ -172,6 +211,8 @@ void run_frame(Ctx& c, u32 keys, std::optional<std::pair<int, int>> touch)
         c.nds->ReleaseScreen();
     c.nds->RunFrame();
     c.frame++;
+    if (c.shared)
+        c.shared->frames[c.inst] = c.frame;
 }
 
 bool ram_matches(Ctx& c, const json::Value& r)
@@ -307,6 +348,32 @@ void run_step(Ctx& c, size_t i, const json::Value& st)
         }
         log_step(c, i, "every", "", true);
     }
+    else if (st.has("sync"))
+    {
+        if (!c.shared)
+            throw std::runtime_error("sync needs two instances");
+        const std::string& name = st["sync"].s;
+        {
+            std::lock_guard<std::mutex> g(c.shared->lock);
+            c.shared->arrivals[name]++;
+        }
+        long long timeout = st.has("timeout") ? st["timeout"].i() : 60000;
+        bool ok = false;
+        for (long long f = 0; f <= timeout && !ok; f++)
+        {
+            {
+                std::lock_guard<std::mutex> g(c.shared->lock);
+                ok = c.shared->arrivals[name] >= 2;
+            }
+            if (!ok)
+            {
+                if (!c.shared->active[1 - c.inst] || c.shared->done[1 - c.inst])
+                    break;
+                run_frame(c, 0, std::nullopt);
+            }
+        }
+        log_step(c, i, "sync", ",\"label\":\"" + esc(name) + "\"", ok);
+    }
     else if (st.has("hash"))
     {
         log_step(c, i, "hash", ",\"label\":\"" + esc(st["hash"].s) + "\"", true);
@@ -326,6 +393,139 @@ void run_step(Ctx& c, size_t i, const json::Value& st)
     }
     else
         throw std::runtime_error("unknown step " + std::to_string(i));
+}
+
+void setup(Ctx& c, const json::Value& cfg)
+{
+    std::filesystem::create_directories(c.out);
+
+    NDSArgs args;
+    args.JIT = std::nullopt;
+    if (cfg.has("bios_dir"))
+    {
+        std::string d = join(c.base, cfg["bios_dir"].s);
+        auto b9 = read_file(d + "/bios9.bin"), b7 = read_file(d + "/bios7.bin");
+        auto fw = read_file(d + "/firmware.bin");
+        if (b9.size() != ARM9BIOSSize || b7.size() != ARM7BIOSSize)
+            throw std::runtime_error("BIOS sizes are wrong");
+        args.ARM9BIOS = std::make_unique<ARM9BIOSImage>();
+        args.ARM7BIOS = std::make_unique<ARM7BIOSImage>();
+        memcpy(args.ARM9BIOS->data(), b9.data(), b9.size());
+        memcpy(args.ARM7BIOS->data(), b7.data(), b7.size());
+        args.Firmware = Firmware(fw.data(), (u32)fw.size());
+    }
+    if (c.inst > 0)
+    {
+        // Consoles on one network need different MAC addresses (as EmuInstance does).
+        auto& mac = args.Firmware.GetHeader().MacAddr;
+        mac[3] += c.inst;
+        mac[4] += c.inst * 0x44;
+        mac[5] += c.inst * 0x10;
+        args.Firmware.UpdateChecksums();
+    }
+    c.nds = std::make_unique<NDS>(std::move(args), &c.inst);
+
+    std::string rom_path = join(c.base, cfg["rom"].s);
+    auto rom = read_file(rom_path);
+    NDSCart::NDSCartArgs cart_args{};
+    if (cfg.has("sd_image"))
+        cart_args.SDCard = FATStorageArgs{
+            join(c.base, cfg["sd_image"].s), 0, false,
+            cfg.has("sd_dir") ? std::optional<std::string>(join(c.base, cfg["sd_dir"].s))
+                              : std::nullopt};
+    if (cfg.has("save"))
+    {
+        auto sav = read_file(join(c.base, cfg["save"].s));
+        cart_args.SRAM = std::make_unique<u8[]>(sav.size());
+        memcpy(cart_args.SRAM.get(), sav.data(), sav.size());
+        cart_args.SRAMLength = (u32)sav.size();
+    }
+    auto romdata = std::make_unique<u8[]>(rom.size());
+    memcpy(romdata.get(), rom.data(), rom.size());
+    auto cart = NDSCart::ParseROM(std::move(romdata), (u32)rom.size(), &c.inst, std::move(cart_args));
+    if (!cart)
+        throw std::runtime_error("cannot parse ROM " + rom_path);
+
+    c.nds->Reset();
+    c.nds->SetNDSCart(std::move(cart));
+    bool direct = !cfg.has("direct_boot") || cfg["direct_boot"].b;
+    if (direct || c.nds->NeedsDirectBoot())
+    {
+        std::string name = rom_path.substr(rom_path.rfind('/') + 1);
+        c.nds->SetupDirectBoot(name);
+    }
+    int rtc[6] = {2026, 1, 1, 12, 0, 0};
+    if (cfg.has("rtc"))
+        for (int i = 0; i < 6; i++)
+            rtc[i] = (int)cfg["rtc"][i].i();
+    c.nds->RTC.SetDateTime(rtc[0], rtc[1], rtc[2], rtc[3], rtc[4], rtc[5]);
+    c.nds->Start();
+
+    c.log = fopen((c.out + "/run.jsonl").c_str(), "w");
+    if (!c.log)
+        throw std::runtime_error("cannot write run log");
+}
+
+void run_steps(Ctx& c, const json::Value& cfg)
+{
+    auto& steps = cfg["steps"].a;
+    for (size_t i = 0; i < steps.size(); i++)
+        run_step(c, i, steps[i]);
+}
+
+int run_linked(const json::Value& cfg, const std::string& base, const std::string& root)
+{
+    auto& insts = cfg["instances"].a;
+    if (insts.size() != 2)
+        throw std::runtime_error("instances must list exactly two consoles");
+
+    LocalMP mp;
+    Platform::set_local_mp(&mp);
+    Shared shared;
+    Ctx ctx[2];
+    for (int i = 0; i < 2; i++)
+    {
+        ctx[i].inst = i;
+        ctx[i].shared = &shared;
+        ctx[i].base = base;
+        ctx[i].out = root + "/inst" + std::to_string(i);
+        setup(ctx[i], insts[i]);
+        shared.active[i] = true;
+    }
+
+    std::string errors[2];
+    std::thread threads[2];
+    for (int i = 0; i < 2; i++)
+        threads[i] = std::thread([&, i] {
+            Ctx& c = ctx[i];
+            try
+            {
+                run_steps(c, insts[i]);
+                shared.done[i] = true;
+                while (!shared.done[1 - i] && shared.active[1 - i])
+                    run_frame(c, 0, std::nullopt);
+            }
+            catch (const std::exception& e)
+            {
+                errors[i] = e.what();
+            }
+            shared.active[i] = false;
+        });
+    for (auto& t : threads)
+        t.join();
+    Platform::set_local_mp(nullptr);
+
+    bool failed = false;
+    for (int i = 0; i < 2; i++)
+    {
+        if (!errors[i].empty())
+            fprintf(stderr, "emu-harness: instance %d: %s\n", i, errors[i].c_str());
+        failed |= ctx[i].failed || !errors[i].empty();
+        fclose(ctx[i].log);
+        printf("instance %d: %zu steps, %llu frames, %s\n", i, insts[i]["steps"].a.size(),
+               (unsigned long long)ctx[i].frame, ctx[i].failed ? "FAILED" : "ok");
+    }
+    return failed ? 1 : 0;
 }
 
 }  // namespace
@@ -354,75 +554,23 @@ int main(int argc, char** argv)
         ss << sf.rdbuf();
         json::Value cfg = json::parse(ss.str());
 
-        Ctx c;
         size_t slash = script.rfind('/');
-        c.base = slash == std::string::npos ? "." : script.substr(0, slash);
-        c.out = out.empty() ? script + ".out" : out;
-        std::filesystem::create_directories(c.out);
+        std::string base = slash == std::string::npos ? "." : script.substr(0, slash);
+        std::string root = out.empty() ? script + ".out" : out;
 
-        NDSArgs args;
-        args.JIT = std::nullopt;
-        if (cfg.has("bios_dir"))
+        if (!cfg.has("instances"))
         {
-            std::string d = join(c.base, cfg["bios_dir"].s);
-            auto b9 = read_file(d + "/bios9.bin"), b7 = read_file(d + "/bios7.bin");
-            auto fw = read_file(d + "/firmware.bin");
-            if (b9.size() != ARM9BIOSSize || b7.size() != ARM7BIOSSize)
-                throw std::runtime_error("BIOS sizes are wrong");
-            args.ARM9BIOS = std::make_unique<ARM9BIOSImage>();
-            args.ARM7BIOS = std::make_unique<ARM7BIOSImage>();
-            memcpy(args.ARM9BIOS->data(), b9.data(), b9.size());
-            memcpy(args.ARM7BIOS->data(), b7.data(), b7.size());
-            args.Firmware = Firmware(fw.data(), (u32)fw.size());
+            Ctx c;
+            c.base = base;
+            c.out = root;
+            setup(c, cfg);
+            run_steps(c, cfg);
+            fclose(c.log);
+            printf("%zu steps, %llu frames, %s\n", cfg["steps"].a.size(),
+                   (unsigned long long)c.frame, c.failed ? "FAILED" : "ok");
+            return c.failed ? 1 : 0;
         }
-        c.nds = std::make_unique<NDS>(std::move(args), &c);
-
-        std::string rom_path = join(c.base, cfg["rom"].s);
-        auto rom = read_file(rom_path);
-        NDSCart::NDSCartArgs cart_args{};
-        if (cfg.has("sd_image"))
-            cart_args.SDCard = FATStorageArgs{
-                join(c.base, cfg["sd_image"].s), 0, false,
-                cfg.has("sd_dir") ? std::optional<std::string>(join(c.base, cfg["sd_dir"].s))
-                                  : std::nullopt};
-        if (cfg.has("save"))
-        {
-            auto sav = read_file(join(c.base, cfg["save"].s));
-            cart_args.SRAM = std::make_unique<u8[]>(sav.size());
-            memcpy(cart_args.SRAM.get(), sav.data(), sav.size());
-            cart_args.SRAMLength = (u32)sav.size();
-        }
-        auto romdata = std::make_unique<u8[]>(rom.size());
-        memcpy(romdata.get(), rom.data(), rom.size());
-        auto cart = NDSCart::ParseROM(std::move(romdata), (u32)rom.size(), &c, std::move(cart_args));
-        if (!cart)
-            throw std::runtime_error("cannot parse ROM " + rom_path);
-
-        c.nds->Reset();
-        c.nds->SetNDSCart(std::move(cart));
-        bool direct = !cfg.has("direct_boot") || cfg["direct_boot"].b;
-        if (direct || c.nds->NeedsDirectBoot())
-        {
-            std::string name = rom_path.substr(rom_path.rfind('/') + 1);
-            c.nds->SetupDirectBoot(name);
-        }
-        int rtc[6] = {2026, 1, 1, 12, 0, 0};
-        if (cfg.has("rtc"))
-            for (int i = 0; i < 6; i++)
-                rtc[i] = (int)cfg["rtc"][i].i();
-        c.nds->RTC.SetDateTime(rtc[0], rtc[1], rtc[2], rtc[3], rtc[4], rtc[5]);
-        c.nds->Start();
-
-        c.log = fopen((c.out + "/run.jsonl").c_str(), "w");
-        if (!c.log)
-            throw std::runtime_error("cannot write run log");
-        auto& steps = cfg["steps"].a;
-        for (size_t i = 0; i < steps.size(); i++)
-            run_step(c, i, steps[i]);
-        fclose(c.log);
-        printf("%zu steps, %llu frames, %s\n", steps.size(), (unsigned long long)c.frame,
-               c.failed ? "FAILED" : "ok");
-        return c.failed ? 1 : 0;
+        return run_linked(cfg, base, root);
     }
     catch (const std::exception& e)
     {
