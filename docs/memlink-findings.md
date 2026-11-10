@@ -95,10 +95,23 @@ that step wasn't run. The messages come from one table entry per broken block
 
 verity refuses instead, because the game's path destroys data the player can't choose to keep.
 
+## In-game check
+
+`make emu-flashback` boots retail Black 2 on a save linked by `memlink::apply` (source: a finished
+Black save, trainer Lynx) and on an unlinked control. Both copies have event flag 2400 set and start
+in Nuvema Town, one zone south of the trigger. The two runs are identical until Route 1. Then:
+
+- Linked: Bianca's flashback starts, names "Lynx", and runs through to its trainer battle.
+- Control: the player walks over the trigger and nothing happens.
+- The Memory Link menu has a MEMORY LIST entry on the linked save only.
+
+The script that arms the flashback runs on entering the zone, not on Continue, so a save placed
+directly on Route 1 shows nothing. Flag 2400 is set by the helper because the test save hasn't got
+it; the map script requires it. One of the 8 flashbacks was played, on Black 2 only.
+
 ## Not done
 
 - The Key System (R5). `+0x0C` is preserved or initialised, never edited.
-- The in-game check that the Memory Link indicator shows and a flashback can be triggered.
 - A DS screen for this.
 - Linking a Japanese or Korean BW save, which hasn't been tried.
 

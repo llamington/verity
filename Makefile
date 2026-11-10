@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback
 
 all: nds
 
@@ -29,6 +29,10 @@ emu-link: emu-harness
 	rm -rf build/emu/memlink
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/memlink.json --out build/emu/memlink
 	python3 tools/emu-harness/check_memlink.py corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/memlink/inst0/b2-after.sav
+
+# P10: retail Black 2 plays a flashback from a save linked by memlink::apply (needs roms/, bios/).
+emu-flashback: emu-harness
+	python3 tools/emu-harness/memlink_flashback.py
 
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
