@@ -590,7 +590,7 @@ Tests needing ROMs or BIOS skip with a clear message when they're absent.
 | **M5** | Gen 5 (BW, B2W2), Poké Transfer, Dream World/Radar/grotto sources | Gen 5 complete |
 | **M6** | P8 mystery gifts | Events |
 | **M7** | Phase H full (two instances), P10 Memory Link + Key System | B2W2 extras |
-| **M8** | P11 nightly suite, polish, optional ROM-graphics loading | Release candidate |
+| **M8** | P11 nightly suite, polish, ROM font/graphics loading (`verity-rom`, chosen 2026-11-10) | Release candidate |
 
 P10's research can run in parallel with M3–M5 once Phase H's two-instance support is proven.
 
