@@ -14,7 +14,7 @@ Gen 4), builds the cache (~150 KB) and saves it; a better ROM later replaces a w
 still uses the console font; other characters come from the ROM font (Gen 4: stroke only, rows
 2..11; all glyphs fitted to 8 rows by merging similar rows). Without a ROM the picker says a ROM
 enables Japanese/Korean names. `make emu-font` checks both paths with stand-in ROMs that hold only
-the font (`tools/emu-harness/font_rom.py`, written under `build/`).
+the font (`tools/emu-harness/standin_rom.py`, written under `build/`).
 
 Decisions behind it (user, 2026-11-10): no Nintendo assets in the repo or a release; the user never
 picks a ROM; a separate crate rather than a Cargo feature.
@@ -25,10 +25,11 @@ compose into syllables (`verity-ffi/src/keyboard.rs`, unit-tested; a syllable Ge
 stays as separate jamo). `make emu-font` also runs `ui-keyboard-jp.json`. Korean has no in-emulator
 check (no Korean Pokémon in the test saves).
 
-Rest of M8: box icons and sprites from the ROM (research so far in `docs/research/rom-icons.md`:
-palette tables are in the code, BLZ-compressed except on Platinum) (LZ is
-ready; NCGR/NCLR/NCER parsing and the file locations are still to do, from the pret decomps and
-`fuddlesworth/pokebw2`), with the current placeholder icons as the fallback.
+Box icons from the ROM are done (`docs/research/rom-icons.md`): built into `icons.vicn` with the
+font, drawn in the box view, placeholders without a ROM.
+
+Rest of M8: battle sprites (summary screen) are not planned yet; decide whether they're worth it
+before P12 (the DS has no screen that shows one today).
 
 After that: **P12 web version** (in PLAN, user decisions 2026-11-10). WASM holds code only; data
 blobs are fetched per game; text uses browser fonts; sprites are hotlinked at runtime from the

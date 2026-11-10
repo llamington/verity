@@ -76,6 +76,70 @@ pub fn decompress(src: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Decompresses BLZ, the backward LZ that compresses ARM9 binaries and overlays: the last 8 bytes
+/// hold the compressed length (24 bits) with the footer length (top 8 bits), then the growth.
+/// Data before the compressed region is copied as is.
+pub fn blz_decompress(src: &[u8]) -> Result<Vec<u8>> {
+    let mut buf = src.to_vec();
+    blz_decompress_in_place(&mut buf)?;
+    Ok(buf)
+}
+
+/// [`blz_decompress`] in the buffer itself (the format is made for this: the output grows past
+/// the end and every read is below the write position). On error the buffer is unspecified.
+pub fn blz_decompress_in_place(buf: &mut Vec<u8>) -> Result<()> {
+    let bad = Error::Format("BLZ");
+    let n = buf.len();
+    if n < 8 {
+        return Err(bad);
+    }
+    let enc_hdr = u32::from_le_bytes([buf[n - 8], buf[n - 7], buf[n - 6], buf[n - 5]]);
+    let inc = u32::from_le_bytes([buf[n - 4], buf[n - 3], buf[n - 2], buf[n - 1]]) as usize;
+    let (hdr, enc) = ((enc_hdr >> 24) as usize, (enc_hdr & 0xFF_FFFF) as usize);
+    if !(8..=11).contains(&hdr) || enc > n || enc < hdr || n + inc > MAX_OUT {
+        return Err(bad);
+    }
+    let limit = n - enc;
+    buf.resize(n + inc, 0);
+    let (mut s, mut d) = (n - hdr, n + inc);
+    while s > limit {
+        s -= 1;
+        let mut flags = buf[s];
+        for _ in 0..8 {
+            if s <= limit {
+                break;
+            }
+            if flags & 0x80 != 0 {
+                if s < limit + 2 {
+                    return Err(bad);
+                }
+                s -= 2;
+                let v = usize::from(buf[s]) | usize::from(buf[s + 1]) << 8;
+                let (len, disp) = ((v >> 12) + 3, (v & 0xFFF) + 3);
+                for _ in 0..len {
+                    if d <= s || d - 1 + disp >= buf.len() {
+                        return Err(bad);
+                    }
+                    d -= 1;
+                    buf[d] = buf[d + disp];
+                }
+            } else {
+                if d <= s {
+                    return Err(bad);
+                }
+                s -= 1;
+                d -= 1;
+                buf[d] = buf[s];
+            }
+            flags <<= 1;
+        }
+    }
+    if d != limit {
+        return Err(bad);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,6 +174,25 @@ mod tests {
         let out = decompress(&s).unwrap();
         assert_eq!(out.len(), 0x126);
         assert!(out.iter().all(|&b| b == b'x'));
+    }
+
+    #[test]
+    fn blz_literals_and_copy() {
+        // A plain prefix "P", then a region decoded from the end backwards: three literals
+        // (c, b, a, read top-down) and one copy of 18 bytes at distance 3, giving "abc" x 7.
+        let mut v = std::vec![b'P', 0x00, 0xF0, b'a', b'b', b'c', 0b0001_0000];
+        v.extend_from_slice(&(14u32 | 8 << 24).to_le_bytes()); // 6 encoded + 8 footer
+        v.extend_from_slice(&7u32.to_le_bytes()); // 21 decoded bytes replace 14
+        let mut want = std::vec![b'P'];
+        for _ in 0..7 {
+            want.extend_from_slice(b"abc");
+        }
+        assert_eq!(blz_decompress(&v).unwrap(), want);
+        // A copy reaching past the end, or a footer longer than the file, is refused.
+        let mut bad = v.clone();
+        bad[2] = 0xF1; // distance 4 at the very end
+        assert!(blz_decompress(&bad).is_err());
+        assert!(blz_decompress(&[0; 8]).is_err());
     }
 
     #[test]

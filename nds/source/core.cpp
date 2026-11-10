@@ -288,62 +288,138 @@ void use_font(uint8_t* buf, size_t len)
 
 }  // namespace
 
-bool font_init()
+namespace {
+
+FILE* g_icon_file = nullptr;  // icons.vicn, kept open: tiles are read per icon
+uint8_t* g_icon_head = nullptr;
+size_t g_icon_head_len = 0;
+
+int file_rank(const uint8_t* code) { return code ? verity_rom_font_rank(code) : 0; }
+
+// Writes a cache built by verity-ffi and frees it; true if the file was written whole.
+bool write_cache(const char* file, uint8_t* built, size_t len)
 {
-    char file[80];
-    snprintf(file, sizeof(file), "%s/font.vfnt", config_path());
-    size_t len = 0;
-    uint8_t* cached = read_all(file, 512 * 1024, &len);
-    int rank = 0;
-    if (cached && verity_font_check(cached, len))
-        rank = verity_rom_font_rank(cached + 12);
-    if (rank == 3)
+    ensure_config_dir();
+    FILE* out = fopen(file, "wb");
+    bool ok = out && fwrite(built, 1, len, out) == len;
+    if (out)
+        ok = fclose(out) == 0 && ok;
+    verity_rom_free(built, len);
+    if (!ok)
+        remove(file);
+    return ok;
+}
+
+// Opens icons.vicn and keeps its head (palettes and index) in memory; returns its rank.
+int open_icons(const char* file)
+{
+    if (g_icon_file)
+        fclose(g_icon_file);
+    free(g_icon_head);
+    g_icon_file = nullptr;
+    g_icon_head = nullptr;
+    g_icon_head_len = 0;
+    FILE* f = fopen(file, "rb");
+    uint8_t h[16];
+    if (!f || fread(h, 1, 16, f) != 16)
     {
-        use_font(cached, len);
-        return true;
-    }
-    char best[192] = "";
-    int best_rank = 0;
-    for (const char* root : {"sd:/", "fat:/"})
-        scan_roms(root, 3, best, sizeof(best), &best_rank);
-    uint8_t* built = nullptr;
-    size_t built_len = 0;
-    if (best_rank > rank)
-    {
-        FILE* f = fopen(best, "rb");
         if (f)
-        {
-            built = verity_rom_build_font_cache(read_rom, f, &built_len);
             fclose(f);
-        }
+        return 0;
     }
-    if (built)
+    size_t n = verity_icons_head_len(h, 16);
+    uint8_t* head = n >= 16 && n < 64 * 1024 ? (uint8_t*)malloc(n) : nullptr;
+    if (!head || fseek(f, 0, SEEK_SET) != 0 || fread(head, 1, n, f) != n ||
+        verity_icons_palette_count(head, n) == 0)
     {
-        uint8_t* copy = (uint8_t*)malloc(built_len);
-        if (copy)
+        free(head);
+        fclose(f);
+        return 0;
+    }
+    g_icon_file = f;
+    g_icon_head = head;
+    g_icon_head_len = n;
+    return file_rank(head + 12);
+}
+
+}  // namespace
+
+void rom_assets_init()
+{
+    char font_file[80], icon_file[80];
+    snprintf(font_file, sizeof(font_file), "%s/font.vfnt", config_path());
+    snprintf(icon_file, sizeof(icon_file), "%s/icons.vicn", config_path());
+    size_t len = 0;
+    uint8_t* cached = read_all(font_file, 512 * 1024, &len);
+    int font_rank = 0;
+    if (cached && verity_font_check(cached, len))
+        font_rank = file_rank(cached + 12);
+    else
+    {
+        free(cached);
+        cached = nullptr;
+    }
+    int icon_rank = open_icons(icon_file);
+    if (font_rank < 3 || icon_rank < 3)
+    {
+        char best[192] = "";
+        int best_rank = 0;
+        for (const char* root : {"sd:/", "fat:/"})
+            scan_roms(root, 3, best, sizeof(best), &best_rank);
+        if (best_rank > font_rank || best_rank > icon_rank)
         {
-            memcpy(copy, built, built_len);
-            ensure_config_dir();
-            FILE* out = fopen(file, "wb");
-            if (out)
+            FILE* f = fopen(best, "rb");
+            if (f && best_rank > font_rank)
             {
-                fwrite(copy, 1, built_len, out);
-                fclose(out);
+                size_t n = 0;
+                uint8_t* built = verity_rom_build_font_cache(read_rom, f, &n);
+                if (built && write_cache(font_file, built, n))
+                {
+                    free(cached);
+                    cached = read_all(font_file, 512 * 1024, &len);
+                    if (!cached || !verity_font_check(cached, len))
+                    {
+                        free(cached);
+                        cached = nullptr;
+                    }
+                }
             }
-            free(cached);
-            use_font(copy, built_len);
+            if (f && best_rank > icon_rank)
+            {
+                if (g_icon_file)
+                {
+                    fclose(g_icon_file);
+                    g_icon_file = nullptr;
+                }
+                size_t n = 0;
+                uint8_t* built = verity_rom_build_icon_cache(read_rom, f, &n);
+                if (built)
+                    write_cache(icon_file, built, n);
+                open_icons(icon_file);
+            }
+            if (f)
+                fclose(f);
         }
-        verity_rom_free(built, built_len);
-        if (copy)
-            return true;
     }
-    if (rank > 0)
-    {
+    if (cached)
         use_font(cached, len);
-        return true;
+    if (g_icon_head)
+    {
+        uint16_t pal[4][16];
+        int count = verity_icons_palette_count(g_icon_head, g_icon_head_len);
+        for (int p = 0; p < count && p < 4; p++)
+            verity_icons_palette(g_icon_head, g_icon_head_len, (uint8_t)p, pal[p]);
+        ui::set_icon_palettes(pal, count < 4 ? count : 4);
     }
-    free(cached);
-    return false;
+}
+
+bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* tiles, uint8_t* palette)
+{
+    uint32_t at = 0;
+    if (!g_icon_file ||
+        !verity_icons_find(g_icon_head, g_icon_head_len, species, form, female, egg, palette, &at))
+        return false;
+    return fseek(g_icon_file, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, g_icon_file) == 512;
 }
 
 const char* font_game() { return g_font_game; }

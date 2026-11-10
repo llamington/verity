@@ -35,8 +35,8 @@ int main(int argc, char **argv)
         while (1)
             swiWaitForVBlank();
     }
-    ui::at(ui::top(), 0, 0, "verity: reading font...");
-    core::font_init();
+    ui::at(ui::top(), 0, 0, "verity: reading font and icons...");
+    core::rom_assets_init();
     ui::push(scenes::file_picker());
     ui::run();
     return 0;

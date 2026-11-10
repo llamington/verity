@@ -82,6 +82,10 @@ void sprites_hide_all();
 void sprites_commit();
 // Placeholder Pokémon icon (original art), coloured by type; egg and shiny variants.
 void icon(int oam_id, int x, int y, uint8_t type, bool egg, bool shiny);
+// ROM icon palettes (16 BGR555 colours each, at most 4).
+void set_icon_palettes(const uint16_t (*pal)[16], int count);
+// A box icon from the ROM: 4 bpp tiles (1D 32x32) drawn with ROM palette `palette`; shiny star.
+void icon_rom(int oam_id, int x, int y, const uint8_t* tiles, uint8_t palette, bool shiny);
 // Selection cursor (32x32 frame) on the bottom screen.
 void cursor(int oam_id, int x, int y);
 // Highlight bar (8 px high, full width) on the bottom screen.

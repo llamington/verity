@@ -11,6 +11,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod font;
+pub mod icons;
 pub mod lz;
 pub mod narc;
 pub mod nds;

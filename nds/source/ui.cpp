@@ -554,6 +554,38 @@ void icon(int id, int x, int y, uint8_t type, bool egg, bool shiny)
            g_star, -1, false, !shiny || egg, false, false, false);
 }
 
+namespace {
+constexpr int kRomPalBase = 64;  // ROM icon palettes take 64.. of the 256-colour sprite palette
+uint16_t* g_rom_slot[128];       // one 8bpp 32x32 graphic per OAM id that shows a ROM icon
+}  // namespace
+
+void set_icon_palettes(const uint16_t (*pal)[16], int count)
+{
+    for (int p = 0; p < count; p++)
+        for (int i = 1; i < 16; i++)
+            SPRITE_PALETTE_SUB[kRomPalBase + 16 * p + i] = pal[p][i];
+}
+
+void icon_rom(int id, int x, int y, const uint8_t* tiles, uint8_t palette, bool shiny)
+{
+    if (id < 0 || id >= 128)
+        return;
+    if (!g_rom_slot[id])
+        g_rom_slot[id] = oamAllocateGfx(&oamSub, SpriteSize_32x32, SpriteColorFormat_256Color);
+    // 4 bpp (low nibble first) to 8 bpp, same 1D tile order.
+    uint16_t* dst = g_rom_slot[id];
+    int base = kRomPalBase + 16 * (palette & 3);
+    for (int i = 0; i < 512; i++)
+    {
+        uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
+        dst[i] = (uint16_t)((lo ? base + lo : 0) | (hi ? base + hi : 0) << 8);
+    }
+    oamSet(&oamSub, id, x, y, 2, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
+           false, false, false, false);
+    oamSet(&oamSub, id + 1, x + 23, y + 1, 1, 0, SpriteSize_8x8, SpriteColorFormat_256Color,
+           g_star, -1, false, !shiny, false, false, false);
+}
+
 void cursor(int id, int x, int y)
 {
     oamSet(&oamSub, id, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, g_cursor, -1,
