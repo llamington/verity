@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font emu-tour
 
 all: nds
 
@@ -98,3 +98,6 @@ emu-ui: emu-harness nds
 	@if [ -f roms/platinum.nds ] && [ -f bios/bios7.bin ]; then \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/pt-loads-written.json --out build/emu/pt-loads-written; \
 	else echo "skip pt-loads-written: ROM or BIOS missing"; fi
+
+emu-tour: emu-harness nds
+	tools/emu-harness/tour.sh

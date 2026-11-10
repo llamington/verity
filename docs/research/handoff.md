@@ -17,6 +17,14 @@ and gaps are in `docs/research/p5-plan.md`.
   overlays, read with `Rom::overlay`); the ribbon list shows the highlighted ribbon on the top
   screen. `docs/research/rom-icons.md` (Ribbons). `make emu-font` runs `ui-ribbons.json` too; the
   stand-in ROMs now keep the overlays.
+- **Fixed: Gen 5 saves failed their read-back with ROM data loaded** ("verify failed: restore
+  from .bak1"; the file itself was written). The read-back allocated a second 512 KB buffer, which
+  no longer fit next to the save, the Gen 3-5 data and the ROM caches (move descriptions add about
+  100 KB). It now compares in 4 KB chunks. Found by `make emu-tour`, which runs every `ui-*.json`
+  with stand-in ROMs; `make emu-ui` runs without ROMs and missed it. DS heap is getting tight:
+  watch large allocations.
+- Seen, not fixed: the save overview shows "Checksums BAD" for an edited save before it's saved
+  (checksums are only recomputed on save), e.g. `ui-misc-tabs` 10-overview.
 - **Move descriptions:** from the ROM's message bank into the move cache (version 2, so old
   caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
   the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`
