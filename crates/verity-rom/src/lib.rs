@@ -13,6 +13,7 @@ extern crate std;
 pub mod font;
 pub mod icons;
 pub mod lz;
+pub mod moves;
 pub mod narc;
 pub mod nds;
 

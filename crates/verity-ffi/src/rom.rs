@@ -7,6 +7,7 @@ use core::slice;
 use verity::text::{value_to_char_g4, TERMINATOR};
 use verity_rom::font::{self, CachedFont, Keys};
 use verity_rom::icons::{self, CachedIcons, IconKey};
+use verity_rom::moves::{self, CachedMoves};
 use verity_rom::nds::{Game, Rom};
 use verity_rom::{Error, Source};
 
@@ -245,6 +246,116 @@ pub unsafe extern "C" fn verity_icons_find(
     true
 }
 
+/// Builds the move cache file (category, power, accuracy) for the ROM read by `src`.
+pub fn build_moves_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error> {
+    let mut rom = Rom::open(src)?;
+    Ok(moves::load(&mut rom)?.to_cache(rom.game_code()))
+}
+
+/// C ABI: builds a move cache from a ROM, like `verity_rom_build_font_cache` (free the result with
+/// `verity_rom_free`). The cache serves saves of the ROM's generation only.
+///
+/// # Safety
+///
+/// As for `verity_rom_build_font_cache`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_rom_build_moves_cache(
+    read: Option<ReadFn>,
+    ctx: *mut c_void,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let Some(read) = read else {
+        return core::ptr::null_mut();
+    };
+    if out_len.is_null() {
+        return core::ptr::null_mut();
+    }
+    match build_moves_cache(Callback { read, ctx }) {
+        Ok(v) => {
+            let b = v.into_boxed_slice();
+            unsafe { *out_len = b.len() };
+            alloc::boxed::Box::into_raw(b) as *mut u8
+        }
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+/// C ABI: the generation a move cache serves (4 or 5), or 0 if it isn't one.
+///
+/// # Safety
+///
+/// `p` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_moves_generation(p: *const u8, len: usize) -> u8 {
+    if p.is_null() {
+        return 0;
+    }
+    CachedMoves::parse(unsafe { slice::from_raw_parts(p, len) }).map_or(0, |c| c.generation)
+}
+
+/// What the move pickers show. `type_` and `pp` come from verity's data (0xFF when the move
+/// data isn't loaded); `category` (0 physical, 1 special, 2 status), `power` and `accuracy` from
+/// the ROM's move table, with `from_rom` 0 when there is no cache for this generation.
+#[repr(C)]
+pub struct VerityMoveInfo {
+    pub type_: u8,
+    pub pp: u8,
+    pub from_rom: u8,
+    pub category: u8,
+    pub power: u8,
+    pub accuracy: u8,
+}
+
+/// C ABI: info about move `mv` in a Gen `generation` save. `rom_moves` is the move cache for
+/// that generation, or null. False if `mv` is out of range for the generation.
+///
+/// # Safety
+///
+/// `rom_moves` is null or valid for `len` bytes; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn verity_move_info(
+    generation: u8,
+    mv: u16,
+    rom_moves: *const u8,
+    len: usize,
+    out: *mut VerityMoveInfo,
+) -> bool {
+    if out.is_null() {
+        return false;
+    }
+    let kind = if generation == 4 {
+        crate::ui::BlobKind::Moves4
+    } else {
+        crate::ui::BlobKind::Moves5
+    };
+    let data = crate::ui::blob(kind).and_then(|b| verity::data::MoveData::load(b).ok());
+    if data.is_some_and(|d| mv > d.max_move()) {
+        return false;
+    }
+    let mut info = VerityMoveInfo {
+        type_: data.map_or(0xFF, |d| d.move_type(mv)),
+        pp: data.map_or(0xFF, |d| d.base_pp(mv)),
+        from_rom: 0,
+        category: 0,
+        power: 0,
+        accuracy: 0,
+    };
+    if !rom_moves.is_null() {
+        let cache = CachedMoves::parse(unsafe { slice::from_raw_parts(rom_moves, len) }).ok();
+        if let Some(m) = cache
+            .filter(|c| c.generation == generation)
+            .and_then(|c| c.get(mv))
+        {
+            info.from_rom = 1;
+            info.category = m.category as u8;
+            info.power = m.power;
+            info.accuracy = m.accuracy;
+        }
+    }
+    unsafe { *out = info };
+    true
+}
+
 /// A glyph for the DS renderer: bit `x` of `rows[y]` is an ink pixel (stroke or shadow; the games
 /// draw both, and stroke alone is broken). Ink starts at column 0 and is `width` wide.
 #[repr(C)]
@@ -421,6 +532,42 @@ mod tests {
         assert!(unsafe { verity_icons_find(v.as_ptr(), head, 25, 0, 0, 0, &mut pi, &mut at) });
         assert!(at as usize + 512 <= v.len());
         assert!(!unsafe { verity_icons_find(v.as_ptr(), head, 2000, 0, 0, 0, &mut pi, &mut at) });
+    }
+
+    #[test]
+    fn move_info_uses_the_matching_generation_only() {
+        let Some(mut rom) = rom("platinum.nds") else {
+            return;
+        };
+        let mut len = 0;
+        let p = unsafe {
+            verity_rom_build_moves_cache(
+                Some(read_slice),
+                &mut rom as *mut _ as *mut c_void,
+                &mut len,
+            )
+        };
+        assert!(!p.is_null());
+        let v = unsafe { slice::from_raw_parts(p, len) }.to_vec();
+        unsafe { verity_rom_free(p, len) };
+        assert_eq!(unsafe { verity_moves_generation(v.as_ptr(), v.len()) }, 4);
+        let mut out = VerityMoveInfo {
+            type_: 0,
+            pp: 0,
+            from_rom: 9,
+            category: 9,
+            power: 0,
+            accuracy: 0,
+        };
+        assert!(unsafe { verity_move_info(4, 33, v.as_ptr(), v.len(), &mut out) });
+        assert_eq!(
+            (out.from_rom, out.category, out.power, out.accuracy),
+            (1, 0, 35, 95),
+            "Gen 4 Tackle"
+        );
+        // A Gen 4 cache says nothing about a Gen 5 save.
+        assert!(unsafe { verity_move_info(5, 33, v.as_ptr(), v.len(), &mut out) });
+        assert_eq!(out.from_rom, 0);
     }
 
     #[test]

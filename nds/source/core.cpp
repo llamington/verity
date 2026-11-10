@@ -242,13 +242,23 @@ int rom_rank(const char* path)
     return ok ? verity_rom_font_rank(code) : 0;
 }
 
-void scan_roms(const char* dir, int depth, char* best, int cap, int* best_rank)
+// The best ROM overall (font and icons) and the best of each generation (move stats, which differ
+// between generations).
+struct RomScan
+{
+    char best[192] = "";
+    int rank = 0;
+    char gen[2][192] = {"", ""};  // Gen 4, Gen 5
+    int gen_rank[2] = {0, 0};
+};
+
+void scan_roms(const char* dir, int depth, RomScan* scan)
 {
     DIR* d = opendir(dir);
     if (!d)
         return;
     struct dirent* e;
-    while ((e = readdir(d)) != nullptr && *best_rank < 3)
+    while ((e = readdir(d)) != nullptr && !(scan->rank == 3 && scan->gen_rank[0] > 0))
     {
         if (e->d_name[0] == '.')
             continue;
@@ -261,19 +271,42 @@ void scan_roms(const char* dir, int depth, char* best, int cap, int* best_rank)
         if (e->d_type == DT_DIR)
         {
             if (depth > 0)
-                scan_roms(path, depth - 1, best, cap, best_rank);
+                scan_roms(path, depth - 1, scan);
         }
         else if (dot && strcasecmp(dot, ".nds") == 0)
         {
             int r = rom_rank(path);
-            if (r > *best_rank)
+            if (r > scan->rank)
             {
-                *best_rank = r;
-                snprintf(best, cap, "%s", path);
+                scan->rank = r;
+                snprintf(scan->best, sizeof(scan->best), "%s", path);
+            }
+            int g = r == 3 ? 1 : 0;
+            if (r > 0 && r > scan->gen_rank[g])
+            {
+                scan->gen_rank[g] = r;
+                snprintf(scan->gen[g], sizeof(scan->gen[g]), "%s", path);
             }
         }
     }
     closedir(d);
+}
+
+uint8_t* g_moves[2] = {nullptr, nullptr};  // move caches for Gen 4 and Gen 5 saves
+size_t g_moves_len[2] = {0, 0};
+
+void load_moves(int g, const char* file)
+{
+    free(g_moves[g]);
+    size_t len = 0;
+    uint8_t* b = read_all(file, 16 * 1024, &len);
+    if (b && verity_moves_generation(b, len) != 4 + g)
+    {
+        free(b);
+        b = nullptr;
+    }
+    g_moves[g] = b;
+    g_moves_len[g] = b ? len : 0;
 }
 
 void use_font(uint8_t* buf, size_t len)
@@ -360,12 +393,32 @@ void rom_assets_init()
         cached = nullptr;
     }
     int icon_rank = open_icons(icon_file);
-    if (font_rank < 3 || icon_rank < 3)
+    char move_file[2][80];
+    for (int g = 0; g < 2; g++)
     {
-        char best[192] = "";
-        int best_rank = 0;
+        snprintf(move_file[g], sizeof(move_file[g]), "%s/moves%d.vmov", config_path(), 4 + g);
+        load_moves(g, move_file[g]);
+    }
+    if (font_rank < 3 || icon_rank < 3 || !g_moves[0] || !g_moves[1])
+    {
+        RomScan scan;
         for (const char* root : {"sd:/", "fat:/"})
-            scan_roms(root, 3, best, sizeof(best), &best_rank);
+            scan_roms(root, 3, &scan);
+        for (int g = 0; g < 2; g++)
+        {
+            if (g_moves[g] || !scan.gen_rank[g])
+                continue;
+            FILE* f = fopen(scan.gen[g], "rb");
+            if (!f)
+                continue;
+            size_t n = 0;
+            uint8_t* built = verity_rom_build_moves_cache(read_rom, f, &n);
+            fclose(f);
+            if (built && write_cache(move_file[g], built, n))
+                load_moves(g, move_file[g]);
+        }
+        const char* best = scan.best;
+        int best_rank = scan.rank;
         if (best_rank > font_rank || best_rank > icon_rank)
         {
             FILE* f = fopen(best, "rb");
@@ -420,6 +473,12 @@ bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* 
         !verity_icons_find(g_icon_head, g_icon_head_len, species, form, female, egg, palette, &at))
         return false;
     return fseek(g_icon_file, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, g_icon_file) == 512;
+}
+
+bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out)
+{
+    int g = generation == 5 ? 1 : 0;
+    return verity_move_info(generation, mv, g_moves[g], g_moves_len[g], out);
 }
 
 const char* font_game() { return g_font_game; }

@@ -69,6 +69,7 @@ emu-font: emu-harness nds
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-rom-font.json --out build/emu/ui-rom-font-$$g && \
 	  test -s build/emu/sd/_nds/verity/font.vfnt && test -s build/emu/sd/_nds/verity/icons.vicn || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-keyboard-jp.json --out build/emu/ui-keyboard-jp-$$g || exit 1; \
+	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves.json --out build/emu/ui-moves-$$g || exit 1; \
 	done
 
 emu-ui: emu-harness nds

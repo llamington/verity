@@ -346,6 +346,23 @@ bool verity_icons_palette(const uint8_t *head, size_t len, uint8_t index, uint16
 bool verity_icons_find(const uint8_t *head, size_t len, uint16_t species, uint8_t form,
                        uint8_t female, uint8_t egg, uint8_t *palette, uint32_t *tiles_at);
 
+/* Move stats from the ROM (category, power, accuracy), one cache per generation: values differ
+ * between Gen 4 and Gen 5. */
+uint8_t *verity_rom_build_moves_cache(verity_read_fn read, void *ctx, size_t *out_len);
+uint8_t verity_moves_generation(const uint8_t *p, size_t len);
+/* type_/pp from verity's data (0xFF if not loaded); category 0 physical, 1 special, 2 status;
+ * power 0 none, 1 varies; accuracy 0 (Gen 4) or 101 (Gen 5) never misses. */
+typedef struct verity_move_stats {
+    uint8_t type_;
+    uint8_t pp;
+    uint8_t from_rom;
+    uint8_t category;
+    uint8_t power;
+    uint8_t accuracy;
+} verity_move_stats;
+bool verity_move_info(uint8_t generation, uint16_t mv, const uint8_t *rom_moves, size_t len,
+                      verity_move_stats *out);
+
 /* Bit x of rows[y] is an ink pixel (stroke or shadow); ink starts at column 0 and is width wide.
  * left is where the game would place it after the pen (verity uses 1 px gaps instead). */
 typedef struct verity_glyph {
