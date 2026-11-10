@@ -17,6 +17,13 @@ and gaps are in `docs/research/p5-plan.md`.
   caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
   the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`
   runs `ui-moves.json` (Gen 4) and `ui-moves5.json` (Gen 5).
+- **Move panel look** (user: "visual hierarchy is pretty bad", wanted type colour): name, PP and
+  a type pill on row 1; a category pill (Physical red, Special blue, Status grey), Power and Acc
+  on row 2; the description in the label shade. `ui::pill` draws a rounded pill on the frame
+  layer with its own palette bank (15 colours per screen between `frame_clear` calls; the text
+  ink is white or dark by the colour's luma). `at()` clears the rest of its row, so draw pills
+  after any text to their left. Pills aren't used in lists yet: the row highlight sprite would
+  cover them.
 - **Held item icons:** `verity-rom::items` builds `items4.vitm` / `items5.vitm` from the best ROM
   of each generation; the editor shows the icon beside the Main tab's rows and in a top-screen
   panel of the held-item picker. Research and files: `docs/research/rom-icons.md` (Item icons).
