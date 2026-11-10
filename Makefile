@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all
+.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11
 
 all: nds
 
@@ -37,6 +37,10 @@ emu-flashback: emu-harness
 # P10: retail Black 2's Key System settings on a save that received keys (needs roms/, bios/).
 emu-keys: emu-harness
 	python3 tools/emu-harness/key_system_check.py
+
+# P11: in-game acceptance on every game with a ROM in roms/; the report goes to corpus/reports/p11.
+emu-p11: emu-harness nds
+	python3 tools/emu-harness/p11_suite.py
 
 # P10: "Enable all keys" on a new game's first save, then Challenge Mode in retail Black 2.
 emu-keys-all: emu-harness nds

@@ -47,6 +47,7 @@
     {"wait": 40},
     {"press": ["Down"], "frames": 2},
     {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
     {"press": ["A"], "frames": 2},
     {"wait": 240},
     {"screenshot": "05-saved.png"}
