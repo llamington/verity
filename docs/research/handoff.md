@@ -1,34 +1,72 @@
-# Handoff (2026-11-09)
+# Handoff (2026-11-10)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
 
 ## Resume here
 
-Phase H is complete: two linked consoles run through `{"instances": [...]}` scripts, and
-`make emu-link` performs a genuine Memory Link (Black 2 host, White receiving over Download Play).
-That passes P10's go/no-go: the save changes only in `0x7E000..0x7EA1F`, and two runs give identical
-bytes, so differential runs can compare saves directly. `verity::memlink` (`build`/`apply`) matches 17 of 17 genuine links byte for byte: run
-`tools/emu-harness/memlink_accept.py`, then `cargo test -p verity --test p10_memlink`. See
-`docs/memlink-findings.md`. The `fuddlesworth/pokebw2` decompilation is the reference for field
-meanings, read for facts only and proved against genuine links. The in-game check passes (`make emu-flashback`: retail Black 2 plays Bianca's flashback from a verity-linked save, an unlinked control doesn't). The Key System is done (`memlink::keys`, `make emu-keys`): exchanges follow the game's rules, and "Enable all keys" needs no partner (`make emu-keys-all`). The DS screen is done (`make emu-unova`), so **P10 is complete**. **P11** runs with `make emu-p11` on Platinum, HeartGold, White and Black 2 (see `docs/research/p11.md`); the other five games skip until their ROMs and setup exist. Next is the rest of **M8**:
-P11 in-game suite. Refusal policy (user, 2026-11-09): match the game where it is sensible, don't copy
-anything silly, and don't add complexity. See "Refusals" in the findings.
-Read only the PLAN sections for those (`grep -n "P10\|Phase H" PLAN.md`), not the whole file.
+**Next task: create the `verity-rom` crate** (M8, "optional ROM-graphics loading", now chosen; PLAN
+§P9 stretch goal at `grep -n "Stretch:" PLAN.md`). Nothing for it exists yet. Decisions (user,
+2026-11-10):
 
-Open items, none blocking P10:
+- **Nintendo assets never go in the repo or a release.** The DS loads its font and graphics from the
+  user's own ROM at runtime. Reasoning: a takedown notice can name a whole repo, and deleting files
+  later leaves them in git history and in forks.
+- **A separate workspace crate `crates/verity-rom`, used only by `verity-ffi`.** The core `verity`
+  crate must not depend on it, so a web build can't pull it in. A Cargo feature was rejected: ROM
+  parsing needs nothing from verity's internals, and feature unification could switch it on by
+  accident.
+- **The user never picks a ROM.** On startup, scan the SD card for `.nds` files and identify them by
+  the 4-letter game code in the header. The first time one is found, extract what verity needs into
+  `/_nds/verity/` (a few hundred KB at most), so the ROM isn't needed afterwards. Without a ROM, keep
+  today's behaviour (Latin text, "?" for kana and Hangul) and say on screen that a ROM enables more.
+  The ROM needn't match the save: any Gen 4 or 5 ROM serves every save.
+- **Check first:** whether an English ROM's font includes Japanese and Korean characters. Read the
+  font out of `roms/platinum.nds` and `roms/black2.nds` before building the loader. If it doesn't,
+  those names need a Japanese or Korean ROM, and the plan should say so.
+- Scope of the crate: NDS header and file system (FAT/FNT), NARC archives, LZ decompression, then the
+  font format and sprite/palette formats. File locations come from the pret decompilations
+  (`pret/pokeplatinum`, `pret/pokeheartgold`, read through `gh api`) and `fuddlesworth/pokebw2`,
+  read for facts only.
 
-- Japanese/Korean text has no font (shows "?"; the keyboard refuses those Pokémon). Needs a freely
-  licensed font or ROM font loading; the user hasn't decided.
+After that: **P12 web version** (in PLAN, user decisions 2026-11-10). WASM holds code only; data
+blobs are fetched per game; text uses browser fonts; sprites are hotlinked at runtime from the
+PokeAPI sprites repo through a CDN, pinned to a commit, with the species name and a generic icon as
+the fallback. Web builds don't use `verity-rom`.
+
+Done this session (2026-11-10), all committed and pushed:
+
+- **P10 complete.** In-game flashback check (`make emu-flashback`), Key System exchange under the
+  game's rules (`memlink::keys`, `make emu-keys`), the DS screen "Memory Link and keys"
+  (`make emu-unova`), and "Enable all keys" without a partner (user request; enabled only, never
+  earned; `make emu-keys-all` checks Challenge Mode on a new game's first save). Details:
+  `docs/memlink-findings.md`.
+- **Validator:** an empty party is accepted only when every box is empty too (a game before its first
+  Pokémon). See `docs/discrepancies.md`.
+- **P11** (`make emu-p11`, `docs/research/p11.md`): passes on Platinum, HeartGold, White and Black 2.
+  The user chose to build on these four; Diamond, Pearl, SoulSilver, Black and White 2 skip for lack
+  of ROMs and setup. Nothing schedules it nightly.
+- Fixed: the UI scripts' Down counts to "Save to SD card" were stale (Mystery gifts row, then the
+  Memory Link row). `make emu-ui` can't detect a missed save by itself; P11 does.
+
+Open items:
+
 - Colosseum/XD origins stay "not checked yet" (the user deferred them), in Gen 4 and Gen 5 saves.
 - The Gen 5 wizard makes wild Pokémon only. Gen 5 eggs and statics aren't planned in it yet.
 - `Test-Save-White-2.sav` can't be saved from the DS: its Moltres (box slot 145) has an impossible
   met location and the whole-save validator refuses it. That is intended.
 - On hatched gift eggs that are already illegal, PKHeX can blame different checks after Poké
   Transfer; the verdict is the same. The test accepts this only for the `egg` source.
+- Releasing a `.nds` would embed PKHeX-derived data, including Mystery Gift event records. The user
+  was advised to get legal advice before publishing builds.
+- The Refusal policy (user, 2026-11-09) still applies: match the game where it is sensible, don't copy
+  anything silly, and don't add complexity.
 
 Working economically: read narrowly (`grep`, `offset`/`limit`) and cap command output. Most token
-use has been whole-file reads of `analysis4.rs`, PKHeX sources and repeated screenshots.
+use has been whole-file reads of `analysis4.rs`, PKHeX sources and repeated screenshots. For
+emulator checks, compare screenshot hashes and view small contact sheets rather than many full
+images. The decompilations aren't on disk; read single files with
+`gh api -H 'Accept: application/vnd.github.raw' repos/<owner>/<repo>/contents/<path>`.
 
 ## Environment
 
