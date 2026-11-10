@@ -1947,8 +1947,28 @@ private:
         return true;
     }
 
+    // The highlighted ribbon on the top screen (rows row..row+3): its image from the ROM, name and
+    // whether this Pokémon has it.
+    void ribbon_details(int row, int i)
+    {
+        ui::panel(top(), 1, row, 30, 4);
+        for (int r = row; r < row + 4; r++)
+            at(top(), 1, r, "%s", "");
+        uint8_t tiles[512];
+        uint16_t colors[16];
+        bool icon = core::ribbon_icon(i, tiles, colors);
+        ui::item_icon(true, 10, row * 8, icon ? tiles : nullptr, colors);
+        int c = icon ? 6 : 1;
+        at(top(), c, row + 1, "%s", ribbon_name(i));
+        ui::badge(top(), c, row + 2, ribbon_on(i) ? ui::Badge::Legal : ui::Badge::Fishy,
+                  ribbon_on(i) ? "Has it" : "Not set");
+        if (!icon)
+            at(top(), 1, row + 3, UI_MUTED "A ROM on the SD card adds images.");
+    }
+
     void draw_ribbons()
     {
+        ribbon_details(10, ribbons_.selected);
         ui::frame_clear(bottom());
         ui::title(bottom(), "Ribbons");
         char n[16];

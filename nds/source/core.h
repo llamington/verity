@@ -48,6 +48,9 @@ bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* 
 // A held item's icon from a ROM of the save's generation: 512 bytes of 4 bpp tiles (1D 32x32)
 // and 16 BGR555 colours. False without one (and for item 0).
 bool item_icon(uint8_t generation, uint16_t item, uint8_t* tiles, uint16_t* colors);
+// A ribbon's image from the ROM by verity's list position: 512 bytes of 4 bpp tiles (1D 32x32)
+// and 16 colours. False without a ROM.
+bool ribbon_icon(int index, uint8_t* tiles, uint16_t* colors);
 // Type and PP of a move, plus category, power and accuracy when a ROM of the save's generation
 // was found (from_rom). False for a move number the generation doesn't have.
 bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out);

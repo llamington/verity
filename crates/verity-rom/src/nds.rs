@@ -192,6 +192,36 @@ impl<S: Source> Rom<S> {
         Ok(crate::lz::blz_decompress(&raw).unwrap_or(raw))
     }
 
+    /// ARM9 overlay `id`, BLZ-decompressed when its table entry says so. The overlay table (header
+    /// 0x50, 32 bytes per entry) gives each overlay's file ID at 0x18 and, at 0x1C, its compressed
+    /// size in the low 24 bits and the compressed flag in bit 24.
+    pub fn overlay(&mut self, id: u32) -> Result<Vec<u8>> {
+        let mut h = [0u8; 8];
+        self.src.read_at(0x50, &mut h)?;
+        let (table, size) = (u32_at(&h, 0)?, u32_at(&h, 4)?);
+        if id >= size / 32 {
+            return Err(Error::NotFound);
+        }
+        let mut e = [0u8; 32];
+        self.src.read_at(table + 32 * id, &mut e)?;
+        let file = u16::try_from(u32_at(&e, 0x18)?).map_err(|_| Error::Format("overlay"))?;
+        let r = self.file_by_id(file)?;
+        if r.len() > 4 << 20 {
+            return Err(Error::Format("overlay size"));
+        }
+        let mut raw = self.read(r)?;
+        let flags = u32_at(&e, 0x1C)?;
+        if flags & (1 << 24) == 0 {
+            return Ok(raw);
+        }
+        // The file may be padded past the compressed size.
+        let packed = (flags & 0xFF_FFFF) as usize;
+        if packed > 0 && packed <= raw.len() {
+            raw.truncate(packed);
+        }
+        crate::lz::blz_decompress(&raw)
+    }
+
     pub fn read(&mut self, r: FileRange) -> Result<Vec<u8>> {
         let mut out = vec![0; r.len() as usize];
         self.src.read_at(r.start, &mut out)?;

@@ -10,6 +10,7 @@ use verity_rom::icons::{self, CachedIcons, IconKey};
 use verity_rom::items::{self, CachedItems};
 use verity_rom::moves::{self, CachedMoves};
 use verity_rom::nds::{Game, Rom};
+use verity_rom::ribbons::{self, CachedRibbons};
 use verity_rom::{Error, Source};
 
 /// Reads `len` bytes at `offset` of the ROM file into `buf`; false on failure.
@@ -243,6 +244,79 @@ pub unsafe extern "C" fn verity_icons_find(
     unsafe {
         *palette = r.palette;
         *tiles_at = r.tiles_at;
+    }
+    true
+}
+
+/// Builds the ribbon image cache file for the ROM read by `src`.
+pub fn build_ribbon_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error> {
+    let mut rom = Rom::open(src)?;
+    Ok(ribbons::load(&mut rom)?.to_cache(rom.game_code()))
+}
+
+/// C ABI: builds the ribbon image cache from a ROM, like `verity_rom_build_font_cache` (free the
+/// result with `verity_rom_free`). Null for a ROM verity can't read ribbons from (Diamond/Pearl).
+///
+/// # Safety
+///
+/// As for `verity_rom_build_font_cache`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_rom_build_ribbon_cache(
+    read: Option<ReadFn>,
+    ctx: *mut c_void,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let Some(read) = read else {
+        return core::ptr::null_mut();
+    };
+    if out_len.is_null() {
+        return core::ptr::null_mut();
+    }
+    match build_ribbon_cache(Callback { read, ctx }) {
+        Ok(v) => {
+            let b = v.into_boxed_slice();
+            unsafe { *out_len = b.len() };
+            alloc::boxed::Box::into_raw(b) as *mut u8
+        }
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+/// C ABI: true if `p` is a ribbon cache.
+///
+/// # Safety
+///
+/// `p` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_ribbons_check(p: *const u8, len: usize) -> bool {
+    !p.is_null() && CachedRibbons::parse(unsafe { slice::from_raw_parts(p, len) }).is_ok()
+}
+
+/// C ABI: the image of the ribbon at position `index` of verity's list (Sinnoh set, Hoenn set,
+/// Sinnoh contests): 512 tile bytes (4 bpp, 1D 32x32) into `tiles` and 16 BGR555 colours into
+/// `colors`. False if there is none.
+///
+/// # Safety
+///
+/// `cache` is null or valid for `len` bytes; `tiles` and `colors` are null or have room.
+#[no_mangle]
+pub unsafe extern "C" fn verity_ribbon_icon(
+    cache: *const u8,
+    len: usize,
+    index: u8,
+    tiles: *mut u8,
+    colors: *mut u16,
+) -> bool {
+    if cache.is_null() || tiles.is_null() || colors.is_null() {
+        return false;
+    }
+    let c = CachedRibbons::parse(unsafe { slice::from_raw_parts(cache, len) }).ok();
+    let Some((t, pal)) = c.and_then(|c| c.icon(usize::from(index))) else {
+        return false;
+    };
+    unsafe {
+        core::ptr::copy_nonoverlapping(t.as_ptr(), tiles, t.len());
+        core::ptr::copy_nonoverlapping(pal.as_ptr(), colors, 16);
     }
     true
 }
@@ -678,6 +752,25 @@ mod tests {
         assert!(unsafe { verity_icons_find(v.as_ptr(), head, 25, 0, 0, 0, &mut pi, &mut at) });
         assert!(at as usize + 512 <= v.len());
         assert!(!unsafe { verity_icons_find(v.as_ptr(), head, 2000, 0, 0, 0, &mut pi, &mut at) });
+    }
+
+    #[test]
+    fn ribbon_cache_through_the_c_abi() {
+        let Some(rom) = rom("white.nds") else {
+            return;
+        };
+        let v = build_ribbon_cache(rom.as_slice()).unwrap();
+        assert!(unsafe { verity_ribbons_check(v.as_ptr(), v.len()) });
+        let (mut t, mut c) = ([0u8; 512], [0u16; 16]);
+        for i in 0..80 {
+            assert!(unsafe {
+                verity_ribbon_icon(v.as_ptr(), v.len(), i, t.as_mut_ptr(), c.as_mut_ptr())
+            });
+        }
+        assert!(!unsafe {
+            verity_ribbon_icon(v.as_ptr(), v.len(), 80, t.as_mut_ptr(), c.as_mut_ptr())
+        });
+        assert!(!unsafe { verity_ribbons_check(v.as_ptr(), v.len() - 1) });
     }
 
     #[test]

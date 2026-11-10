@@ -13,6 +13,10 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Done 2026-11-10 (all committed and pushed):**
 
+- **Ribbon images:** `verity-rom::ribbons` (`ribbons.vrib` from the best ROM; Gen 5 tables are in
+  overlays, read with `Rom::overlay`); the ribbon list shows the highlighted ribbon on the top
+  screen. `docs/research/rom-icons.md` (Ribbons). `make emu-font` runs `ui-ribbons.json` too; the
+  stand-in ROMs now keep the overlays.
 - **Move descriptions:** from the ROM's message bank into the move cache (version 2, so old
   caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
   the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`

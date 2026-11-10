@@ -81,18 +81,24 @@ fn table(code: &[u8], gen4: bool, members: usize, last: usize) -> Result<Vec<(u1
 }
 
 fn palette(nclr: &[u8]) -> Result<[u16; 16]> {
+    palette_n(nclr, 0)
+}
+
+/// Palette `p` (16 BGR555 colours) of an NCLR.
+pub(crate) fn palette_n(nclr: &[u8], p: usize) -> Result<[u16; 16]> {
     let at = nclr
         .windows(4)
         .position(|w| w == b"TTLP")
         .ok_or(Error::Format("NCLR"))?;
     let mut pal = [0u16; 16];
     for (i, c) in pal.iter_mut().enumerate() {
-        *c = u16_at(nclr, at + 0x18 + 2 * i)?;
+        *c = u16_at(nclr, at + 0x18 + 32 * p + 2 * i)?;
     }
     Ok(pal)
 }
 
-fn frame(ncgr: &[u8]) -> Result<[u8; TILES]> {
+/// The first 32x32 4 bpp frame of an NCGR.
+pub(crate) fn frame(ncgr: &[u8]) -> Result<[u8; TILES]> {
     if ncgr.get(..4) != Some(b"RGCN") {
         return Err(Error::Format("NCGR"));
     }
