@@ -299,7 +299,7 @@ void load_moves(int g, const char* file)
 {
     free(g_moves[g]);
     size_t len = 0;
-    uint8_t* b = read_all(file, 16 * 1024, &len);
+    uint8_t* b = read_all(file, 96 * 1024, &len);  // stats and descriptions (about 50 KB)
     if (b && verity_moves_generation(b, len) != 4 + g)
     {
         free(b);
@@ -532,6 +532,12 @@ bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out)
 {
     int g = generation == 5 ? 1 : 0;
     return verity_move_info(generation, mv, g_moves[g], g_moves_len[g], out);
+}
+
+bool move_description(uint8_t generation, uint16_t mv, char* out, size_t cap)
+{
+    int g = generation == 5 ? 1 : 0;
+    return verity_move_description(generation, mv, g_moves[g], g_moves_len[g], out, cap);
 }
 
 const char* font_game() { return g_font_game; }

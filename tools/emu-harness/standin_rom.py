@@ -9,13 +9,13 @@ import struct
 import sys
 
 KEEP = {b"CPU": ["graphic/pl_font.narc", "poketool/icongra/pl_poke_icon.narc", "poketool/waza/pl_waza_tbl.narc",
-                 "itemtool/itemdata/item_icon.narc"],
+                 "itemtool/itemdata/item_icon.narc", "msgdata/pl_msg.narc"],
         b"ADA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
-                 "itemtool/itemdata/item_icon.narc"],
+                 "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
         b"APA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
-                 "itemtool/itemdata/item_icon.narc"],
-        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8"]}
-GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5"]
+                 "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
+        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7"]}
+GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5", "a/0/0/2"]
 
 
 def file_id(d, fnt, path):

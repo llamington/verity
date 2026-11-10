@@ -98,6 +98,9 @@ void slot(Surface* c, int col, int row, int style);
 constexpr int kSlotIconX = 4, kSlotIconY = -4;
 // Width in pixels of text as drawn.
 int text_width(const char* s);
+// Draws text from (col, row), word-wrapped to width px, on at most max_rows rows; returns the rows
+// used. A word that doesn't fit on the last row ends it with "...".
+int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text);
 
 // UTF-16 to drawable UTF-8: ASCII as is; other characters as UTF-8 when the ROM font has them,
 // otherwise common accented letters folded and the rest '?'. Cut short rather than split one.

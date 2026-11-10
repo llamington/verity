@@ -71,6 +71,7 @@ emu-font: emu-harness nds
 	  ls build/emu/sd/_nds/verity/items?.vitm >/dev/null || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-keyboard-jp.json --out build/emu/ui-keyboard-jp-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves.json --out build/emu/ui-moves-$$g || exit 1; \
+	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves5.json --out build/emu/ui-moves5-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items.json --out build/emu/ui-items-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items5.json --out build/emu/ui-items5-$$g || exit 1; \
 	done
