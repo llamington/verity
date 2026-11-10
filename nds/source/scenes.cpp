@@ -313,7 +313,7 @@ public:
         ui::panel(bottom(), 0, list_.first_row, 32, count_);
         for (int r = 0; r < count_; r++)
             at(bottom(), 0, list_.first_row + r, " %s", kItems[items_[r]]);
-        ui::hints(bottom(), "A:Open|B:Files");
+        ui::hints(bottom(), confirm_leave_ ? "A:Open|B:Discard edits" : "A:Open|B:Files");
         list_.count = count_;
         list_.rows = count_;
     }
@@ -323,9 +323,24 @@ public:
         bool changed;
         int a = list_.update(in, &changed);
         ui::bar(0, list_.bar_y(), true);
-        if (in.down & KEY_B)
-            return false;
         int item = a >= 0 ? items_[a] : -1;
+        // Leaving drops unsaved edits (the file is read again when opened), so the first B or
+        // Close only warns; anything else cancels the warning.
+        if ((in.down & KEY_B) || item == kClose)
+        {
+            if (!core::doc().dirty || confirm_leave_)
+                return false;
+            confirm_leave_ = true;
+            snprintf(message_, sizeof(message_), "Not saved. B again to discard.");
+            enter();
+            return true;
+        }
+        if (confirm_leave_ && (in.down || changed))
+        {
+            confirm_leave_ = false;
+            message_[0] = 0;
+            enter();
+        }
         if (item == kBoxes)
         {
             message_[0] = 0;
@@ -348,12 +363,11 @@ public:
             snprintf(message_, sizeof(message_), "%s", m);
             enter();
         }
-        if (item == kClose)
-            return false;
         return true;
     }
 
 private:
+    bool confirm_leave_ = false;
     enum { kBoxes, kGifts, kSave, kClose, kUnova };
     static constexpr uint8_t kBlack2White2 = 5;
     static constexpr const char* kItems[5] = {"Boxes and party", "Mystery gifts", "Save to SD card",

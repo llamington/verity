@@ -26,8 +26,8 @@ and gaps are in `docs/research/p5-plan.md`.
 - **Fixed: "Checksums BAD" on an edited, unsaved save.** Edits leave the block checksums in memory
   stale until `verity_save_finalize` runs on save, and the overview re-probed the buffer. It now
   shows the file's state (`Doc::file_checksums_ok`) and "updated on save" while there are unsaved
-  edits. Also fixed: `core::open` kept `dirty` from the previous save. Still open: backing out of
-  an edited save with B discards the edits without asking.
+  edits. Also fixed: `core::open` kept `dirty` from the previous save. Leaving an edited save (B or
+  Close) now warns first; a second B discards (`ui-leave.json`, in `make emu-ui`).
 - **Mystery Gift list repeats explained and labelled:** repeated titles are different cards (regional
   or shop releases of one event, or a series sharing a title) whose Pokémon differ in OT name and
   trainer ID. Rows now show what the card gives, the OT, the ID and the region; the top panel adds
