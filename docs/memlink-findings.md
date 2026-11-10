@@ -64,5 +64,5 @@ been identified. The block's `0x1F958` field is presumably Musical props, which 
 ## Harness reliability
 
 A link can drop mid-download; Black 2 then says "Unable to connect" and leaves the save untouched.
-This happened in about 2 of 20 parallel runs at melonDS's 25 ms timeout. At 150 ms, 4 of 4 parallel
+This happened in 2 of 18 parallel runs at melonDS's 25 ms timeout. At 150 ms, 4 of 4 parallel
 runs linked on the first try. `memlink_run.py` retries when the save comes back unchanged.
