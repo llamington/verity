@@ -96,11 +96,17 @@ int badge(Surface* c, int col, int row, Badge b, const char* text);
 // game's icon at kSlotIconX/Y from the slot's corner (its frames draw the Pokemon low).
 void slot(Surface* c, int col, int row, int style);
 constexpr int kSlotIconX = 4, kSlotIconY = -4;
+// A rounded pill of a colour with its text centred (white or dark ink to suit the colour), for
+// types and move categories on a panel; returns the column after it. Up to 15 colours per screen
+// between frame_clear calls; past that, pills are white.
+int pill(Surface* c, int col, int row, uint16_t color, const char* text);
+// A type's colour (the placeholder icons' palette).
+uint16_t type_color(int type);
 // Width in pixels of text as drawn.
 int text_width(const char* s);
 // Draws text from (col, row), word-wrapped to width px, on at most max_rows rows; returns the rows
-// used. A word that doesn't fit on the last row ends it with "...".
-int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text);
+// used. A word that doesn't fit on the last row ends it with "...". Muted: the label shade.
+int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text, bool muted = false);
 
 // UTF-16 to drawable UTF-8: ASCII as is; other characters as UTF-8 when the ROM font has them,
 // otherwise common accented letters folded and the rest '?'. Cut short rather than split one.

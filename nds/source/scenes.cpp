@@ -2114,8 +2114,9 @@ private:
         return true;
     }
 
-    // A move in a panel on the top screen (rows row..row+5): name, type and PP; category, power
-    // and accuracy; the description, wrapped to four rows.
+    // A move in a panel on the top screen (rows row..row+5): the name with its type pill; the
+    // category pill with power, accuracy and PP; the description in the label shade, wrapped to
+    // four rows.
     void move_details(int row, uint16_t mv)
     {
         ui::panel(top(), 1, row, 30, 6);
@@ -2128,15 +2129,25 @@ private:
         }
         verity_move_stats m;
         uint8_t gen = gen4_ ? 4 : 5;
+        const char* name = ui::name(VERITY_NAME_MOVES, mv);
         if (!core::move_info(gen, mv, &m))
         {
-            at(top(), 1, row, "%s", ui::name(VERITY_NAME_MOVES, mv));
+            at(top(), 1, row, "%s", name);
             at(top(), 1, row + 1, UI_MUTED "Not in Gen %u games.", gen);
             return;
         }
-        at(top(), 1, row, "%s", ui::name(VERITY_NAME_MOVES, mv));
+        at(top(), 1, row, "%s", name);
         if (m.type_ != 0xFF)
-            at(top(), 17, row, UI_MUTED "%s" UI_MUTED "  %u PP", ui::name(VERITY_NAME_TYPES, m.type_), m.pp);
+        {
+            // At the right edge: "n PP", then the type pill.
+            const char* type = ui::name(VERITY_NAME_TYPES, m.type_);
+            int start = 31 - (ui::text_width(type) + 15) / 8;
+            char pp[16];
+            snprintf(pp, sizeof(pp), "%u " UI_MUTED "PP", m.pp);
+            // at() clears the rest of its row, so the pill goes last.
+            at(top(), start - 1 - (ui::text_width(pp) + 7) / 8, row, "%s", pp);
+            ui::pill(top(), start, row, ui::type_color(m.type_), type);
+        }
         if (!m.from_rom)
         {
             at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
@@ -2144,6 +2155,7 @@ private:
             return;
         }
         static const char* kCat[3] = {"Physical", "Special", "Status"};
+        static const uint16_t kCatColor[3] = {RGB15(27, 9, 5), RGB15(7, 12, 26), RGB15(11, 11, 13)};
         char power[12], acc[16];
         if (m.power == 0)
             snprintf(power, sizeof(power), "-");
@@ -2155,12 +2167,17 @@ private:
             snprintf(acc, sizeof(acc), "sure hit");
         else
             snprintf(acc, sizeof(acc), "%u%%", m.accuracy);
-        at(top(), 1, row + 1, "%s", kCat[m.category % 3]);
-        at(top(), 10, row + 1, UI_MUTED "Power" UI_MUTED " %s", power);
-        at(top(), 20, row + 1, UI_MUTED "Acc" UI_MUTED " %s", acc);
+        // Left to right by measured width (fonts differ), PP at the right edge.
+        int col = ui::pill(top(), 1, row + 1, kCatColor[m.category % 3], kCat[m.category % 3]) + 1;
+        char buf[24];
+        snprintf(buf, sizeof(buf), UI_MUTED "Power" UI_MUTED " %s", power);
+        at(top(), col, row + 1, "%s", buf);
+        col += (ui::text_width(buf) + 7) / 8 + 1;
+        snprintf(buf, sizeof(buf), UI_MUTED "Acc" UI_MUTED " %s", acc);
+        at(top(), col, row + 1, "%s", buf);
         char desc[192];
         if (core::move_description(gen, mv, desc, sizeof(desc)))
-            ui::wrap(top(), 1, row + 2, 236, 4, desc);
+            ui::wrap(top(), 1, row + 2, 236, 4, desc, true);
     }
 
     // The held item's icon from a ROM of the save's generation, if there is one; false otherwise

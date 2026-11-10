@@ -278,6 +278,8 @@ enum Kind : uint8_t
     K_INVALID,
     K_SAFE,
     K_SLOT,
+    K_PILL_DARK,   // a coloured pill under dark text
+    K_PILL_LIGHT,  // a coloured pill under white text
 };
 // Tile numbers in the frame layer.
 enum : uint16_t
@@ -290,7 +292,8 @@ enum : uint16_t
     T_BADGE = 92,     // 4 verdict dots (stride 3)
     T_BETWEEN = 104,  // 5: one panel's bottom ring over the next one's top ring, in one row
     T_KEYSEL = 109,   // 3: a selected key on a panel (peach pill, orange edge)
-    T_COUNT = 112,
+    T_PILL = 112,     // 4: left, middle, right, single; fill 15, edge 13 (set per palette bank)
+    T_COUNT = 116,
 };
 
 uint16_t* g_fmap[2];
@@ -311,6 +314,10 @@ uint8_t ink_for(Surface* c, int x, int y)
         return C_INVALID;
     if (k == K_FISHY || k == K_SAFE)
         return C_SAFE;
+    if (k == K_PILL_DARK)
+        return C_INK;
+    if (k == K_PILL_LIGHT)
+        return C_WHITE;
     bool dark = k == K_PANEL || k == K_CHIP || k == K_SLOT;
     if (g_muted)
         return dark ? C_MUTED : C_MUTED_L;
@@ -410,6 +417,18 @@ void make_frame_tiles(uint16_t* tiles)
                 px[y * 8 + x] = v < 0 ? C_INK : (uint8_t)v;
             }
         put_tile(tiles, T_CHIP + t, px);
+    }
+    // Pills on a cream panel, coloured by palette bank (see pill()).
+    for (int t = 0; t < 4; t++)
+    {
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 8; x++)
+            {
+                int v = t < 3 ? rounded(t * 8 + x, y, 0, 0, 24, 8, 3, 1, 15, 13)
+                              : rounded(x, y, 0, 0, 8, 8, 3, 1, 15, 13);
+                px[y * 8 + x] = v < 0 ? C_CREAM : (uint8_t)v;
+            }
+        put_tile(tiles, T_PILL + t, px);
     }
     // A selected key on a cream panel.
     for (int t = 0; t < 3; t++)
@@ -575,10 +594,48 @@ bool has_glyph(uint16_t c)
     return (c >= 0x20 && c < 0x7F) || rom_glyph(c, &g);
 }
 
+namespace {
+// Pill colours per screen: palette bank b (1..15) is the theme with colour 15 = g_pill[s][b].
+uint16_t g_pill[2][16];
+int g_pills[2];
+}  // namespace
+
 void frame_clear(Surface* c)
 {
     for (int i = 0; i < kTiles; i++)
         set_cell(c, i % 32, i / 32, T_BACK, K_BACK);
+    g_pills[screen_of(c)] = 0;
+}
+
+int pill(Surface* c, int col, int row, uint16_t color, const char* text)
+{
+    int s = screen_of(c);
+    int bank = 0;
+    for (int b = 1; b <= g_pills[s] && !bank; b++)
+        if (g_pill[s][b] == color)
+            bank = b;
+    if (!bank && g_pills[s] < 15)
+    {
+        bank = ++g_pills[s];
+        g_pill[s][bank] = color;
+        uint16_t* pal = (s ? BG_PALETTE_SUB : BG_PALETTE) + 16 * bank;
+        for (int i = 0; i < 16; i++)
+            pal[i] = kTheme[i];
+        int r = color & 31, g = color >> 5 & 31, b = color >> 10 & 31;
+        pal[15] = color;
+        pal[13] = RGB15(r * 3 / 4, g * 3 / 4, b * 3 / 4);  // edge
+    }
+    // White text unless the colour is light (luma on a 0..31 scale).
+    int r = color & 31, g = color >> 5 & 31, b = color >> 10 & 31;
+    uint8_t kind = bank && (r * 3 + g * 6 + b) / 10 < 18 ? K_PILL_LIGHT : K_PILL_DARK;
+    int w = draw_text(nullptr, 0, 0, text);
+    int cells = (w + 8 + 7) / 8;
+    uint16_t pb = (uint16_t)(bank << 12);
+    for (int k = 0; k < cells; k++)
+        set_cell(c, col + k, row,
+                 pb | (T_PILL + (cells == 1 ? 3 : k == 0 ? 0 : k == cells - 1 ? 2 : 1)), kind);
+    draw_text(c, col * 8 + (cells * 8 - w) / 2 - 2, row * 8, text);
+    return col + cells;
 }
 
 void title(Surface* c, const char* fmt, ...)
@@ -709,7 +766,7 @@ void slot(Surface* c, int col, int row, int style)
 
 int text_width(const char* s) { return draw_text(nullptr, 0, 0, s); }
 
-int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text)
+int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text, bool muted)
 {
     char line[96];
     int rows = 0;
@@ -756,7 +813,7 @@ int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text
             }
             strcat(line, "...");
         }
-        at(c, col, row + rows, "%s", line);
+        at(c, col, row + rows, muted ? UI_MUTED "%s" : "%s", line);
         rows++;
         p += n;
     }
@@ -829,6 +886,12 @@ const uint16_t kTypeColor[kTypes][2] = {
     {RGB15(10, 8, 8), RGB15(5, 4, 4)},       // Dark
     {RGB15(20, 20, 20), RGB15(12, 12, 12)},  // unknown
 };
+
+}  // namespace
+
+uint16_t type_color(int type) { return kTypeColor[type >= 0 && type < kTypes ? type : kTypes - 1][0]; }
+
+namespace {
 
 // Sprite palette (8bpp, shared): 1 outline, 2 eye, 3 egg, 4 egg spots, 5 star, 6 cursor,
 // 7 bar, then 16 + 2*type body/shade.
