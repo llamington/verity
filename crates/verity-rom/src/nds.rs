@@ -176,6 +176,22 @@ impl<S: Source> Rom<S> {
         Err(Error::NotFound)
     }
 
+    /// The ARM9 binary, BLZ-decompressed when its footer says it is compressed (HeartGold and the
+    /// Gen 5 games; Platinum's is plain).
+    pub fn arm9(&mut self) -> Result<Vec<u8>> {
+        let mut h = [0u8; 0x30];
+        self.src.read_at(0, &mut h)?;
+        let (offset, size) = (u32_at(&h, 0x20)?, u32_at(&h, 0x2C)?);
+        if size > 4 << 20 {
+            return Err(Error::Format("ARM9 size"));
+        }
+        let raw = self.read(FileRange {
+            start: offset,
+            end: offset + size,
+        })?;
+        Ok(crate::lz::blz_decompress(&raw).unwrap_or(raw))
+    }
+
     pub fn read(&mut self, r: FileRange) -> Result<Vec<u8>> {
         let mut out = vec![0; r.len() as usize];
         self.src.read_at(r.start, &mut out)?;

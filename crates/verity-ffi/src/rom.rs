@@ -6,6 +6,7 @@ use core::slice;
 
 use verity::text::{value_to_char_g4, TERMINATOR};
 use verity_rom::font::{self, CachedFont, Keys};
+use verity_rom::icons::{self, CachedIcons, IconKey};
 use verity_rom::nds::{Game, Rom};
 use verity_rom::{Error, Source};
 
@@ -116,6 +117,132 @@ pub unsafe extern "C" fn verity_rom_free(p: *mut u8, len: usize) {
     if !p.is_null() {
         drop(unsafe { alloc::boxed::Box::from_raw(core::ptr::slice_from_raw_parts_mut(p, len)) });
     }
+}
+
+/// Builds the icon cache file for the ROM read by `src`.
+pub fn build_icon_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error> {
+    let mut rom = Rom::open(src)?;
+    let set = icons::load(&mut rom)?;
+    Ok(set.to_cache(rom.game_code()))
+}
+
+/// C ABI: builds the box icon cache from a ROM read through `read`, like
+/// `verity_rom_build_font_cache` (free the result with `verity_rom_free`). Null on failure,
+/// including a ROM whose icons verity can't place.
+///
+/// # Safety
+///
+/// As for `verity_rom_build_font_cache`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_rom_build_icon_cache(
+    read: Option<ReadFn>,
+    ctx: *mut c_void,
+    out_len: *mut usize,
+) -> *mut u8 {
+    let Some(read) = read else {
+        return core::ptr::null_mut();
+    };
+    if out_len.is_null() {
+        return core::ptr::null_mut();
+    }
+    match build_icon_cache(Callback { read, ctx }) {
+        Ok(v) => {
+            let b = v.into_boxed_slice();
+            unsafe { *out_len = b.len() };
+            alloc::boxed::Box::into_raw(b) as *mut u8
+        }
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+/// C ABI: how many bytes from the start of an icon cache file the DS keeps in memory (the head:
+/// palettes and index), from its first 16 bytes; 0 if it isn't an icon cache.
+///
+/// # Safety
+///
+/// `p` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_icons_head_len(p: *const u8, len: usize) -> usize {
+    if p.is_null() {
+        return 0;
+    }
+    CachedIcons::head_len(unsafe { slice::from_raw_parts(p, len) }).unwrap_or(0)
+}
+
+fn cached_icons(p: *const u8, len: usize) -> Option<CachedIcons<'static>> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: callers vouch that `p` is valid for `len` bytes while the icons are in use.
+    CachedIcons::parse(unsafe { slice::from_raw_parts(p, len) }).ok()
+}
+
+/// C ABI: palette `index` (16 BGR555 colours) of the icon cache head; false if there is none.
+///
+/// # Safety
+///
+/// `head` is null or valid for `len` bytes; `out` is null or has room for 16 `u16`s.
+#[no_mangle]
+pub unsafe extern "C" fn verity_icons_palette(
+    head: *const u8,
+    len: usize,
+    index: u8,
+    out: *mut u16,
+) -> bool {
+    let Some(pal) = cached_icons(head, len).and_then(|c| c.palette(index)) else {
+        return false;
+    };
+    if out.is_null() {
+        return false;
+    }
+    unsafe { core::ptr::copy_nonoverlapping(pal.as_ptr(), out, 16) };
+    true
+}
+
+/// C ABI: the number of palettes in the icon cache head (0 if it isn't one).
+///
+/// # Safety
+///
+/// `head` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_icons_palette_count(head: *const u8, len: usize) -> u8 {
+    cached_icons(head, len).map_or(0, |c| c.palette_count)
+}
+
+/// C ABI: the icon of a Pokémon (`female` and `egg` 0/1). Writes its palette and the file offset of
+/// its 512 bytes of 4 bpp tiles (1D, 32x32). False if the cache has no icon for it.
+///
+/// # Safety
+///
+/// `head` is null or valid for `len` bytes; `palette` and `tiles_at` are null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn verity_icons_find(
+    head: *const u8,
+    len: usize,
+    species: u16,
+    form: u8,
+    female: u8,
+    egg: u8,
+    palette: *mut u8,
+    tiles_at: *mut u32,
+) -> bool {
+    if palette.is_null() || tiles_at.is_null() {
+        return false;
+    }
+    let key = IconKey {
+        species,
+        form,
+        female: female != 0,
+        egg: egg != 0,
+    };
+    let Some(r) = cached_icons(head, len).and_then(|c| c.find(key)) else {
+        return false;
+    };
+    unsafe {
+        *palette = r.palette;
+        *tiles_at = r.tiles_at;
+    }
+    true
 }
 
 /// A glyph for the DS renderer: bit `x` of `rows[y]` is an ink pixel (stroke or shadow; the games
@@ -266,6 +393,34 @@ mod tests {
         assert!(glyph(&c, '\u{FFFE}').is_none());
         // A damaged cache is refused.
         assert!(!unsafe { verity_font_check(c.as_ptr(), c.len() - 1) });
+    }
+
+    #[test]
+    fn icon_cache_through_the_c_abi() {
+        let Some(mut rom) = rom("black2.nds") else {
+            return;
+        };
+        let mut len = 0;
+        let p = unsafe {
+            verity_rom_build_icon_cache(
+                Some(read_slice),
+                &mut rom as *mut _ as *mut c_void,
+                &mut len,
+            )
+        };
+        assert!(!p.is_null());
+        let v = unsafe { slice::from_raw_parts(p, len) }.to_vec();
+        unsafe { verity_rom_free(p, len) };
+        let head = unsafe { verity_icons_head_len(v.as_ptr(), 16) };
+        assert!(head > 0 && head < v.len());
+        assert_eq!(unsafe { verity_icons_palette_count(v.as_ptr(), head) }, 3);
+        let mut pal = [0u16; 16];
+        assert!(unsafe { verity_icons_palette(v.as_ptr(), head, 2, pal.as_mut_ptr()) });
+        assert!(!unsafe { verity_icons_palette(v.as_ptr(), head, 3, pal.as_mut_ptr()) });
+        let (mut pi, mut at) = (0u8, 0u32);
+        assert!(unsafe { verity_icons_find(v.as_ptr(), head, 25, 0, 0, 0, &mut pi, &mut at) });
+        assert!(at as usize + 512 <= v.len());
+        assert!(!unsafe { verity_icons_find(v.as_ptr(), head, 2000, 0, 0, 0, &mut pi, &mut at) });
     }
 
     #[test]

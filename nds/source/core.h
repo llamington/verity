@@ -40,9 +40,11 @@ void box_name(uint32_t box_index, char* out, int cap);
 // The last opened file, kept in /_nds/verity/last.txt on the SD card.
 void remember(const char* path);
 
-// Loads the ROM font cache, building it from the best Gen 4/5 ROM on the SD card when there is
-// none or a better ROM appears. False when there is no ROM font (Latin text only).
-bool font_init();
+// Loads the ROM font and box icon caches, building them from the best Gen 4/5 ROM on the SD card
+// when they are missing or a better ROM appears. Without a ROM: Latin text, placeholder icons.
+void rom_assets_init();
+// A Pokémon's box icon from the ROM: 512 bytes of 4 bpp tiles (1D 32x32) and its palette.
+bool icon_tiles(uint16_t species, uint8_t form, bool female, bool egg, uint8_t* tiles, uint8_t* palette);
 // The game code of the ROM the font came from ("" for none).
 const char* font_game();
 bool last(char* out, int cap);

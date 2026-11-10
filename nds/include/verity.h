@@ -336,6 +336,16 @@ uint8_t verity_rom_font_rank(const uint8_t *code);
 uint8_t *verity_rom_build_font_cache(verity_read_fn read, void *ctx, size_t *out_len);
 void verity_rom_free(uint8_t *p, size_t len);
 
+/* Box icons: builds the icon cache like the font cache (free with verity_rom_free). The DS keeps
+ * the head (verity_icons_head_len bytes, known from the first 16) in memory and reads each icon's
+ * 512 tile bytes from the file at the offset verity_icons_find gives. */
+uint8_t *verity_rom_build_icon_cache(verity_read_fn read, void *ctx, size_t *out_len);
+size_t verity_icons_head_len(const uint8_t *p, size_t len);
+uint8_t verity_icons_palette_count(const uint8_t *head, size_t len);
+bool verity_icons_palette(const uint8_t *head, size_t len, uint8_t index, uint16_t *out);
+bool verity_icons_find(const uint8_t *head, size_t len, uint16_t species, uint8_t form,
+                       uint8_t female, uint8_t egg, uint8_t *palette, uint32_t *tiles_at);
+
 /* Bit x of rows[y] is an ink pixel (stroke or shadow); ink starts at column 0 and is width wide.
  * left is where the game would place it after the pen (verity uses 1 px gaps instead). */
 typedef struct verity_glyph {

@@ -1,19 +1,43 @@
-# ROM box icons (M8, research started 2026-11-10)
+# ROM box icons (M8, 2026-11-10)
 
-Not built yet. What is known so far, from the owner's ROMs and `pret/pokeplatinum src/pokemon_icon.c`:
+`verity-rom::icons` extracts every box icon from the user's ROM into `/_nds/verity/icons.vicn`
+(about 280 KB for Gen 4, 370 KB for Gen 5; format in `CachedIcons`). The DS keeps the head
+(palettes and index) in memory and reads each icon's 512 tile bytes from the file. Without a ROM
+the box view keeps the placeholder icons. `make emu-font` checks both generations.
 
-- **Platinum:** `poketool/icongra/pl_poke_icon.narc`, 547 members: 0 NCLR (`shared_pals`, 3
-  palettes), 1-6 NANR/NCER cells and animations, then 540 icon NCGRs (1072 bytes: 32x64, two 32x32
-  frames, 4 bpp). Icon index = species, with forms and eggs after 494 (`PokeIconSpriteIndex`).
-- **Palette per icon:** a byte table (`sPokemonIconPaletteIndex`, values 0-2) compiled into the
-  code, not a file. Platinum's ARM9 is uncompressed; the table is at ARM9 offset 984960 and is
-  exactly the last 540 bytes of a run of bytes <= 2 (species 0 = 0, Bulbasaur line 1 1 1,
-  Charmander line 0 0 0, Squirtle 0, Wartortle/Blastoise 2). Candidate rule: the run of bytes <= 2
-  that ends exactly `icon count` bytes after a start whose first byte is 0. Must be checked on
-  every ROM before use.
-- **HeartGold, White, Black 2:** ARM9 is BLZ-compressed (footer), so the table needs BLZ
-  decompression first, and may sit in an overlay instead.
-- **Gen 5:** `a/0/0/7`, 1510 members: 0-1 NCLR (158 and 192 bytes), 2-7 NANR/NCER, icon NCGRs
-  from 8, interleaved with empty members (likely female variants). Palette table not located yet.
+## Files
 
-Fallback stays the current placeholder icons.
+| Games | Icons | Shared files | Order after the species |
+| --- | --- | --- | --- |
+| Platinum | `poketool/icongra/pl_poke_icon.narc` (547) | 7 (palette NCLR, cells, animations) | egg 494, Manaphy egg 495, then forms |
+| HeartGold/SoulSilver | `a/0/2/0` (551) | 7 | same as Platinum; 540-543 are battle-only icons |
+| Diamond/Pearl | `poketool/icongra/poke_icon.narc` | 7 | not checked (no ROM); forms past the file count fall back |
+| Black/White | `a/0/0/7` (1431) | 7 | two files per icon (the second the female's, often empty); eggs, then forms |
+| Black 2/White 2 | `a/0/0/7` (1510) | 8 (a second palette for boxes) | same |
+
+Each icon NCGR is 0x30 bytes of header and two 32x32 frames, 4 bpp in 1D tile order; verity keeps
+frame 0. Palettes: the first NCLR, three 16-colour palettes.
+
+Gen 4 forms (`pokeplatinum res/pokemon/meson.build`, `pokeheartgold src/pokemon_icon_idx.c`): form 1
+of Deoxys 496, Unown 500 (form 0 is the species icon, A), Burmy 527, Wormadam 529, Shellos 531,
+Gastrodon 532, Giratina 533, Shaymin 534, Rotom 535.
+
+Gen 5 forms (`fuddlesworth/pokebw2 src/system/poke_icon.c`): species data `a/0/1/6` gives each
+species' sprite offset (`u16` at 0x1E), form count (0x20) and palette-only forms (0x21 bit 7). Form
+icons are at `forms_start + offset + form - 1`, where `forms_start` is the icon count minus the
+largest `offset + count - 1`; the two eggs are just before.
+
+## Palette table
+
+A byte per icon in the ARM9 code (`sPokemonIconPaletteIndex` / `sPokeIconPalettes`), not a file.
+HeartGold's and the Gen 5 ARM9 are BLZ-compressed (`lz::blz_decompress_in_place`); Platinum's is
+plain. verity finds the table by its start: species 0, then Bulbasaur to Blastoise (palettes
+1 1 1 0 0 0 0 2 2); Gen 5 packs male | female << 4. Found once in each of Platinum (ARM9 offset
+984960), HeartGold, White and Black 2. Black 2/White 2's table has two more entries than icons from
+the eggs on (Black/White none); verity finds that shift from the eggs' palettes (1, and 2 for
+Manaphy's), which hold in all four games.
+
+## Speed on the DS
+
+Reading each file once (not per member) matters: thousands of seeks into a large ROM on a FAT card
+took 8-16 s for font and icons together; whole-file reads take 2-4 s (melonDS, Black 2 stand-in).

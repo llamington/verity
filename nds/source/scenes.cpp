@@ -799,7 +799,11 @@ private:
             verity_pkm_view v = at_cell(i);
             int x, y;
             cell_pos(i, &x, &y);
-            if (v.species != 0)
+            uint8_t tiles[512], pal;
+            if (v.species != 0 &&
+                core::icon_tiles(v.species, v.form, v.gender == 1, v.is_egg, tiles, &pal))
+                ui::icon_rom(2 + 2 * i, x, y, tiles, pal, v.is_shiny && !v.is_egg);
+            else if (v.species != 0)
                 ui::icon(2 + 2 * i, x, y, v.types[0] == 0xFF ? 17 : v.types[0], v.is_egg,
                          v.is_shiny);
             if (i == cur_)
