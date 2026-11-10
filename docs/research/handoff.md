@@ -25,7 +25,8 @@ compose into syllables (`verity-ffi/src/keyboard.rs`, unit-tested; a syllable Ge
 stays as separate jamo). `make emu-font` also runs `ui-keyboard-jp.json`. Korean has no in-emulator
 check (no Korean Pokémon in the test saves).
 
-Rest of M8: box icons and sprites from the ROM (LZ is
+Rest of M8: box icons and sprites from the ROM (research so far in `docs/research/rom-icons.md`:
+palette tables are in the code, BLZ-compressed except on Platinum) (LZ is
 ready; NCGR/NCLR/NCER parsing and the file locations are still to do, from the pret decomps and
 `fuddlesworth/pokebw2`), with the current placeholder icons as the fallback.
 
