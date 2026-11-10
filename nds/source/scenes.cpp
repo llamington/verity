@@ -2114,11 +2114,12 @@ private:
         return true;
     }
 
-    // A move's stats in a panel on the top screen (rows row..row+3).
+    // A move in a panel on the top screen (rows row..row+5): name, type and PP; category, power
+    // and accuracy; the description, wrapped to four rows.
     void move_details(int row, uint16_t mv)
     {
-        ui::panel(top(), 1, row, 30, 4);
-        for (int r = row; r < row + 4; r++)
+        ui::panel(top(), 1, row, 30, 6);
+        for (int r = row; r < row + 6; r++)
             at(top(), 1, r, "%s", "");
         if (mv == 0)
         {
@@ -2139,7 +2140,7 @@ private:
         if (!m.from_rom)
         {
             at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
-            at(top(), 1, row + 3, UI_MUTED "power, accuracy and category.");
+            at(top(), 1, row + 3, UI_MUTED "power, accuracy and a description.");
             return;
         }
         static const char* kCat[3] = {"Physical", "Special", "Status"};
@@ -2151,11 +2152,15 @@ private:
         else
             snprintf(power, sizeof(power), "%u", m.power);
         if (m.accuracy == 0 || m.accuracy == 101)
-            snprintf(acc, sizeof(acc), "never misses");
+            snprintf(acc, sizeof(acc), "sure hit");
         else
             snprintf(acc, sizeof(acc), "%u%%", m.accuracy);
-        at(top(), 1, row + 2, UI_MUTED "Category" UI_MUTED "  %s", kCat[m.category % 3]);
-        at(top(), 1, row + 3, UI_MUTED "Power" UI_MUTED "  %s    " UI_MUTED "Accuracy" UI_MUTED "  %s", power, acc);
+        at(top(), 1, row + 1, "%s", kCat[m.category % 3]);
+        at(top(), 10, row + 1, UI_MUTED "Power" UI_MUTED " %s", power);
+        at(top(), 20, row + 1, UI_MUTED "Acc" UI_MUTED " %s", acc);
+        char desc[192];
+        if (core::move_description(gen, mv, desc, sizeof(desc)))
+            ui::wrap(top(), 1, row + 2, 236, 4, desc);
     }
 
     // The held item's icon from a ROM of the save's generation, if there is one; false otherwise
@@ -2256,27 +2261,27 @@ private:
 
     void show_preview()
     {
-        ui::panel(top(), 1, 17, 30, 4);
-        for (int r = 17; r < 21; r++)
+        ui::panel(top(), 1, 18, 30, 4);
+        for (int r = 18; r < 22; r++)
             at(top(), 1, r, "%s", "");
-        at(top(), 1, 17, UI_MUTED "If applied now");
+        at(top(), 1, 18, UI_MUTED "If applied now");
         if (!preview_ok_)
         {
-            at(top(), 1, 18, "Preview unavailable");
+            at(top(), 1, 19, "Preview unavailable");
             return;
         }
-        at(top(), 1, 18, UI_MUTED "Game-safe");
+        at(top(), 1, 19, UI_MUTED "Game-safe");
         if (issue_)
         {
-            int c = ui::badge(top(), 11, 18, ui::Badge::Invalid, "NO");
-            at(top(), c, 18, "%.18s", verity_issue_text(issue_));
+            int c = ui::badge(top(), 11, 19, ui::Badge::Invalid, "NO");
+            at(top(), c, 19, "%.18s", verity_issue_text(issue_));
         }
         else
-            ui::badge(top(), 11, 18, ui::Badge::Legal, "OK");
+            ui::badge(top(), 11, 19, ui::Badge::Legal, "OK");
         const verity_legality_report& r = report_;
-        at(top(), 1, 19, UI_MUTED "Legality");
+        at(top(), 1, 20, UI_MUTED "Legality");
         if (r.status == 1)
-            ui::badge(top(), 11, 19, ui::Badge::Legal, "LEGAL");
+            ui::badge(top(), 11, 20, ui::Badge::Legal, "LEGAL");
         else if (r.status == 2)
         {
             char list[40] = "";
@@ -2286,11 +2291,11 @@ private:
                 strcat(list, core::check_name(r.checks[i]));
             }
             bool mv = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            ui::badge(top(), 11, 19, ui::Badge::Invalid, "ILLEGAL");
-            at(top(), 1, 20, "%s%s", list, mv ? " Moves" : "");
+            ui::badge(top(), 11, 20, ui::Badge::Invalid, "ILLEGAL");
+            at(top(), 1, 21, "%s%s", list, mv ? " Moves" : "");
         }
         else
-            ui::badge(top(), 11, 19, ui::Badge::Fishy, "NOT CHECKED");
+            ui::badge(top(), 11, 20, ui::Badge::Fishy, "NOT CHECKED");
     }
 
     void draw()

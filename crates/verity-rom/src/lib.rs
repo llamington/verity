@@ -17,6 +17,7 @@ pub mod lz;
 pub mod moves;
 pub mod narc;
 pub mod nds;
+pub mod text;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {

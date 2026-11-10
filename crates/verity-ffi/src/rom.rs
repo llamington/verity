@@ -341,9 +341,61 @@ pub unsafe extern "C" fn verity_items_find(
 }
 
 /// Builds the move cache file (category, power, accuracy) for the ROM read by `src`.
+/// Descriptions are added when the ROM's text can be read; without them the stats still serve.
 pub fn build_moves_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error> {
     let mut rom = Rom::open(src)?;
-    Ok(moves::load(&mut rom)?.to_cache(rom.game_code()))
+    let mut table = moves::load(&mut rom)?;
+    let text = if table.generation == 4 {
+        moves::load_descriptions(&mut rom, |c| {
+            Some(value_to_char_g4(c))
+                .filter(|&u| u != TERMINATOR && u != 0)
+                .and_then(|u| char::from_u32(u.into()))
+        })
+    } else {
+        moves::load_descriptions(&mut rom, |c| char::from_u32(c.into()))
+    };
+    if let Ok(d) = text {
+        table.set_descriptions(d);
+    }
+    Ok(table.to_cache(rom.game_code()))
+}
+
+/// C ABI: the description of move `mv` from a move cache of generation `generation`, as UTF-8
+/// into `out` (`cap` bytes, NUL-terminated, cut at a character boundary). False if the cache
+/// isn't of that generation or has no description for the move.
+///
+/// # Safety
+///
+/// `rom_moves` is null or valid for `len` bytes; `out` is null or writable for `cap` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_move_description(
+    generation: u8,
+    mv: u16,
+    rom_moves: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> bool {
+    if rom_moves.is_null() || out.is_null() || cap == 0 {
+        return false;
+    }
+    let cache = CachedMoves::parse(unsafe { slice::from_raw_parts(rom_moves, len) }).ok();
+    let Some(text) = cache
+        .filter(|c| c.generation == generation)
+        .and_then(|c| c.description(mv))
+        .filter(|t| !t.is_empty())
+    else {
+        return false;
+    };
+    let mut n = text.len().min(cap - 1);
+    while !text.is_char_boundary(n) {
+        n -= 1;
+    }
+    unsafe {
+        core::ptr::copy_nonoverlapping(text.as_ptr(), out, n);
+        *out.add(n) = 0;
+    }
+    true
 }
 
 /// C ABI: builds a move cache from a ROM, like `verity_rom_build_font_cache` (free the result with
@@ -691,6 +743,67 @@ mod tests {
         // A Gen 4 cache says nothing about a Gen 5 save.
         assert!(unsafe { verity_move_info(5, 33, v.as_ptr(), v.len(), &mut out) });
         assert_eq!(out.from_rom, 0);
+    }
+
+    #[test]
+    fn move_descriptions_from_each_rom() {
+        let tackle4 = "A physical attack in which the user charges and slams into the foe with \
+                       its whole body.";
+        let tackle5 = "A physical attack in which the user charges and slams into the target \
+                       with its whole body.";
+        for (name, generation, tackle) in [
+            ("platinum.nds", 4, tackle4),
+            ("heartgold.nds", 4, tackle4),
+            ("white.nds", 5, tackle5),
+            ("black2.nds", 5, tackle5),
+        ] {
+            let Some(rom) = rom(name) else { continue };
+            let v = build_moves_cache(rom.as_slice()).unwrap();
+            let desc = |mv: u16, cap: usize| {
+                let mut buf = std::vec![0u8; cap];
+                let ok = unsafe {
+                    verity_move_description(
+                        generation,
+                        mv,
+                        v.as_ptr(),
+                        v.len(),
+                        buf.as_mut_ptr(),
+                        cap,
+                    )
+                };
+                ok.then(|| {
+                    let end = buf.iter().position(|&b| b == 0).unwrap();
+                    std::string::String::from_utf8(buf[..end].to_vec()).unwrap()
+                })
+            };
+            assert_eq!(desc(33, 256).as_deref(), Some(tackle), "{name}");
+            assert_eq!(desc(0, 256), None, "{name}: no move");
+            assert_eq!(
+                desc(33, 10).as_deref(),
+                Some("A physica"),
+                "{name}: cut to fit"
+            );
+            // Every real move has a description with no control-code leftovers or double spaces.
+            let last = if generation == 4 { 467 } else { 559 };
+            for mv in 1..=last {
+                let d = desc(mv, 256).unwrap_or_else(|| panic!("{name}: move {mv}"));
+                assert!(
+                    !d.contains("  ") && !d.starts_with(' ') && !d.ends_with(' '),
+                    "{name} {mv}: {d:?}"
+                );
+                assert!(
+                    d.chars().all(|c| c >= ' ' && c != '\u{FFFD}'),
+                    "{name} {mv}: {d:?}"
+                );
+                assert!(d.len() < 130, "{name} {mv}: {} {d:?}", d.len());
+            }
+            // The other generation gets nothing from this cache.
+            let other = 9 - generation;
+            let mut buf = [0u8; 8];
+            assert!(!unsafe {
+                verity_move_description(other, 33, v.as_ptr(), v.len(), buf.as_mut_ptr(), 8)
+            });
+        }
     }
 
     #[test]

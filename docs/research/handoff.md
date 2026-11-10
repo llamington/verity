@@ -7,19 +7,16 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Next tasks (user, 2026-11-10), in order:**
 
-1. **Move descriptions.** Show a move's description in the move details panel (top screen, Moves
-   tab and move picker; `Editor::move_details` in `nds/source/scenes.cpp`). Text comes from the
-   ROM's message archive, in the save's generation and ideally the ROM's language. Not yet checked:
-   which archive and bank (Gen 4 `msgdata/pl_msg.narc` on Platinum; Gen 4 messages are encrypted per
-   string, see pokeplatinum `src/message.c` or PKHeX-adjacent tools; Gen 5 `a/0/0/2` or `a/0/0/3`,
-   plain UTF-16 with its own header). Descriptions are about 3 lines of 20 characters in-game: the
-   panel has 4 rows of about 30, so they fit as is or wrap.
-2. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
+1. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
    as Judge words ("Best" ... "No Good"). The user asked whether it should show EVs, IVs or both;
    not answered yet. Ask before building it.
 
 **Done 2026-11-10 (all committed and pushed):**
 
+- **Move descriptions:** from the ROM's message bank into the move cache (version 2, so old
+  caches rebuild). The move panel has six rows (name, stats, four rows of wrapped description);
+  the editor's preview panel moved to rows 18-21. `docs/research/rom-text.md`. `make emu-font`
+  runs `ui-moves.json` (Gen 4) and `ui-moves5.json` (Gen 5).
 - **Held item icons:** `verity-rom::items` builds `items4.vitm` / `items5.vitm` from the best ROM
   of each generation; the editor shows the icon beside the Main tab's rows and in a top-screen
   panel of the held-item picker. Research and files: `docs/research/rom-icons.md` (Item icons).

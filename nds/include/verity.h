@@ -371,6 +371,10 @@ typedef struct verity_move_stats {
 } verity_move_stats;
 bool verity_move_info(uint8_t generation, uint16_t mv, const uint8_t *rom_moves, size_t len,
                       verity_move_stats *out);
+/* A move's description from the move cache of that generation, as UTF-8 into out (cap bytes,
+ * NUL-terminated); false when there is none. */
+bool verity_move_description(uint8_t generation, uint16_t mv, const uint8_t *rom_moves, size_t len,
+                             char *out, size_t cap);
 
 /* Bit x of rows[y] is an ink pixel (stroke or shadow); ink starts at column 0 and is width wide.
  * left is where the game would place it after the pen (verity uses 1 px gaps instead). */

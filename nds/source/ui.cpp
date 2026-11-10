@@ -709,6 +709,60 @@ void slot(Surface* c, int col, int row, int style)
 
 int text_width(const char* s) { return draw_text(nullptr, 0, 0, s); }
 
+int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text)
+{
+    char line[96];
+    int rows = 0;
+    const char* p = text;
+    while (*p && rows < max_rows)
+    {
+        while (*p == ' ')
+            p++;
+        int n = 0;  // bytes of p on this line
+        for (;;)
+        {
+            const char* w = p + n;
+            while (*w == ' ')
+                w++;
+            const char* e = w;
+            while (*e && *e != ' ')
+                e++;
+            if (e == w)
+                break;
+            int len = (int)(e - p);
+            if (len >= (int)sizeof(line))
+                break;
+            memcpy(line, p, len);
+            line[len] = 0;
+            if (n && text_width(line) > width)
+                break;
+            n = len;
+        }
+        if (n == 0)  // one word wider than the line: cut it
+            n = (int)strnlen(p, sizeof(line) - 1);
+        bool last = rows == max_rows - 1 && p[n] && p[n + strspn(p + n, " ")];
+        memcpy(line, p, n);
+        line[n] = 0;
+        if (last)
+        {
+            // Make room for "..." by dropping words from the end.
+            while (n > 0 && text_width(line) + text_width("...") > width)
+            {
+                while (n > 0 && line[n - 1] != ' ')
+                    n--;
+                while (n > 0 && line[n - 1] == ' ')
+                    n--;
+                line[n] = 0;
+            }
+            strcat(line, "...");
+        }
+        at(c, col, row + rows, "%s", line);
+        rows++;
+        p += n;
+    }
+    return rows;
+}
+
 int text_len(const char* s)
 {
     int n = 0;
