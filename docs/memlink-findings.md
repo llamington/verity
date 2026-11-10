@@ -128,9 +128,14 @@ Keys are earned at the end of the story or in the Underground Ruins, and verity 
 there must be a partner save that earned the key. `make emu-keys` confirms the difficulty, city and
 chamber settings unlock in retail Black 2 for all five keys, against a save with none.
 
+## DS screen
+
+On a B2W2 save, "Memory Link and keys" lists the other saves on the SD card. A Black or White save
+offers Memory Link and a Black 2 or White 2 save offers its keys, with a preview before anything
+changes. `make emu-unova` drives both and checks the file written to the SD card.
+
 ## Not done
 
-- A DS screen for this.
 - Linking a Japanese or Korean BW save, which hasn't been tried.
 
 ## Harness reliability

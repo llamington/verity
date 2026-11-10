@@ -108,6 +108,40 @@ struct ListView
 constexpr int kMaxFiles = 256;
 constexpr int kPathLen = 192;
 
+static bool is_save(const char* name)
+{
+    const char* dot = strrchr(name, '.');
+    return dot && (strcasecmp(dot, ".sav") == 0 || strcasecmp(dot, ".dsv") == 0);
+}
+
+// Adds the save files under dir to files; returns the new count.
+static int scan_saves(char (*files)[kPathLen], int count, const char* dir, int depth)
+{
+    DIR* d = opendir(dir);
+    if (!d)
+        return count;
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr && count < kMaxFiles)
+    {
+        if (e->d_name[0] == '.')
+            continue;
+        char path[kPathLen];
+        int n = snprintf(path, sizeof(path), "%s%s%s", dir,
+                         dir[strlen(dir) - 1] == '/' ? "" : "/", e->d_name);
+        if (n <= 0 || n >= kPathLen)
+            continue;
+        if (e->d_type == DT_DIR)
+        {
+            if (depth > 0)
+                count = scan_saves(files, count, path, depth - 1);
+        }
+        else if (is_save(e->d_name))
+            strcpy(files[count++], path);
+    }
+    closedir(d);
+    return count;
+}
+
 class FilePicker : public ui::Scene
 {
 public:
@@ -117,7 +151,7 @@ public:
         {
             scanned_ = true;
             for (const char* root : {"sd:/", "fat:/"})
-                scan(root, 3);
+                count_ = scan_saves(files_, count_, root, 3);
             list_.count = count_;
             char last[kPathLen];
             if (core::last(last, sizeof(last)))
@@ -157,38 +191,6 @@ private:
     int count_ = 0;
     bool scanned_ = false;
     ListView list_;
-
-    static bool is_save(const char* name)
-    {
-        const char* dot = strrchr(name, '.');
-        return dot && (strcasecmp(dot, ".sav") == 0 || strcasecmp(dot, ".dsv") == 0);
-    }
-
-    void scan(const char* dir, int depth)
-    {
-        DIR* d = opendir(dir);
-        if (!d)
-            return;
-        struct dirent* e;
-        while ((e = readdir(d)) != nullptr && count_ < kMaxFiles)
-        {
-            if (e->d_name[0] == '.')
-                continue;
-            char path[kPathLen];
-            int n = snprintf(path, sizeof(path), "%s%s%s", dir,
-                             dir[strlen(dir) - 1] == '/' ? "" : "/", e->d_name);
-            if (n <= 0 || n >= kPathLen)
-                continue;
-            if (e->d_type == DT_DIR)
-            {
-                if (depth > 0)
-                    scan(path, depth - 1);
-            }
-            else if (is_save(e->d_name))
-                strcpy(files_[count_++], path);
-        }
-        closedir(d);
-    }
 
     void draw_top(const char* message)
     {
@@ -253,6 +255,8 @@ public:
         count_ = 0;
         items_[count_++] = kBoxes;
         items_[count_++] = kGifts;
+        if (i.kind == kBlack2White2)
+            items_[count_++] = kUnova;
         items_[count_++] = kSave;
         items_[count_++] = kClose;
         for (int r = 0; r < count_; r++)
@@ -279,6 +283,11 @@ public:
             message_[0] = 0;
             ui::push(gifts());
         }
+        if (item == kUnova)
+        {
+            message_[0] = 0;
+            ui::push(unova_link());
+        }
         if (item == kSave)
         {
             const char* m = "";
@@ -292,10 +301,11 @@ public:
     }
 
 private:
-    enum { kBoxes, kGifts, kSave, kClose };
-    static constexpr const char* kItems[4] = {"Boxes and party", "Mystery gifts", "Save to SD card",
-                                              "Close"};
-    int items_[4];
+    enum { kBoxes, kGifts, kSave, kClose, kUnova };
+    static constexpr uint8_t kBlack2White2 = 5;
+    static constexpr const char* kItems[5] = {"Boxes and party", "Mystery gifts", "Save to SD card",
+                                              "Close", "Memory Link and keys"};
+    int items_[5];
     int count_ = 0;
     ListView list_;
     char message_[48] = "";
@@ -447,6 +457,177 @@ private:
         at(top(), 0, 20, core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
                                                           : "deliveryman in any Poke Mart.");
         at(top(), 0, 22, "A: deliver   B: back");
+    }
+};
+
+// ---- Memory Link and Key System ---------------------------------------------------------------
+
+class UnovaLink : public ui::Scene
+{
+public:
+    ~UnovaLink() override { free(other_); }
+
+    void enter() override
+    {
+        if (!scanned_)
+        {
+            scanned_ = true;
+            for (const char* root : {"sd:/", "fat:/"})
+                count_ = scan_saves(files_, count_, root, 3);
+            int kept = 0;
+            for (int i = 0; i < count_; i++)
+                if (strcmp(files_[i], core::doc().path) != 0)
+                    memmove(files_[kept++], files_[i], kPathLen);
+            count_ = kept;
+            list_.count = count_;
+            list_.clamp();
+        }
+        draw();
+    }
+
+    bool update(const ui::Input& in) override
+    {
+        if (other_)
+        {
+            if (in.down & KEY_B)
+                close_other();
+            else if ((in.down & KEY_A) && preview_.status == 0)
+                link();
+            return true;
+        }
+        bool changed;
+        int pick = list_.update(in, &changed);
+        if (changed)
+            draw_list();
+        ui::bar(0, list_.bar_y(), count_ > 0);
+        if (in.down & KEY_B)
+            return false;
+        if (pick >= 0)
+            open_other(files_[pick]);
+        return true;
+    }
+
+private:
+    char files_[kMaxFiles][kPathLen];
+    int count_ = 0;
+    bool scanned_ = false;
+    ListView list_;
+    uint8_t* other_ = nullptr;
+    size_t other_len_ = 0;
+    const char* other_path_ = "";
+    bool replace_ = false;
+    verity_unova_preview_t preview_{};
+    char trainer_[16] = "";
+    char message_[40] = "";
+
+    void open_other(const char* path)
+    {
+        const auto& d = core::doc();
+        other_ = core::read_save_file(path, &other_len_);
+        if (!other_)
+        {
+            snprintf(message_, sizeof(message_), "Could not read that file.");
+            draw();
+            return;
+        }
+        other_path_ = path;
+        message_[0] = 0;
+        trainer_[0] = 0;
+        verity_unova_preview(d.buf, d.len, other_, other_len_, false, &preview_);
+        replace_ = preview_.status == 1;
+        if (replace_)
+            verity_unova_preview(d.buf, d.len, other_, other_len_, true, &preview_);
+        auto info = d.info;
+        if (verity_save_probe(other_, other_len_, &info) == VERITY_OK)
+            ui::utf16_to_ascii(info.ot_name, trainer_, sizeof(trainer_));
+        draw();
+    }
+
+    void close_other()
+    {
+        free(other_);
+        other_ = nullptr;
+        draw();
+    }
+
+    void link()
+    {
+        auto& d = core::doc();
+        uint32_t seed = (uint32_t)time(nullptr) * 1103515245u + 12345u;
+        uint8_t r = verity_unova_apply(d.buf, d.len, other_, other_len_, replace_, seed);
+        if (r == 0)
+        {
+            d.dirty = true;
+            snprintf(message_, sizeof(message_), "Linked. Save to SD to keep it.");
+        }
+        else
+            snprintf(message_, sizeof(message_), "%s", verity_unova_status_text(r));
+        close_other();
+    }
+
+    void draw()
+    {
+        ui::clear(top());
+        ui::clear(bottom());
+        at(top(), 0, 0, "Memory Link and keys");
+        if (other_)
+            draw_preview();
+        else
+        {
+            at(top(), 0, 2, "Pick a Black or White save for");
+            at(top(), 0, 3, "Memory Link, or a Black 2 or");
+            at(top(), 0, 4, "White 2 save to receive its keys.");
+            if (count_ == 0)
+                at(top(), 0, 6, "No other saves found.");
+            if (message_[0])
+                at(top(), 0, 8, "%s", message_);
+            draw_list();
+        }
+    }
+
+    void draw_preview()
+    {
+        static constexpr const char* kKeys[5] = {"Easy Mode", "Challenge Mode", "City swap",
+                                                 "Iron Chamber", "Iceberg Chamber"};
+        const char* slash = strrchr(other_path_, '/');
+        at(top(), 0, 2, "%.30s", slash ? slash + 1 : other_path_);
+        at(top(), 0, 3, "Trainer  %s", trainer_);
+        ui::bar(0, 0, false);
+        if (preview_.status != 0)
+            at(top(), 0, 5, "%s", verity_unova_status_text(preview_.status));
+        else if (preview_.mode == 1)
+        {
+            at(top(), 0, 5, "Memory Link");
+            at(top(), 0, 6, preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
+            if (replace_)
+                at(top(), 0, 8, "%s", verity_unova_status_text(1));
+        }
+        else
+        {
+            at(top(), 0, 5, "Keys this save will receive:");
+            int row = 6;
+            for (int i = 0; i < 5; i++)
+                if (preview_.keys[i])
+                    at(top(), 1, row++, "%s", kKeys[i]);
+        }
+        at(bottom(), 0, 0, " Link");
+        at(bottom(), 0, 3, preview_.status == 0 ? " A: link   B: back" : " B: back");
+    }
+
+    void draw_list()
+    {
+        at(bottom(), 0, 0, " Link with");
+        for (int r = 0; r < list_.rows; r++)
+        {
+            int i = list_.scroll + r;
+            if (i < count_)
+            {
+                const char* slash = strrchr(files_[i], '/');
+                at(bottom(), 0, list_.first_row + r, " %.30s", slash ? slash + 1 : files_[i]);
+            }
+            else
+                at(bottom(), 0, list_.first_row + r, "%s", "");
+        }
     }
 };
 
@@ -1871,5 +2052,6 @@ ui::Scene* box_view() { return new BoxView(); }
 ui::Scene* add_wizard(uint8_t b, uint8_t s) { return new AddWizard(b, s); }
 ui::Scene* editor(uint8_t b, uint8_t s) { return new Editor(b, s); }
 ui::Scene* gifts() { return new Gifts(); }
+ui::Scene* unova_link() { return new UnovaLink(); }
 
 }  // namespace scenes

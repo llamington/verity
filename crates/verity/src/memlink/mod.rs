@@ -357,6 +357,28 @@ pub fn apply(
     seeds: Seeds,
     replace: bool,
 ) -> Result<Applied, MemLinkError> {
+    let (gifts, keys, applied) = plan(b2w2, data, seeds, replace)?;
+    b2w2[GIFTS..GIFTS + GIFTS_BLOCK].copy_from_slice(&gifts);
+    b2w2[GIFTS_BACKUP..GIFTS_BACKUP + GIFTS_BLOCK].copy_from_slice(&gifts);
+    b2w2[KEYS..KEYS + KEYS_BLOCK].copy_from_slice(&keys);
+    Ok(applied)
+}
+
+/// What `apply` would do, without writing.
+pub fn preview(b2w2: &[u8], data: &MemoryLinkData, replace: bool) -> Result<Applied, MemLinkError> {
+    let seeds = Seeds {
+        gifts: 0,
+        key_info: 0,
+    };
+    plan(b2w2, data, seeds, replace).map(|(_, _, applied)| applied)
+}
+
+fn plan(
+    b2w2: &[u8],
+    data: &MemoryLinkData,
+    seeds: Seeds,
+    replace: bool,
+) -> Result<([u8; GIFTS_BLOCK], [u8; KEYS_BLOCK], Applied), MemLinkError> {
     if !is_valid(b2w2, SaveKind::B2W2) {
         return Err(MemLinkError::NotBlack2White2);
     }
@@ -388,10 +410,8 @@ pub fn apply(
     let crc = crc16_ccitt(&keys[HEADER..]);
     write_u16(&mut keys, 8, crc);
 
-    b2w2[GIFTS..GIFTS + GIFTS_BLOCK].copy_from_slice(&gifts);
-    b2w2[GIFTS_BACKUP..GIFTS_BACKUP + GIFTS_BLOCK].copy_from_slice(&gifts);
-    b2w2[KEYS..KEYS + KEYS_BLOCK].copy_from_slice(&keys);
-    Ok(Applied {
+    let applied = Applied {
         unlocked_flashback: after & (before ^ after) != 0,
-    })
+    };
+    Ok((gifts, keys, applied))
 }

@@ -344,6 +344,11 @@ bool save_to_disk(const char** message)
     return true;
 }
 
+uint8_t* read_save_file(const char* path, size_t* len)
+{
+    return read_all(path, kMaxSave, len);
+}
+
 const char* game_name(uint8_t kind)
 {
     switch (kind)
