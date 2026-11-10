@@ -85,8 +85,9 @@ void hints(Surface* c, const char* spec);
 // A cream panel over cells [col, col+w) x [row, row+h) (w, h >= 2); its border is drawn just
 // outside them.
 void panel(Surface* c, int col, int row, int w, int h);
-// A verdict pill `cells` wide (>= 2) on a panel, with centred text.
-void badge(Surface* c, int col, int row, int cells, Badge b, const char* text);
+// A verdict on a panel: a coloured dot, then `text` in the verdict's colour. Returns the first
+// column after it.
+int badge(Surface* c, int col, int row, Badge b, const char* text);
 // A 32x32 box slot at a cell: style 0 filled, 1 empty, 2 selected.
 void slot(Surface* c, int col, int row, int style);
 // Width in pixels of text as drawn.

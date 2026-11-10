@@ -280,8 +280,7 @@ public:
         at(top(), 1, 7, UI_MUTED "Party" UI_MUTED "  %u   " UI_MUTED "Boxes" UI_MUTED "  %lu", i.party_count,
            (unsigned long)d.boxes);
         at(top(), 1, 9, UI_MUTED "Checksums");
-        ui::badge(top(), 12, 9, i.checksums_valid ? 3 : 4,
-                  i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
+        ui::badge(top(), 12, 9, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
                   i.checksums_valid ? "OK" : "BAD");
         if (!core::data_available())
             at(top(), 1, 12, "(data missing: showing IDs)");
@@ -882,30 +881,30 @@ private:
         char lv[12];
         snprintf(lv, sizeof(lv), "Lv %u", v.level);
         ui::title_right(top(), lv);
-        ui::panel(top(), 1, 2, 30, 5);
+        // Panels sit two rows apart so each keeps its padding.
+        ui::panel(top(), 1, 2, 30, 4);
         if (v.form)
             at(top(), 1, 2, "#%03u %s " UI_MUTED "form %u" UI_MUTED "  %s", v.species, sp, v.form, g);
         else
             at(top(), 1, 2, "#%03u %s  %s", v.species, sp, g);
-        at(top(), 1, 4, UI_MUTED "Nature" UI_MUTED "  %s", ui::name(VERITY_NAME_NATURES, v.nature));
-        at(top(), 1, 5, UI_MUTED "Ability" UI_MUTED "  %s", ui::name(VERITY_NAME_ABILITIES, v.ability));
+        at(top(), 1, 3, UI_MUTED "Nature" UI_MUTED "  %s", ui::name(VERITY_NAME_NATURES, v.nature));
+        at(top(), 1, 4, UI_MUTED "Ability" UI_MUTED "  %s", ui::name(VERITY_NAME_ABILITIES, v.ability));
         uint32_t items = core::doc().info.generation == 4 ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
-        at(top(), 1, 6, UI_MUTED "Item" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "-");
-        ui::panel(top(), 1, 8, 30, 2);
+        at(top(), 1, 5, UI_MUTED "Item" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "-");
+        ui::panel(top(), 1, 8, 30, 6);
         for (int m = 0; m < 4; m++)
             at(top(), 1 + (m % 2) * 15, 8 + m / 2, "%.14s",
                v.moves[m] ? ui::name(VERITY_NAME_MOVES, v.moves[m]) : "-");
-        ui::panel(top(), 1, 11, 30, 3);
         at(top(), 1, 11, UI_MUTED "      HP  At  Df  Sp  SA  SD");
         at(top(), 1, 12, UI_MUTED "IVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.ivs[0], v.ivs[1], v.ivs[2], v.ivs[3],
            v.ivs[4], v.ivs[5]);
         at(top(), 1, 13, UI_MUTED "EVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.evs[0], v.evs[1], v.evs[2], v.evs[3],
            v.evs[4], v.evs[5]);
-        ui::panel(top(), 1, 15, 30, 3);
-        at(top(), 1, 15, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
-        at(top(), 1, 16, UI_MUTED "Met" UI_MUTED "  %.20s Lv %u",
+        ui::panel(top(), 1, 16, 30, 3);
+        at(top(), 1, 16, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
+        at(top(), 1, 17, UI_MUTED "Met" UI_MUTED "  %.20s Lv %u",
            ui::location(core::doc().info.generation, v.met_location), v.met_level);
-        at(top(), 1, 17, UI_MUTED "PID" UI_MUTED "  %08lX%s", (unsigned long)v.pid,
+        at(top(), 1, 18, UI_MUTED "PID" UI_MUTED "  %08lX%s", (unsigned long)v.pid,
            v.checksum_ok ? "" : "  ! checksum mismatch");
         legality_line();
     }
@@ -918,11 +917,11 @@ private:
         static const char* why[] = {"",        "egg",       "origin game",
                                     "data missing", "Gen 5 save", "hatched",
                                     "event/trade/walker"};
-        ui::panel(top(), 1, 20, 30, 3);
+        ui::panel(top(), 1, 21, 30, 2);
         if (r.status == 1)
         {
-            ui::badge(top(), 1, 21, 5, ui::Badge::Legal, "LEGAL");
-            at(top(), 7, 21, UI_MUTED "checked in %lu ms", (unsigned long)ms);
+            int c = ui::badge(top(), 1, 21, ui::Badge::Legal, "LEGAL");
+            at(top(), c, 21, UI_MUTED "checked in %lu ms", (unsigned long)ms);
         }
         else if (r.status == 2)
         {
@@ -933,14 +932,14 @@ private:
                 strcat(list, core::check_name(r.checks[i]));
             }
             bool moves = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            ui::badge(top(), 1, 20, 6, ui::Badge::Invalid, "ILLEGAL");
-            at(top(), 8, 20, UI_MUTED "%lu ms", (unsigned long)ms);
-            at(top(), 1, 21, "%s%s", list, moves ? " Moves" : "");
+            int c = ui::badge(top(), 1, 21, ui::Badge::Invalid, "ILLEGAL");
+            at(top(), c, 21, UI_MUTED "%lu ms", (unsigned long)ms);
+            at(top(), 1, 22, "%s%s", list, moves ? " Moves" : "");
         }
         else
         {
-            ui::badge(top(), 1, 20, 9, ui::Badge::Fishy, "NOT CHECKED");
-            at(top(), 1, 21, "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
+            ui::badge(top(), 1, 21, ui::Badge::Fishy, "NOT CHECKED");
+            at(top(), 1, 22, "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
         }
     }
 };
