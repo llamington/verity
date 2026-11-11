@@ -473,3 +473,57 @@ fn finalize_refuses_a_save_the_validator_rejects() {
     let why = ed.finalize().unwrap_err().0;
     assert!(why.starts_with("not saved: met location (box "), "{why}");
 }
+
+#[test]
+fn bag_lists_names_and_edits() {
+    for (file, game, pouches) in [
+        ("gen4_heartgold.sav", "hgss", 8),
+        ("gen5_black.sav", "bw", 5),
+    ] {
+        let Some(mut ed) = open(file, game) else {
+            return;
+        };
+        let bag = ed.bag();
+        assert_eq!(bag.len(), pouches, "{file}");
+        assert_eq!(bag[0].name, "Items");
+        assert!(
+            bag.iter()
+                .flat_map(|p| &p.items)
+                .all(|i| i.item.name.is_some())
+        );
+        let before = bag[0].items.len();
+
+        let add = ed.bag_addable(0).unwrap();
+        let first = add.first().expect("an item to add");
+        assert!(first.name.is_some());
+        let id = first.id;
+        assert_eq!(ed.bag_add(0, id, 3), Ok(None));
+        assert!(ed.dirty());
+        let bag = ed.bag();
+        let last = bag[0].items.last().unwrap();
+        assert_eq!((last.item.id, last.count, last.locked), (id, 3, false));
+        assert!(!ed.bag_addable(0).unwrap().iter().any(|n| n.id == id));
+
+        // Refusals come back as text; bad pouches are errors.
+        let again = ed.bag_add(0, id, 1).unwrap();
+        assert!(again.unwrap().contains("already in the pouch"));
+        assert!(ed.bag_set_count(0, before, 0).unwrap().is_some());
+        assert_eq!(ed.bag_set_count(0, before, 7), Ok(None));
+        assert_eq!(ed.bag()[0].items[before].count, 7);
+        assert!(ed.bag_addable(99).is_err());
+
+        assert_eq!(ed.bag_remove(0, before), Ok(None));
+        assert_eq!(ed.bag()[0].items.len(), before);
+    }
+}
+
+#[test]
+fn bag_refuses_event_items() {
+    let Some(mut ed) = open("gen5_white2.sav", "b2w2") else {
+        return;
+    };
+    let key = ed.bag().iter().position(|p| p.name == "Key Items").unwrap();
+    assert!(!ed.bag_addable(key).unwrap().iter().any(|n| n.id == 574));
+    let why = ed.bag_add(key, 574, 1).unwrap().unwrap();
+    assert!(why.contains("Mystery Gift"), "{why}");
+}

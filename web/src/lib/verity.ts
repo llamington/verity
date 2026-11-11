@@ -70,5 +70,7 @@ export type {
 	WildAdd,
 	EggAdd,
 	WildSlot,
-	Gift
+	Gift,
+	Pouch,
+	BagItem
 } from '#lib/wasm/verity_wasm.js';

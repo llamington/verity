@@ -21,6 +21,7 @@
 	};
 	const SECTIONS = [
 		{ href: resolve('/app'), label: 'Boxes' },
+		{ href: resolve('/app/bag'), label: 'Bag' },
 		{ href: resolve('/app/gifts'), label: 'Mystery Gifts' }
 	];
 	const inPlace = canWriteInPlace();

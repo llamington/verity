@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
+use verity::bag;
 use verity::data::encounters::EncounterData;
 use verity::data::{GameData, Strings, string_table as st};
 use verity::edit::{self, Edit, Met, Nickname};
@@ -496,6 +497,26 @@ pub struct Gift {
     pub ready: bool,
     /// Ready, Already received, Waiting at the deliveryman, ...
     pub status: String,
+}
+
+/// One bag pouch for the bag screen.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Pouch {
+    pub name: String,
+    /// The most of one item it holds.
+    pub max_count: u16,
+    pub items: Vec<BagItem>,
+}
+
+/// One item in a pouch; its position in `items` is the index the bag edits take.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct BagItem {
+    pub item: Named,
+    pub count: u16,
+    /// An event key item: it comes from Mystery Gift and can't be changed here.
+    pub locked: bool,
 }
 
 fn gift_databases() -> catalog::Databases<'static> {
@@ -1044,12 +1065,7 @@ impl Editor {
 
     /// The Mystery Gifts offered to this save's game and language.
     pub fn gifts(&mut self) -> Result<Vec<Gift>, Invalid> {
-        let generation = self.open().generation();
-        let items = if generation == 4 {
-            st::ITEMS4
-        } else {
-            st::ITEMS5
-        };
+        let items = item_names(self.open().generation());
         let save = self.open();
         Ok(catalog::list(&save, &gift_databases())
             .iter()
@@ -1080,6 +1096,64 @@ impl Editor {
         }
     }
 
+    /// The bag, pouch by pouch.
+    pub fn bag(&mut self) -> Vec<Pouch> {
+        let save = self.open();
+        let items = item_names(save.generation());
+        (0..save.pouches().len())
+            .filter_map(|p| {
+                Some(Pouch {
+                    name: bag::pouch_name(save.pouches()[p].kind).into(),
+                    max_count: bag::max_count(&save, p).ok()?,
+                    items: bag::entries(&save, p)
+                        .ok()?
+                        .map(|e| BagItem {
+                            item: named(items, e.item),
+                            count: e.count,
+                            locked: e.locked,
+                        })
+                        .collect(),
+                })
+            })
+            .collect()
+    }
+
+    /// Items that can be added to a pouch, in the game's order.
+    pub fn bag_addable(&mut self, pouch: usize) -> Result<Vec<Named>, Invalid> {
+        let save = self.open();
+        let game = game_data(save.kind()).ok_or_else(|| Invalid::new("game data not loaded"))?;
+        let items = item_names(save.generation());
+        Ok(bag::addable(&save, &game, pouch)
+            .map_err(|r| Invalid::new(r.text()))?
+            .map(|i| named(items, i))
+            .collect())
+    }
+
+    /// Adds `count` of `item` to a pouch. Returns why it was refused, or nothing when added.
+    pub fn bag_add(
+        &mut self,
+        pouch: usize,
+        item: u16,
+        count: u16,
+    ) -> Result<Option<String>, Invalid> {
+        self.bag_change(|save, game| bag::add(save, game, pouch, item, count))
+    }
+
+    /// Sets the count of the `index`th item of a pouch.
+    pub fn bag_set_count(
+        &mut self,
+        pouch: usize,
+        index: usize,
+        count: u16,
+    ) -> Result<Option<String>, Invalid> {
+        self.bag_change(|save, game| bag::set_count(save, game, pouch, index, count))
+    }
+
+    /// Removes the `index`th item of a pouch.
+    pub fn bag_remove(&mut self, pouch: usize, index: usize) -> Result<Option<String>, Invalid> {
+        self.bag_change(|save, game| bag::remove(save, game, pouch, index))
+    }
+
     /// The save file as it stands, for downloading.
     pub fn bytes(&self) -> Vec<u8> {
         self.save.clone()
@@ -1087,6 +1161,21 @@ impl Editor {
 }
 
 impl Editor {
+    fn bag_change(
+        &mut self,
+        change: impl FnOnce(&mut Save, &GameData) -> Result<(), bag::Refusal>,
+    ) -> Result<Option<String>, Invalid> {
+        let kind = self.open().kind();
+        let game = game_data(kind).ok_or_else(|| Invalid::new("game data not loaded"))?;
+        let mut save = self.open();
+        match change(&mut save, &game) {
+            Ok(()) => {
+                self.dirty = true;
+                Ok(None)
+            }
+            Err(r) => Ok(Some(r.text().into())),
+        }
+    }
     fn open(&mut self) -> Save<'_> {
         Save::open(&mut self.save).expect("opened in new()")
     }
@@ -1371,6 +1460,40 @@ impl Session {
         Ok(self.editor.deliver_gift(source, record, date)?)
     }
 
+    pub fn bag(&mut self) -> Result<Vec<Ts<Pouch>>, JsError> {
+        list(self.editor.bag())
+    }
+
+    #[wasm_bindgen(js_name = bagAddable)]
+    pub fn bag_addable(&mut self, pouch: usize) -> Result<Vec<Ts<Named>>, JsError> {
+        list(self.editor.bag_addable(pouch)?)
+    }
+
+    #[wasm_bindgen(js_name = bagAdd)]
+    pub fn bag_add(
+        &mut self,
+        pouch: usize,
+        item: u16,
+        count: u16,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self.editor.bag_add(pouch, item, count)?)
+    }
+
+    #[wasm_bindgen(js_name = bagSetCount)]
+    pub fn bag_set_count(
+        &mut self,
+        pouch: usize,
+        index: usize,
+        count: u16,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self.editor.bag_set_count(pouch, index, count)?)
+    }
+
+    #[wasm_bindgen(js_name = bagRemove)]
+    pub fn bag_remove(&mut self, pouch: usize, index: usize) -> Result<Option<String>, JsError> {
+        Ok(self.editor.bag_remove(pouch, index)?)
+    }
+
     /// The save file as it stands, for downloading.
     pub fn bytes(&self) -> Vec<u8> {
         self.editor.bytes()
@@ -1456,6 +1579,14 @@ fn locations(generation: u8) -> Vec<Named> {
 fn utf16(s: verity::data::blob::U16s) -> Option<String> {
     let v: Vec<u16> = s.iter().collect();
     (!v.is_empty()).then(|| String::from_utf16_lossy(&v))
+}
+
+fn item_names(generation: u8) -> u16 {
+    if generation == 4 {
+        st::ITEMS4
+    } else {
+        st::ITEMS5
+    }
 }
 
 fn named(cat: u16, id: u16) -> Named {
