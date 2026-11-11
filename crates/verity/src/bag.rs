@@ -40,20 +40,43 @@ pub enum Refusal {
 }
 
 impl Refusal {
+    /// Short enough for the DS (at most 36 characters, ASCII).
     pub fn text(self) -> &'static str {
+        let t = self.c_text();
+        &t[..t.len() - 1]
+    }
+
+    /// [`Refusal::text`], NUL-terminated for C.
+    pub fn c_text(self) -> &'static str {
         match self {
-            Refusal::NoSuchPouch => "There is no such pouch.",
-            Refusal::NoSuchSlot => "There is no item in that slot.",
-            Refusal::NotInPouch => "That item doesn't go in this pouch.",
-            Refusal::EventItem => {
-                "This is an event item. It comes from Mystery Gift, which also unlocks its event."
-            }
-            Refusal::AlreadyInPouch => {
-                "That item is already in the pouch. Change its count instead."
-            }
-            Refusal::Count => "That count is outside what the pouch allows.",
-            Refusal::Full => "The pouch is full.",
+            Refusal::NoSuchPouch => "No such pouch\0",
+            Refusal::NoSuchSlot => "No item in that slot\0",
+            Refusal::NotInPouch => "That item doesn't go in this pouch\0",
+            Refusal::EventItem => "Event item: get it from Mystery Gift\0",
+            Refusal::AlreadyInPouch => "Already in the pouch\0",
+            Refusal::Count => "Count out of range\0",
+            Refusal::Full => "The pouch is full\0",
         }
+    }
+
+    /// Codes for C (`verity_bag_*` results; 0 is success).
+    pub fn code(self) -> u8 {
+        self as u8 + 1
+    }
+
+    pub fn from_code(code: u8) -> Option<Self> {
+        use Refusal::*;
+        [
+            NoSuchPouch,
+            NoSuchSlot,
+            NotInPouch,
+            EventItem,
+            AlreadyInPouch,
+            Count,
+            Full,
+        ]
+        .get(usize::from(code).checked_sub(1)?)
+        .copied()
     }
 }
 

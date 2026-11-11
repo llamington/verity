@@ -320,3 +320,15 @@ fn duplicates_are_edited_by_position() {
         assert_eq!(items(save, p)[n..], [(item, 9)], "{name}");
     });
 }
+
+#[test]
+fn refusal_texts_fit_the_ds() {
+    for code in 1..=7 {
+        let r = Refusal::from_code(code).unwrap();
+        assert_eq!(r.code(), code);
+        assert!(r.text().len() <= 36 && r.text().is_ascii(), "{r:?}");
+        assert!(r.c_text().ends_with('\0'));
+    }
+    assert_eq!(Refusal::from_code(0), None);
+    assert_eq!(Refusal::from_code(8), None);
+}

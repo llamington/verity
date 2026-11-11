@@ -168,7 +168,12 @@ pub fn build_game(j: &Value, evolutions: &Value) -> Vec<u8> {
         .as_array()
         .map(|a| {
             a.iter()
-                .map(|p| ints(p).iter().flat_map(|v| (*v as u16).to_le_bytes()).collect())
+                .map(|p| {
+                    ints(p)
+                        .iter()
+                        .flat_map(|v| (*v as u16).to_le_bytes())
+                        .collect()
+                })
                 .collect()
         })
         .unwrap_or_default();

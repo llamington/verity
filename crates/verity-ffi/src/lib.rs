@@ -9,6 +9,7 @@ extern crate alloc;
 use core::slice;
 
 #[cfg(feature = "alloc")]
+pub mod bag;
 pub mod edit;
 pub mod events;
 pub mod keyboard;

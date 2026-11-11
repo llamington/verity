@@ -195,6 +195,36 @@ size_t verity_events_list(uint8_t *buf, size_t len, verity_event_view *out, size
 uint8_t verity_event_inject(uint8_t *buf, size_t len, uint8_t blob, uint16_t record, uint16_t days);
 const char *verity_event_status_text(uint8_t code);
 
+/** One bag pouch. kind: 0 Items, 1 Key Items, 2 TMs & HMs, 3 Mail, 4 Medicine, 5 Berries,
+    6 Poke Balls, 7 Battle Items. */
+typedef struct verity_pouch_view {
+    uint8_t kind;
+    uint8_t reserved;
+    uint16_t count;     /* items in it now */
+    uint16_t slots;
+    uint16_t max_count; /* the most of one item it holds */
+} verity_pouch_view;
+
+/** One item in a pouch; its position in the list is the index the edits take. */
+typedef struct verity_bag_item {
+    uint16_t item;
+    uint16_t count;
+    uint8_t locked; /* 1: an event item (read-only; it comes from Mystery Gift) */
+    uint8_t reserved;
+} verity_bag_item;
+
+/** The bag. Each returns how many were written (at most cap). addable: items that can be added
+    to the pouch, in the game's order. */
+size_t verity_bag_pouches(uint8_t *buf, size_t len, verity_pouch_view *out, size_t cap);
+size_t verity_bag_items(uint8_t *buf, size_t len, uint8_t pouch, verity_bag_item *out, size_t cap);
+size_t verity_bag_addable(uint8_t *buf, size_t len, uint8_t pouch, uint16_t *out, size_t cap);
+
+/** Bag edits. Return 0 on success; see verity_bag_status_text. The save is not finalised. */
+uint8_t verity_bag_add(uint8_t *buf, size_t len, uint8_t pouch, uint16_t item, uint16_t count);
+uint8_t verity_bag_set_count(uint8_t *buf, size_t len, uint8_t pouch, uint16_t index, uint16_t count);
+uint8_t verity_bag_remove(uint8_t *buf, size_t len, uint8_t pouch, uint16_t index);
+const char *verity_bag_status_text(uint8_t code);
+
 /** What linking another save into the open B2W2 save would do. mode: 0 unusable, 1 Memory Link
     (Black or White save), 2 keys (Black 2 or White 2 save), 3 enable all keys. status: 0 ready, 1 replaces another
     player's link, else see verity_unova_status_text. keys: Easy, Challenge, City, Iron, Iceberg. */

@@ -506,7 +506,7 @@ fn bag_lists_names_and_edits() {
 
         // Refusals come back as text; bad pouches are errors.
         let again = ed.bag_add(0, id, 1).unwrap();
-        assert!(again.unwrap().contains("already in the pouch"));
+        assert_eq!(again.as_deref(), Some("Already in the pouch"));
         assert!(ed.bag_set_count(0, before, 0).unwrap().is_some());
         assert_eq!(ed.bag_set_count(0, before, 7), Ok(None));
         assert_eq!(ed.bag()[0].items[before].count, 7);

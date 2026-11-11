@@ -91,6 +91,7 @@ emu-ui: emu-harness nds
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-pal-park.json --out build/emu/ui-pal-park
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-closest-ivs.json --out build/emu/ui-closest-ivs
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-misc-tabs.json --out build/emu/ui-misc-tabs
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-bag.json --out build/emu/ui-bag
 	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-leave.json --out build/emu/ui-leave
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-gen5.json --out build/emu/ui-gen5
