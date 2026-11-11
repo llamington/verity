@@ -34,6 +34,18 @@ export async function loadLegalityData(session: Session): Promise<void> {
 	await Promise.all(session.legalityBlobs().map((b) => load(b)));
 }
 
+/** Whether `bytes` open as a save with valid checksums (the read-back check before writing). */
+export function checksOut(bytes: Uint8Array): boolean {
+	try {
+		const s = new Session(bytes.slice());
+		const ok = s.overview().checksumsOk;
+		s.free();
+		return ok;
+	} catch {
+		return false;
+	}
+}
+
 export type { Session };
 export type {
 	Mon,
