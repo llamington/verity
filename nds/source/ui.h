@@ -185,6 +185,9 @@ constexpr int kSmallIcons = 6;
 void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* colors);
 // Hides the sprite and the small icons.
 void top_art_hide();
+// verity's mark (48x48 inside a 64x64 sprite) on the top screen, in the Pokémon sprite's slot; a
+// scene change hides it.
+void logo(int x, int y);
 // A 7x7 shape drawn into the text layer: the six box markings (circle, triangle, square, heart,
 // star, diamond), kShiny (the shiny star), kMale or kFemale. Tone 0 ink, 1 muted (an unset
 // mark), 2 gold, 3 blue, 4 red. (The ROM fonts' gender signs need a second shade.)

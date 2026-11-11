@@ -227,6 +227,10 @@ private:
         ui::title(top(), "verity");
         ui::title_right(top(), "Gen 4/5 save editor");
         ui::panel(top(), 1, 2, 30, message[0] ? 6 : 3);
+        // The logo (48 px inside its 64 px sprite) centred in the gap between the panels: from
+        // below this one's border to the bottom panel's border at row 17.
+        int gap_top = (message[0] ? 9 : 6) * 8, gap_bottom = 17 * 8;
+        ui::logo(128 - 32, (gap_top + gap_bottom) / 2 - 32);
         ui::Lines l(2);
         ui::text(top(), ui::kInsetTop, l.line(), "%d save file%s found", count_, count_ == 1 ? "" : "s");
         if (core::doc().loaded())

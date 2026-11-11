@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui.h"
+#include "logo.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -1283,6 +1284,22 @@ void pokemon_sprite(int x, int y, const uint8_t* tiles, const uint16_t* colors)
         oamSet(&oamMain, kSpriteId + b, x + dx[b], y + dy[b], 2, kSpriteBank, size[b], SpriteColorFormat_16Color,
                gfx[b], -1, false, false, false, false, false);
     }
+}
+
+void logo(int x, int y)
+{
+    static uint16_t* gfx;
+    if (!gfx)
+    {
+        gfx = oamAllocateGfx(&oamMain, SpriteSize_64x64, SpriteColorFormat_16Color);
+        copy16(gfx, kLogoTiles, (int)sizeof(kLogoTiles));
+    }
+    for (int i = 1; i < 16; i++)
+        SPRITE_PALETTE[16 * kSpriteBank + i] = kLogoColors[i];
+    // The Pokémon sprite's four blocks share this slot; only the first is the logo.
+    oamClear(&oamMain, kSpriteId + 1, 3);
+    oamSet(&oamMain, kSpriteId, x, y, 2, kSpriteBank, SpriteSize_64x64, SpriteColorFormat_16Color, gfx, -1,
+           false, false, false, false, false);
 }
 
 void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* colors)
