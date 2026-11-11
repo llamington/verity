@@ -7,11 +7,15 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Next tasks (user, 2026-11-10), in order:**
 
-1. **Open question for the user:** the stats hexagon. The games chart EVs (Gen 6 on) and give IVs
-   as Judge words ("Best" ... "No Good"). The user asked whether it should show EVs, IVs or both;
-   not answered yet. Ask before building it.
+1. PLAN P12 (the web version). The stats hexagon is dropped (user, 2026-11-10).
 
 **Done 2026-11-10 (all committed and pushed):**
+
+- **Spacing:** 12 px text pitch, 16 px menus and grouped panels across the app
+  (`docs/research/ui-stack.md`, Spacing).
+- **Sprites:** the games' front sprites, type and category icons, balls and markings
+  (`sprites4/5.vspr`, `docs/research/rom-sprites.md`). First start takes about 20 s in melonDS;
+  untested on hardware.
 
 - **Ribbon images:** `verity-rom::ribbons` (`ribbons.vrib` from the best ROM; Gen 5 tables are in
   overlays, read with `Rom::overlay`); the ribbon list shows the highlighted ribbon on the top
