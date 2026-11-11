@@ -4,6 +4,15 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
+	import {
+		backupName,
+		canWriteInPlace,
+		download,
+		pickSave,
+		writeInPlace,
+		type OpenedFile
+	} from '#lib/files.js';
 	import MonTile from '#lib/components/MonTile.svelte';
 	import PokemonSummary from '#lib/components/PokemonSummary.svelte';
 	import LegalityReport from '#lib/components/LegalityReport.svelte';
@@ -11,6 +20,7 @@
 	import {
 		openSave,
 		loadLegalityData,
+		checksOut,
 		type Session,
 		type Overview,
 		type BoxView,
@@ -32,6 +42,20 @@
 	let overview: Overview | undefined = $state.raw();
 	let fileName = $state('');
 	let error = $state('');
+	/** Where the save came from, for writing back in place (Chromium). */
+	let handle: FileSystemFileHandle | undefined = $state.raw();
+	/** The file as opened, kept for a backup download. */
+	let original: Uint8Array | undefined = $state.raw();
+	/** Edits applied since the last save. */
+	let dirty = $state(false);
+	/** Whether the checksums in the file as opened (or last saved) were valid. */
+	let fileChecksumsOk = $state(true);
+	let saveMessage = $state('');
+	let saveError = $state('');
+	let saving = $state(false);
+	/** A file waiting for the user to confirm discarding unsaved edits. */
+	let pending: OpenedFile | undefined = $state.raw();
+	const inPlace = canWriteInPlace();
 	let boxIndex = $state(0);
 
 	/** The open Pokémon: box index (-1 for the party) and slot. */
@@ -77,27 +101,87 @@
 		legality = session.legality(selected.box, selected.slot);
 		overview = session.overview();
 		version++;
+		dirty = true;
+		saveMessage = '';
 		return undefined;
 	}
 
-	async function onFile(e: Event) {
-		const file = (e.currentTarget as HTMLInputElement).files?.[0];
-		if (!file) return;
+	async function save() {
+		if (!session) return;
+		saving = true;
+		saveError = saveMessage = '';
+		try {
+			const bytes = session.finalize();
+			// Re-open what will be written: it must parse with valid checksums.
+			if (!checksOut(bytes)) throw new Error('the finalized save fails its own checksums');
+			if (handle) {
+				await writeInPlace(handle, bytes);
+				saveMessage = `Saved to ${fileName} and read back intact.`;
+			} else {
+				download(fileName, bytes);
+				saveMessage = `Downloaded ${fileName}. Put it in place of your old save to use it.`;
+			}
+			session.markSaved();
+			dirty = false;
+			fileChecksumsOk = true;
+			overview = session.overview();
+		} catch (err) {
+			saveError = err instanceof Error ? err.message : String(err);
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function load(f: OpenedFile) {
 		error = '';
 		try {
+			const next = await openSave(f.bytes.slice());
 			session?.free();
-			session = await openSave(new Uint8Array(await file.arrayBuffer()));
+			session = next;
 			overview = session.overview();
-			fileName = file.name;
+			fileName = f.name;
+			handle = f.handle;
+			original = f.bytes;
+			dirty = false;
+			fileChecksumsOk = overview.checksumsOk;
+			saveMessage = saveError = '';
 			boxIndex = 0;
 			selected = undefined;
 			choices = undefined;
 		} catch (err) {
-			session = overview = undefined;
-			error = `Couldn't open ${file.name}: ${err instanceof Error ? err.message : err}`;
+			error = `Couldn't open ${f.name}: ${err instanceof Error ? err.message : err}`;
 		}
 	}
+
+	/** Opens `f`, first asking to discard unsaved edits. */
+	function open(f: OpenedFile) {
+		if (dirty) pending = f;
+		else void load(f);
+	}
+
+	async function onPick() {
+		try {
+			const f = await pickSave();
+			if (f) open(f);
+		} catch (err) {
+			error = err instanceof Error ? err.message : String(err);
+		}
+	}
+
+	function onBeforeUnload(e: BeforeUnloadEvent) {
+		if (dirty) e.preventDefault();
+	}
+
+	async function onFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		open({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+	}
 </script>
+
+<svelte:window onbeforeunload={onBeforeUnload} />
 
 <svelte:head>
 	<title>verity editor</title>
@@ -107,19 +191,35 @@
 <main class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6">
 	<header class="flex flex-wrap items-center justify-between gap-3">
 		<h1 class="text-xl font-semibold"><a href={resolve('/')}>verity</a></h1>
-		<label class="cursor-pointer">
-			<input
-				type="file"
-				accept=".sav,.dsv,.bin"
-				class="sr-only"
-				onchange={onFile}
-				data-testid="file"
-			/>
-			<span
-				class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
-				>Open a save…</span
-			>
-		</label>
+		<div class="flex items-center gap-2">
+			{#if inPlace}
+				<Button size="sm" onclick={onPick}>Open a save…</Button>
+				<!-- Kept for drag-and-drop style uploads and tests; saves opened here download. -->
+				<input
+					type="file"
+					accept=".sav,.dsv,.bin"
+					class="sr-only"
+					tabindex="-1"
+					aria-hidden="true"
+					onchange={onFile}
+					data-testid="file"
+				/>
+			{:else}
+				<label class="cursor-pointer">
+					<input
+						type="file"
+						accept=".sav,.dsv,.bin"
+						class="sr-only"
+						onchange={onFile}
+						data-testid="file"
+					/>
+					<span
+						class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+						>Open a save…</span
+					>
+				</label>
+			{/if}
+		</div>
 	</header>
 
 	{#if error}
@@ -139,13 +239,43 @@
 				<span>Money ${overview.trainer.money.toLocaleString()}</span>
 				<span>Badges {overview.trainer.badges}</span>
 				<span>Played {overview.trainer.played}</span>
-				{#if overview.checksumsOk}
+				{#if dirty}
+					<Badge variant="outline">Checksums updated on save</Badge>
+				{:else if fileChecksumsOk}
 					<Badge variant="secondary">Checksums OK</Badge>
 				{:else}
 					<Badge variant="destructive">Checksums bad</Badge>
 				{/if}
 			</Card.Content>
 		</Card.Root>
+
+		<div
+			class="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"
+			data-testid="save-bar"
+		>
+			<span class="mr-auto" role="status">
+				{#if saveError}
+					<span class="text-destructive">{saveError}</span>
+				{:else if dirty}
+					Unsaved changes.
+				{:else if saveMessage}
+					{saveMessage}
+				{:else}
+					No changes yet.
+				{/if}
+			</span>
+			{#if original && (dirty || saveMessage)}
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => original && download(backupName(fileName), original)}
+					>Download original</Button
+				>
+			{/if}
+			<Button size="sm" disabled={!dirty || saving} onclick={save}>
+				{handle ? 'Save' : 'Save (download)'}
+			</Button>
+		</div>
 
 		<section class="flex flex-col gap-2">
 			<h2 class="font-medium">Party</h2>
@@ -240,3 +370,29 @@
 		</p>
 	{/if}
 </main>
+
+<AlertDialog.Root
+	open={!!pending}
+	onOpenChange={(o) => {
+		if (!o) pending = undefined;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Discard unsaved changes?</AlertDialog.Title>
+			<AlertDialog.Description>
+				{fileName} has edits that aren't saved. Opening {pending?.name} discards them.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Keep editing</AlertDialog.Cancel>
+			<AlertDialog.Action
+				onclick={() => {
+					const f = pending;
+					pending = undefined;
+					if (f) void load(f);
+				}}>Discard and open</AlertDialog.Action
+			>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
