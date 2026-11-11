@@ -19,8 +19,13 @@ Svelte, Solid and Astro: **SvelteKit 3** (static adapter, every page prerendered
 **shadcn-svelte** (preset "nova"; components are copied into `web/src/lib/components/ui`),
 **Storybook 10** (Chromatic add-on removed), Vitest and Playwright. Hosting target: Cloudflare Pages
 (free), not set up yet. Node is managed with **mise** (user installed it; `~/.local/bin/mise`),
-pinned by `web/.node-version` (26, the LTS). Run npm through `mise exec --` unless the shell has
-mise activated.
+pinned by `.node-version` at the repo root (26, the LTS). Run npm through `mise exec --` unless the
+shell has mise activated. The root `package.json` is an npm workspace root (`web/` is the
+workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
+- **Commits (user, 2026-11-11): Conventional Commits**, enforced by the husky commit-msg hook
+  (`.husky/commit-msg`, on after `npm install` at the root) and by CI (the "Changed parts" job
+  lints every pushed commit). Scopes: core, ffi, wasm, rom, datagen, ds, web, harness, ci, deps,
+  handoff, plan (`commitlint.config.js`). Subjects start lowercase. History before this stays.
 
 - `crates/verity-wasm`: wasm-bindgen + tsify (`Ts<T>` returns; the `into_wasm_abi` attribute is
   deprecated for leaking). `Session::new(bytes)`, `gameBlob()`, `attach("strings"|"game", bytes)`,
