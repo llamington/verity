@@ -226,8 +226,10 @@ uint8_t verity_bag_remove(uint8_t *buf, size_t len, uint8_t pouch, uint16_t inde
 const char *verity_bag_status_text(uint8_t code);
 
 /** What linking another save into the open B2W2 save would do. mode: 0 unusable, 1 Memory Link
-    (Black or White save), 2 keys (Black 2 or White 2 save), 3 enable all keys. status: 0 ready, 1 replaces another
-    player's link, else see verity_unova_status_text. keys: Easy, Challenge, City, Iron, Iceberg. */
+    (Black or White save), 2 keys (Black 2 or White 2 save), 3 enable all keys. status: 0 ready,
+    1 ready but replaces another player's link, else see verity_unova_status_text. keys: Easy,
+    Challenge, City, Iron, Iceberg. The previews recompute the save's checksums (as saving does),
+    so unsaved edits don't make it look corrupt. */
 typedef struct verity_unova_preview_t {
     uint8_t mode;
     uint8_t status;
@@ -235,13 +237,13 @@ typedef struct verity_unova_preview_t {
     uint8_t keys[5];
 } verity_unova_preview_t;
 
-void verity_unova_preview(const uint8_t *buf, size_t len, const uint8_t *other, size_t other_len,
-                          bool replace, verity_unova_preview_t *out);
-/** Returns 0 on success, else a status code. The save is not finalised. */
-uint8_t verity_unova_apply(uint8_t *buf, size_t len, const uint8_t *other, size_t other_len,
-                           bool replace, uint32_t seed);
+void verity_unova_preview(uint8_t *buf, size_t len, const uint8_t *other, size_t other_len,
+                          verity_unova_preview_t *out);
+/** Links (replacing another player's link). Returns 0 on success, else a status code. The save is
+    not finalised. */
+uint8_t verity_unova_apply(uint8_t *buf, size_t len, const uint8_t *other, size_t other_len, uint32_t seed);
 /** Enabling every key without a partner save; mode is 3. Returns 0 on success, else a status. */
-void verity_unova_enable_preview(const uint8_t *buf, size_t len, verity_unova_preview_t *out);
+void verity_unova_enable_preview(uint8_t *buf, size_t len, verity_unova_preview_t *out);
 uint8_t verity_unova_enable_all(uint8_t *buf, size_t len);
 const char *verity_unova_status_text(uint8_t status);
 

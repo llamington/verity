@@ -1009,7 +1009,7 @@ public:
         {
             if (in.down & KEY_B)
                 close_other();
-            else if ((in.down & KEY_A) && preview_.status == 0)
+            else if ((in.down & KEY_A) && ready())
                 link();
             return true;
         }
@@ -1035,9 +1035,12 @@ private:
     uint8_t* other_ = nullptr;
     size_t other_len_ = 0;
     const char* other_path_ = "";
-    bool replace_ = false;
     bool enabling_ = false;
     verity_unova_preview_t preview_{};
+
+    // Status 1 is ready, with a note that the link replaces another player's.
+    bool ready() const { return preview_.status <= 1; }
+    bool replaces() const { return preview_.status == 1; }
     char trainer_[32] = "";
     char message_[40] = "";
 
@@ -1054,10 +1057,7 @@ private:
         other_path_ = path;
         message_[0] = 0;
         trainer_[0] = 0;
-        verity_unova_preview(d.buf, d.len, other_, other_len_, false, &preview_);
-        replace_ = preview_.status == 1;
-        if (replace_)
-            verity_unova_preview(d.buf, d.len, other_, other_len_, true, &preview_);
+        verity_unova_preview(d.buf, d.len, other_, other_len_, &preview_);
         auto info = d.info;
         if (verity_save_probe(other_, other_len_, &info) == VERITY_OK)
             ui::utf16_to_text(info.ot_name, trainer_, sizeof(trainer_));
@@ -1086,7 +1086,7 @@ private:
         auto& d = core::doc();
         uint32_t seed = (uint32_t)time(nullptr) * 1103515245u + 12345u;
         uint8_t r = enabling_ ? verity_unova_enable_all(d.buf, d.len)
-                              : verity_unova_apply(d.buf, d.len, other_, other_len_, replace_, seed);
+                              : verity_unova_apply(d.buf, d.len, other_, other_len_, seed);
         if (r == 0)
         {
             d.dirty = true;
@@ -1143,13 +1143,13 @@ private:
         ui::bar(0, 0, false);
         ui::panel(top(), 1, top_row, 30, 21 - top_row);
         ui::Lines l(top_row);
-        if (preview_.status != 0)
+        if (!ready())
             ui::badge(top(), 2, l.grid_row(), ui::Badge::Invalid, verity_unova_status_text(preview_.status));
         else if (preview_.mode == 1)
         {
             ui::text(top(), x, l.line(), "Memory Link");
             ui::text(top(), x, l.line(), UI_MUTED "%s", preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
-            if (replace_)
+            if (replaces())
             {
                 l.block();
                 ui::text(top(), x, l.line(), "%s", verity_unova_status_text(1));
@@ -1170,9 +1170,9 @@ private:
         ui::title(bottom(), "Link");
         ui::panel(bottom(), 1, 3, 30, 4);
         ui::Lines b(3);
-        ui::text(bottom(), x, b.line(), "%s", preview_.status == 0 ? "Ready." : "Can't link these saves.");
+        ui::text(bottom(), x, b.line(), "%s", ready() ? "Ready." : "Can't link these saves.");
         ui::text(bottom(), x, b.line(), UI_MUTED "Nothing changes until you link.");
-        ui::hints(bottom(), preview_.status == 0 ? "A:Link|B:Back" : "B:Back");
+        ui::hints(bottom(), ready() ? "A:Link|B:Back" : "B:Back");
     }
 
     void draw_list()
