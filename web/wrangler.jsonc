@@ -1,0 +1,11 @@
+// Cloudflare Workers config for the site: static files only (no Worker script). CI builds the
+// site into build/ and deploys it with `wrangler deploy` (.github/workflows/ci.yml).
+{
+	"name": "verity",
+	"compatibility_date": "2026-11-01",
+	"assets": {
+		"directory": "./build",
+		// /app serves app.html, as the prerendered pages expect.
+		"html_handling": "auto-trailing-slash"
+	}
+}

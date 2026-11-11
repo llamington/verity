@@ -74,6 +74,10 @@ jobs:
               - 'web/**'
               - 'crates/verity/**'
               - 'crates/verity-wasm/**'
+              # The deployed site's data blobs.
+              - 'crates/datagen/**'
+              - 'tools/pkhex-oracle/**'
+              - 'scripts/build-data.sh'
 
   test:
     name: Rust test, lint, DS build
@@ -138,3 +142,54 @@ jobs:
       # Component interaction tests (Storybook play functions) in headless Chromium. The
       # end-to-end Playwright journeys need real saves, which CI doesn't have.
       - run: npx vitest --run
+
+  deploy:
+    name: Deploy web (Cloudflare Workers)
+    needs: [changes, web]
+    # Pushes to main whose web checks passed. Without the Cloudflare secrets the site is still
+    # built (so the build stays tested) and the upload is skipped.
+    if: >-
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.web.result == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      # The data blobs (gitignored) come from PKHeX.Core's NuGet package through the oracle.
+      - name: Build the data blobs
+        run: scripts/build-data.sh
+      - name: Build the site (release WASM, blobs in static/data)
+        run: npm run build
+        working-directory: web
+      # Static files on Workers (web/wrangler.jsonc); the Worker is created on first deploy.
+      - name: Deploy
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: deploy
+      - name: No Cloudflare secrets
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == ''
+        run: echo "::notice::Site built; deploy skipped (set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)."

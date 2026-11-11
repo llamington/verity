@@ -575,7 +575,7 @@ A browser build of the core, after the DS loads its font and graphics from the u
   takedown, not a lawsuit); no stripping of card text.
 - **Stack (user, 2026-11-10):** SvelteKit 3 (static adapter), strict TypeScript, Tailwind v4,
   shadcn-svelte, Storybook, Vitest, Playwright; `crates/verity-wasm` (wasm-bindgen + tsify) built
-  with wasm-pack; hosted on Cloudflare Pages, deployed from a GitHub Action. Node via mise,
+  with wasm-pack; hosted on Cloudflare Workers (static assets), deployed from a GitHub Action. Node via mise,
   pinned in `web/.node-version`.
 
 ---
