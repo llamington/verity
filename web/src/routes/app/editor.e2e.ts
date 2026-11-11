@@ -30,6 +30,30 @@ for (const [file, game] of [
 	});
 }
 
+for (const file of ['gen4_platinum.sav', 'gen5_white2.sav']) {
+	test(`shows the summary and legality of a party Pokémon in ${file}`, async ({ page }) => {
+		test.skip(!existsSync(corpus + file), 'corpus not present');
+		await page.goto('/app');
+		await page.getByTestId('file').setInputFiles(corpus + file);
+		await page.getByTestId('party').getByTestId('mon').first().click();
+
+		const summary = page.getByTestId('summary');
+		await expect(summary).toBeVisible();
+		await expect(summary).toContainText('Nature');
+		await expect(summary.getByTestId('stats')).toContainText('IV');
+		await expect(summary.getByTestId('moves').locator('li').first()).not.toContainText('#');
+
+		// The legality blobs are fetched on first use; the verdict replaces "Checking…".
+		const legality = page.getByTestId('legality');
+		await expect(legality).toContainText(/Legal|Illegal|Not checked/, { timeout: 15_000 });
+		await expect(legality).not.toContainText('Checking');
+		await expect(legality).not.toContainText('data missing');
+
+		await page.keyboard.press('Escape');
+		await expect(summary).toBeHidden();
+	});
+}
+
 test('rejects a file that is not a save', async ({ page }) => {
 	await page.goto('/app');
 	await page.getByTestId('file').setInputFiles({

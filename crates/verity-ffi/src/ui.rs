@@ -439,11 +439,32 @@ pub(crate) fn empty_legality() -> VerityLegality {
 pub(crate) mod legal {
     use super::*;
     use core::cell::Cell;
-    use verity::data::encounters::EncounterData;
-    use verity::data::MoveData;
-    use verity::legality::analysis4::{analyze4, Context4, Matched};
-    use verity::legality::analysis5::{analyze5, Context5};
-    use verity::legality::{evo::Evo4, moves4::Learn4};
+    use verity::legality::analysis4::{Context4, Matched};
+    use verity::legality::analysis5::Context5;
+    use verity::legality::verdict::{self, Blob};
+
+    fn kind(b: Blob) -> BlobKind {
+        use BlobKind as K;
+        match b {
+            Blob::Dp => K::Dp,
+            Blob::Pt => K::Pt,
+            Blob::Hgss => K::Hgss,
+            Blob::Bw => K::Bw,
+            Blob::B2w2 => K::B2w2,
+            Blob::Moves4 => K::Moves4,
+            Blob::Moves5 => K::Moves5,
+            Blob::EncDppt => K::EncDppt,
+            Blob::EncHgss => K::EncHgss,
+            Blob::EncBw => K::EncBw,
+            Blob::EncB2w2 => K::EncB2w2,
+            Blob::EncDr => K::EncDr,
+            Blob::Names4 => K::Names4,
+            Blob::Names5 => K::Names5,
+            Blob::Gifts4 => K::Gifts4,
+            Blob::Gifts5 => K::Gifts5,
+            Blob::G3Origin => K::G3Origin,
+        }
+    }
 
     struct Holder(Cell<Option<&'static Context4<'static>>>);
     // SAFETY: single-threaded FFI (see `Registry`).
@@ -460,34 +481,7 @@ pub(crate) mod legal {
         if let Some(c) = CTX.0.get() {
             return Some(c);
         }
-        let g = |k| blob(k).and_then(|b| GameData::load(b).ok());
-        let (hgss, pt, dp, gen5) = (
-            g(BlobKind::Hgss)?,
-            g(BlobKind::Pt)?,
-            g(BlobKind::Dp)?,
-            g(BlobKind::B2w2)?,
-        );
-        let ctx = Context4 {
-            hgss,
-            learn: Learn4 {
-                hgss,
-                pt,
-                dp,
-                moves: MoveData::load(blob(BlobKind::Moves4)?).ok()?,
-            },
-            evo: Evo4::new(dp, hgss),
-            enc_dppt: EncounterData::load(blob(BlobKind::EncDppt)?).ok()?,
-            enc_hgss: EncounterData::load(blob(BlobKind::EncHgss)?).ok()?,
-            gen5,
-            names4: Strings::load(blob(BlobKind::Names4)?).ok()?,
-            // Optional: without it Pal Park Pokémon stay unchecked.
-            // Optional: without the event database gifts are not matched.
-            g3: blob(BlobKind::G3Origin)
-                .and_then(|b| verity::legality::analysis3::Context3::load(b).ok()),
-            gifts: blob(BlobKind::Gifts4)
-                .and_then(|b| verity::gift::pcd::Gifts4::load(b).ok())
-                .unwrap_or(verity::gift::pcd::Gifts4::empty()),
-        };
+        let ctx = verdict::context4(|b| blob(kind(b)))?;
         let leaked: &'static Context4<'static> =
             alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
         CTX.0.set(Some(leaked));
@@ -499,23 +493,7 @@ pub(crate) mod legal {
         if let Some(c) = CTX5.0.get() {
             return Some(c);
         }
-        let g = |k| blob(k).and_then(|b| GameData::load(b).ok());
-        let (bw, b2w2) = (g(BlobKind::Bw)?, g(BlobKind::B2w2)?);
-        let enc = |k| blob(k).and_then(|b| EncounterData::load(b).ok());
-        let ctx = Context5 {
-            bw,
-            b2w2,
-            moves: MoveData::load(blob(BlobKind::Moves5)?).ok()?,
-            enc_bw: enc(BlobKind::EncBw)?,
-            enc_b2w2: enc(BlobKind::EncB2w2)?,
-            enc_dr: enc(BlobKind::EncDr)?,
-            evo: Evo4::new(bw, b2w2),
-            names: Strings::load(blob(BlobKind::Names5)?).ok()?,
-            // Optional: without it Wonder Card Pokémon are not matched.
-            gifts: blob(BlobKind::Gifts5)
-                .and_then(|b| verity::gift::pgf::Gifts5::load(b).ok())
-                .unwrap_or(verity::gift::pgf::Gifts5::empty()),
-        };
+        let ctx = verdict::context5(|b| blob(kind(b)))?;
         let leaked: &'static Context5<'static> =
             alloc::boxed::Box::leak(alloc::boxed::Box::new(ctx));
         CTX5.0.set(Some(leaked));
@@ -535,62 +513,14 @@ pub(crate) mod legal {
         }
     }
 
-    fn check5(pk: &Pkm, out: &mut VerityLegality) {
-        let Some(ctx) = context5() else {
-            out.unsupported = 3;
-            return;
-        };
-        let r = if verity::legality::analysis5::is_gen5_version(pk.version()) {
-            analyze5(ctx, pk)
-        } else {
-            // Poké Transfer: judged with the Gen 3 and 4 data. Colosseum and XD are out of scope.
-            let Some(c4) = context() else {
-                out.unsupported = 3;
-                return;
-            };
-            if pk.version() == 15 {
-                out.unsupported = 2;
-                return;
-            }
-            verity::legality::analysis4::analyze_transfer4(c4, ctx, pk)
-        };
-        if matches!(r.matched, Matched::Invalid) {
-            out.unsupported = 6;
-            return;
-        }
-        fill(&r, out);
-    }
-
     pub(crate) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
-        if save.generation() == 5 {
-            check5(pk, out);
-            return;
+        let gen = save.generation();
+        // Build only what this save can need (a Gen 4 save never reads the Gen 5 encounters).
+        let c5 = if gen == 5 { context5() } else { None };
+        match verdict::check(gen, pk, context(), c5) {
+            Ok(r) => fill(&r, out),
+            Err(why) => out.unsupported = why as u8,
         }
-        if save.generation() != 4 {
-            out.unsupported = 4;
-            return;
-        }
-        let gba = verity::legality::analysis3::is_gba_version(pk.version());
-        if !gba && !matches!(pk.version(), 7 | 8 | 10..=12) {
-            out.unsupported = 2;
-            return;
-        }
-        let Some(ctx) = context() else {
-            out.unsupported = 3;
-            return;
-        };
-        if gba && ctx.g3.is_none() {
-            out.unsupported = 2;
-            return;
-        }
-        let r = analyze4(ctx, pk);
-        // Only wild slots are modelled; without a slot match the origin is something verity
-        // cannot judge yet, so it says nothing rather than a false "illegal".
-        if matches!(r.matched, Matched::Invalid) {
-            out.unsupported = 6;
-            return;
-        }
-        fill(&r, out);
     }
 }
 

@@ -3,8 +3,19 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
+	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import MonTile from '#lib/components/MonTile.svelte';
-	import { openSave, type Session, type Overview, type BoxView } from '#lib/verity.js';
+	import PokemonSummary from '#lib/components/PokemonSummary.svelte';
+	import LegalityReport from '#lib/components/LegalityReport.svelte';
+	import {
+		openSave,
+		loadLegalityData,
+		type Session,
+		type Overview,
+		type BoxView,
+		type Summary,
+		type Legality
+	} from '#lib/verity.js';
 
 	const GAMES: Record<string, string> = {
 		dp: 'Diamond / Pearl',
@@ -20,6 +31,30 @@
 	let error = $state('');
 	let boxIndex = $state(0);
 
+	/** The open Pokémon: box index (-1 for the party) and slot. */
+	let selected: { box: number; slot: number } | undefined = $state();
+	let summary: Summary | undefined = $state.raw();
+	let legality: Legality | undefined = $state.raw();
+	let legalityError = $state('');
+
+	async function select(box: number, slot: number) {
+		if (!session) return;
+		const s = session;
+		selected = { box, slot };
+		summary = s.summary(box, slot);
+		legality = undefined;
+		legalityError = '';
+		try {
+			await loadLegalityData(s);
+			// Ignore a result for a Pokémon that is no longer open.
+			if (session !== s || selected?.box !== box || selected.slot !== slot) return;
+			legality = s.legality(box, slot);
+			summary = s.summary(box, slot);
+		} catch (err) {
+			legalityError = `Couldn't load the legality data: ${err instanceof Error ? err.message : err}`;
+		}
+	}
+
 	const box: BoxView | undefined = $derived(
 		session && overview ? session.boxView(boxIndex) : undefined
 	);
@@ -34,6 +69,7 @@
 			overview = session.overview();
 			fileName = file.name;
 			boxIndex = 0;
+			selected = undefined;
 		} catch (err) {
 			session = overview = undefined;
 			error = `Couldn't open ${file.name}: ${err instanceof Error ? err.message : err}`;
@@ -93,7 +129,7 @@
 			<h2 class="font-medium">Party</h2>
 			<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6" data-testid="party">
 				{#each overview.party as mon, i (i)}
-					<MonTile {mon} />
+					<MonTile {mon} onselect={() => select(-1, i)} />
 				{/each}
 			</div>
 		</section>
@@ -117,10 +153,36 @@
 			</div>
 			<div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
 				{#each box.slots as mon, i (i)}
-					<MonTile {mon} />
+					<MonTile {mon} onselect={() => select(boxIndex, i)} />
 				{/each}
 			</div>
 		</section>
+
+		<Sheet.Root
+			open={!!selected}
+			onOpenChange={(open) => {
+				if (!open) selected = undefined;
+			}}
+		>
+			<Sheet.Content class="w-full overflow-y-auto sm:max-w-md">
+				{#if summary}
+					<Sheet.Header>
+						<Sheet.Title>
+							{summary.mon.egg ? 'Egg' : (summary.mon.speciesName ?? `#${summary.mon.species}`)}
+						</Sheet.Title>
+						<Sheet.Description>
+							{selected && selected.box < 0
+								? `Party slot ${selected.slot + 1}`
+								: `${box.name}, slot ${(selected?.slot ?? 0) + 1}`}
+						</Sheet.Description>
+					</Sheet.Header>
+					<div class="flex flex-col gap-4 px-4 pb-6">
+						<LegalityReport {legality} error={legalityError} />
+						<PokemonSummary {summary} {legality} />
+					</div>
+				{/if}
+			</Sheet.Content>
+		</Sheet.Root>
 	{:else if !error}
 		<p class="text-muted-foreground">
 			Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
