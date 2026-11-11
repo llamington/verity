@@ -8,25 +8,27 @@ N navy outline, R red shield, C cream check, G gold sparkle, . transparent.
 from pathlib import Path
 
 GRID = [
-    "......NNNN......",
-    "..NNNNRRRRNNNN..",
-    ".NRRRRRRRRRGRRN.",
-    ".NRRRRRRRRGGGRN.",
-    ".NRRRRRRRRRGRRN.",
+    "..NNNNNNNNNNNN..",
     ".NRRRRRRRRRRRRN.",
-    ".NRRRRRRRRRCCRN.",
-    ".NRRRRRRRRCCCRN.",
-    ".NRCCRRRRCCCRRN.",
-    ".NRCCCRRCCCRRRN.",
-    "..NRCCCCCCRRRN..",
-    "...NRCCCCRRRN...",
-    "....NRRCCRRN....",
-    ".....NRRRRN.....",
-    "......NRRN......",
+    ".NRRGRRRRRRRRRN.",
+    ".NRGGGRRRRRRRRN.",
+    ".NRRGRRRRRRCCRN.",
+    ".NRRRRRRRRCCRRN.",
+    ".NRRRRRRRCCRRRN.",
+    ".NRCCRRRCCRRRRN.",
+    ".NRRCCRCCRRRRRN.",
+    ".NRRRCCCRRRRRRN.",
+    "..NRRRCRRRRRRN..",
+    "..NRRRRRRRRRRN..",
+    "...NRRRRRRRRN...",
+    "....NRRRRRRN....",
+    ".....NNRRNN.....",
     ".......NN.......",
 ]
+# The outline is mirror-symmetric (only the sparkle and check aren't).
+assert all(len(r) == 16 for r in GRID) and len(GRID) == 16
+assert all(r.replace("G", "R").replace("C", "R") == r.replace("G", "R").replace("C", "R")[::-1] for r in GRID)
 COLOURS = {"N": "#1F2537", "R": "#E3350D", "C": "#F8F4EA", "G": "#F5B83D"}
-assert len(GRID) == 16 and all(len(r) == 16 for r in GRID)
 
 
 def rects(ox=0, oy=0):
