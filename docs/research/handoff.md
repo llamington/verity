@@ -8,7 +8,7 @@ and gaps are in `docs/research/p5-plan.md`.
 **Next tasks (user, 2026-11-10), in order:**
 
 1. PLAN P12 (the web version), in progress: **make the web app feature complete with the DS
-   app** (user, 2026-11-10). Bag and Memory Link done; next sprites. The parity checklist is in PLAN P12. Work through it without
+   app** (user, 2026-11-10). Done 2026-11-11; the deploy waits for the user's Cloudflare secrets. The parity checklist is in PLAN P12. Work through it without
    stopping between items; stop only for real blockers. The stats hexagon is dropped.
 2. Event data: ship the gift/event blobs unchanged, full cards included (user, 2026-11-10, after
    weighing the legal risk as low). Don't strip card text.
@@ -109,7 +109,24 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   stale); the plan and link now recompute them first, as saving does. A Memory Link replacing
   another player's is one plan (status 1: ready, with a note). `make emu-unova` and
   `make emu-keys-all` pass.
-- Next: sprites, landing pages, deploy (Cloudflare token needed from the user).
+- **Parity checklist complete (2026-11-11).** Also done: sprites (`web/src/lib/sprites.ts`:
+  PokeAPI sprites via jsDelivr pinned to commit `1b3b7c0`; candidates female form → form → base,
+  then a generic icon with the name; `Mon.female` added), Noto Sans JP/KR (Fontsource,
+  unicode-range subsets; an English page fetches at most the subset with ♂/♀, which Geist
+  lacks; `fonts.e2e.ts`), the landing page (features, saves, credits, not-affiliated notice).
+- **Deploy (ci.yml `deploy` job):** on pushes to main after the web job, builds blobs
+  (`scripts/build-data.sh` with setup-dotnet; PKHeX.Core comes from NuGet), WASM and the site,
+  then `wrangler pages deploy` to project `verity`, **only once the user adds the
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets** (otherwise builds and skips).
+  `web/static/_headers`: immutable bundles, revalidated blobs. To check after the first
+  deploy: whether Cloudflare compresses the `.bin` blobs (served as application/octet-stream,
+  which it may not compress; PLAN wants Brotli).
+- **For the user before going public:** the GitHub repo is private, but the GPLv3 (verity's and
+  PKHeX's) asks that people who get the site's WASM can get its source; publish the repo or
+  link a source archive. Event data in the blobs: the user accepted the risk (2026-11-10).
+- Commit `7fefcff` (docs type) also holds the web Memory Link feature: a failed commit-msg hook
+  left the files staged. Not rewritten (already on main).
+- Next: the PR workflow switch (see above), then the open items below.
 
 **Done 2026-11-10 (all committed and pushed):**
 

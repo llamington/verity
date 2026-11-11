@@ -566,7 +566,8 @@ A browser build of the core, after the DS loads its font and graphics from the u
   - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`) (done
     2026-11-11).
   - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
-    overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle).
+    overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle)
+    (done 2026-11-11: Noto Sans JP/KR self-hosted, fetched per unicode-range subset).
   - Save: finalize, verify read-back, write via the File System Access API in Chromium, download
     elsewhere (done).
 - **Event data (user, 2026-11-10):** ship the Mystery Gift blobs (`gifts4/5.bin`,
