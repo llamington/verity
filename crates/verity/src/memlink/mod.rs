@@ -4,6 +4,7 @@
 //! The region sits outside the checksummed save blocks, so writing it changes nothing else.
 
 pub mod keys;
+pub mod link;
 
 use crate::save::gen5::Layout5;
 use crate::save::{SaveKind, crc16_ccitt, detect, read_u16, read_u32, write_u16};
