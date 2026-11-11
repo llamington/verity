@@ -24,6 +24,7 @@ use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
 use verity::legality::moves4::MoveResult;
 use verity::legality::verdict;
+use verity::memlink;
 use verity::pkm::{Format, Pkm};
 use verity::safety::{self, Rules};
 use verity::save::{BOX_SLOTS, Save, SaveKind, Slot};
@@ -497,6 +498,55 @@ pub struct Gift {
     pub ready: bool,
     /// Ready, Already received, Waiting at the deliveryman, ...
     pub status: String,
+}
+
+/// What linking a save into the open Black 2 or White 2 save would do.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct UnovaPlan {
+    /// `memoryLink` (a Black or White save), `keys` (a Black 2 or White 2 save), `enableAll` (no
+    /// partner) or `unusable`.
+    pub mode: String,
+    /// Whether linking can go ahead.
+    pub ready: bool,
+    /// Ready, but the Memory Link replaces another player's.
+    pub replaces: bool,
+    /// Why not, or the note when `replaces`.
+    pub status: String,
+    /// Memory Link: unlocks a flashback this save doesn't have.
+    pub flashback: bool,
+    /// The keys this link enables.
+    pub keys: Vec<String>,
+    /// The other save's trainer, when it opens as a save.
+    pub trainer: Option<String>,
+}
+
+fn unova_plan(p: memlink::link::Plan, trainer: Option<String>) -> UnovaPlan {
+    use memlink::link::{KEY_NAMES, Mode, Status};
+    UnovaPlan {
+        mode: match p.mode {
+            Mode::MemoryLink => "memoryLink",
+            Mode::Keys => "keys",
+            Mode::EnableAll => "enableAll",
+            Mode::Unusable => "unusable",
+        }
+        .into(),
+        ready: p.status.ready(),
+        replaces: p.status == Status::ReplacesOther,
+        status: if p.status == Status::Ready {
+            String::new()
+        } else {
+            p.status.text().into()
+        },
+        flashback: p.flashback,
+        keys: KEY_NAMES
+            .iter()
+            .zip(p.keys)
+            .filter(|(_, on)| *on)
+            .map(|(k, _)| (*k).into())
+            .collect(),
+        trainer,
+    }
 }
 
 /// One bag pouch for the bag screen.
@@ -1096,6 +1146,48 @@ impl Editor {
         }
     }
 
+    /// Whether this save has the Memory Link and keys screen (Black 2 and White 2).
+    pub fn has_unova_link(&mut self) -> bool {
+        self.open().kind() == SaveKind::B2W2
+    }
+
+    /// What linking `other` (another save file) into this save would do. Writes nothing but
+    /// this save's checksums.
+    pub fn unova_plan(&mut self, other: &[u8]) -> Result<UnovaPlan, Invalid> {
+        self.unova_only()?;
+        let trainer = {
+            let mut copy = other.to_vec();
+            Save::open(&mut copy)
+                .ok()
+                .map(|o| decode(&o.trainer().name_raw, o.generation()))
+        };
+        Ok(unova_plan(
+            memlink::link::plan(&mut self.save, other),
+            trainer,
+        ))
+    }
+
+    /// Links `other` into this save. `seed` stands in for the game's frame counter. Returns why
+    /// it was refused, or nothing when linked.
+    pub fn unova_link(&mut self, other: &[u8], seed: u32) -> Result<Option<String>, Invalid> {
+        self.unova_only()?;
+        let r = memlink::link::link(&mut self.save, other, seed);
+        Ok(self.unova_done(r))
+    }
+
+    /// What enabling every key without a partner would do.
+    pub fn unova_enable_plan(&mut self) -> Result<UnovaPlan, Invalid> {
+        self.unova_only()?;
+        Ok(unova_plan(memlink::link::enable_plan(&mut self.save), None))
+    }
+
+    /// Enables every key without a partner (enabled only, never earned).
+    pub fn unova_enable_all(&mut self) -> Result<Option<String>, Invalid> {
+        self.unova_only()?;
+        let r = memlink::link::enable_all(&mut self.save);
+        Ok(self.unova_done(r))
+    }
+
     /// The bag, pouch by pouch.
     pub fn bag(&mut self) -> Vec<Pouch> {
         let save = self.open();
@@ -1161,6 +1253,26 @@ impl Editor {
 }
 
 impl Editor {
+    fn unova_only(&mut self) -> Result<(), Invalid> {
+        if self.has_unova_link() {
+            Ok(())
+        } else {
+            Err(Invalid::new(
+                "Memory Link and keys are for Black 2 and White 2 saves",
+            ))
+        }
+    }
+
+    fn unova_done(&mut self, r: Result<(), memlink::link::Status>) -> Option<String> {
+        match r {
+            Ok(()) => {
+                self.dirty = true;
+                None
+            }
+            Err(s) => Some(s.text().into()),
+        }
+    }
+
     fn bag_change(
         &mut self,
         change: impl FnOnce(&mut Save, &GameData) -> Result<(), bag::Refusal>,
@@ -1458,6 +1570,31 @@ impl Session {
         date: &str,
     ) -> Result<Option<String>, JsError> {
         Ok(self.editor.deliver_gift(source, record, date)?)
+    }
+
+    #[wasm_bindgen(js_name = hasUnovaLink)]
+    pub fn has_unova_link(&mut self) -> bool {
+        self.editor.has_unova_link()
+    }
+
+    #[wasm_bindgen(js_name = unovaPlan)]
+    pub fn unova_plan(&mut self, other: &[u8]) -> Result<Ts<UnovaPlan>, JsError> {
+        Ok(self.editor.unova_plan(other)?.into_ts()?)
+    }
+
+    #[wasm_bindgen(js_name = unovaLink)]
+    pub fn unova_link(&mut self, other: &[u8], seed: u32) -> Result<Option<String>, JsError> {
+        Ok(self.editor.unova_link(other, seed)?)
+    }
+
+    #[wasm_bindgen(js_name = unovaEnablePlan)]
+    pub fn unova_enable_plan(&mut self) -> Result<Ts<UnovaPlan>, JsError> {
+        Ok(self.editor.unova_enable_plan()?.into_ts()?)
+    }
+
+    #[wasm_bindgen(js_name = unovaEnableAll)]
+    pub fn unova_enable_all(&mut self) -> Result<Option<String>, JsError> {
+        Ok(self.editor.unova_enable_all()?)
     }
 
     pub fn bag(&mut self) -> Result<Vec<Ts<Pouch>>, JsError> {

@@ -8,7 +8,7 @@ and gaps are in `docs/research/p5-plan.md`.
 **Next tasks (user, 2026-11-10), in order:**
 
 1. PLAN P12 (the web version), in progress: **make the web app feature complete with the DS
-   app** (user, 2026-11-10). Bag done; next Memory Link and keys. The parity checklist is in PLAN P12. Work through it without
+   app** (user, 2026-11-10). Bag and Memory Link done; next sprites. The parity checklist is in PLAN P12. Work through it without
    stopping between items; stop only for real blockers. The stats hexagon is dropped.
 2. Event data: ship the gift/event blobs unchanged, full cards included (user, 2026-11-10, after
    weighing the legal risk as low). Don't strip card text.
@@ -102,7 +102,14 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   down one; the UI scripts were updated.
 - Known, not new: in `make emu-ui`, `ui-add-w2.json` can't place its Pokémon because box 24 of
   `gen5_white2.sav` is full (P11 clears box 24 slot 20 first), so it ends in the editor unsaved.
-- Next: Memory Link/keys on the web, sprites, landing pages, deploy.
+- **Memory Link and keys on the web done (2026-11-11):** `/app/link` (nav entry for B2W2 saves
+  only), `UnovaLink` component, `link.e2e.ts`. The DS FFI's glue moved into
+  `verity::memlink::link` (shared). **Fixed on both front ends:** linking after any unsaved edit
+  was refused as "not a valid B2/W2 save" (the link code checks checksums, which edits leave
+  stale); the plan and link now recompute them first, as saving does. A Memory Link replacing
+  another player's is one plan (status 1: ready, with a note). `make emu-unova` and
+  `make emu-keys-all` pass.
+- Next: sprites, landing pages, deploy (Cloudflare token needed from the user).
 
 **Done 2026-11-10 (all committed and pushed):**
 
