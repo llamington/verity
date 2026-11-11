@@ -102,11 +102,44 @@ constexpr int kSlotIconX = 4, kSlotIconY = -4;
 int pill(Surface* c, int col, int row, uint16_t color, const char* text);
 // A type's colour (the placeholder icons' palette).
 uint16_t type_color(int type);
+// Text at a pixel position (no clearing), for layouts off the 8 px row grid. Panels, badges and
+// pills stay on the grid.
+void text(Surface* c, int x, int y, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// Shortens UTF-8 text in place to fit `width` px, ending it with "..." when cut.
+void fit(char* text, int width);
+// Text ending at pixel x_end.
+void text_right(Surface* c, int x_end, int y, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+
+// Spacing rules for text in panels (see docs/research/ui-stack.md, Spacing): plain lines on a
+// 12 px pitch (1.5x the 8 px font), lines that carry a badge or pill on the 8 px tile grid 16 px
+// apart, and 12 px of space before a new block. Text sits kInsetTop / kInsetBottom px inside a
+// panel's content (top-screen panels start at column 1, bottom-screen panels span the screen).
+constexpr int kPitch = 12, kGridPitch = 16, kBlockGap = 20;
+constexpr int kInsetTop = 16, kInsetBottom = 12;
+
+// A cursor down a panel: line() gives the y for the next plain line, grid_row() the tile row
+// for the next line with a badge or pill (draw its text at row * 8), block() starts a new block.
+struct Lines
+{
+    int y;  // top of the next line, px
+    bool pending_gap = false;
+    // Text starts `inset` px below the panel content's top (4: about the side padding).
+    explicit Lines(int row, int inset = 4) : y(row * 8 + inset) {}
+    int line();
+    int grid_row();
+    void block() { pending_gap = true; }
+};
+
+// Clears text pixel rows [y0, y1) across the screen.
+void clear_px(Surface* c, int y0, int y1);
 // Width in pixels of text as drawn.
 int text_width(const char* s);
 // Draws text from (col, row), word-wrapped to width px, on at most max_rows rows; returns the rows
 // used. A word that doesn't fit on the last row ends it with "...". Muted: the label shade.
 int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text, bool muted = false);
+// The same at a pixel position with a line pitch (no clearing).
+int wrap_px(Surface* c, int x, int y, int pitch, int width, int max_rows, const char* text,
+            bool muted = false);
 
 // UTF-16 to drawable UTF-8: ASCII as is; other characters as UTF-8 when the ROM font has them,
 // otherwise common accented letters folded and the rest '?'. Cut short rather than split one.
@@ -140,6 +173,6 @@ void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* col
 // Selection cursor (32x32 frame) on the bottom screen.
 void cursor(int oam_id, int x, int y);
 // Highlight bar (8 px high, full width) on the bottom screen.
-void bar(int oam_first, int y, bool visible);
+void bar(int oam_first, int y, bool visible, int height = 8);
 
 }  // namespace ui

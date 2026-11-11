@@ -71,3 +71,28 @@ FolderPath = "~/verity/sd"
 
 `sd/saves` holds copies of the real saves, a non-save `junk.sav` and 30 copies under
 `many/` (gitignored).
+
+## Spacing (2026-11-10)
+
+The user asked for more generous spacing ("start with more space"); the editor was prototyped,
+then every screen was converted. The rules (`ui.h`, `Lines`, `spaced_list`):
+
+- **Line spacing:** plain text lines on a 12 px pitch, 1.5x the 8 px font. Every glyph of the ROM
+  fonts and the built-in ASCII font fits rows 0-7 (descenders included), so 12 px is the smallest
+  whole-pixel pitch that meets WCAG 1.4.8's 1.5 line spacing; 11 px would be 1.375.
+- **Grid lines:** panel frames, badges and pills are 8 px tiles, so a line that carries one sits on
+  the tile grid, 16 px from the next.
+- **Blocks:** 12 px of space before a new block (`Lines::block()`: 20 px top to top), e.g. a
+  description after a stats row.
+- **Insets:** text starts 4 px below a panel's content top, 8 px in from top-screen panels
+  (`kInsetTop`, x 16) and 12 px on full-width bottom panels (`kInsetBottom`).
+- **Lists:** long lists on 12 px rows (13 visible in a full panel), menus and editor tabs with up
+  to 8 rows on 16 px rows; the highlight is as tall as the pitch and centred on the text.
+- **Less on screen:** where a screen no longer fit, content went first. The box view's top screen
+  is one panel grouped by space (verdict, identity, moves, IVs, origin); EVs and the PID are in the
+  editor only. The editor's top screen has a details panel and one edit panel (mode, verdict,
+  status, what's wrong). The file picker's "drag or L/R" line went (the hint bar says it).
+
+Text drawn with `ui::text` doesn't clear; screens clear by pixel rows (`ui::clear_px`). `at()`
+remains for the keyboard's key grid, whose keys are tiles. Mixing `at()` with pixel text on the
+same rows caused bugs during the conversion (it clears the rest of its 8 px row).
