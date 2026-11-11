@@ -1,0 +1,21 @@
+[package]
+name = "verity-wasm"
+description = "Browser bindings for the verity core (P12 web version)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+verity = { path = "../verity", features = ["std", "gen4", "gen5"] }
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+tsify = { version = "0.5", default-features = false, features = ["js"] }
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz"]
