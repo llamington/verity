@@ -8,6 +8,7 @@
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import BallMark from '#lib/components/BallMark.svelte';
+	import Logo from '#lib/components/Logo.svelte';
 	import { gameGradient, typeSwatch } from '#lib/theme.js';
 
 	const FEATURES = [
@@ -73,7 +74,7 @@
 	/>
 	<div class="relative mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-16 pb-14">
 		<h1 class="flex items-center gap-3 font-pixel text-5xl font-bold tracking-wide drop-shadow">
-			<BallMark size={52} class="animate-[wobble_3s_ease-in-out_infinite]" />verity
+			<Logo size={48} tile class="animate-[wobble_3s_ease-in-out_infinite]" />verity
 		</h1>
 		<p class="max-w-xl text-lg font-semibold">
 			A legality-aware save editor for the Gen 4 and Gen 5 games: Diamond, Pearl, Platinum,

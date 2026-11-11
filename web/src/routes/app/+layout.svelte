@@ -8,6 +8,7 @@
 	import { doc } from '#lib/editor.svelte.js';
 	import { errorText } from '#lib/utils.js';
 	import BallMark from '#lib/components/BallMark.svelte';
+	import Logo from '#lib/components/Logo.svelte';
 	import { badgeSlots, gameGradient } from '#lib/theme.js';
 	import type { LayoutProps } from './$types';
 
@@ -62,7 +63,7 @@
 <header class="bg-primary text-primary-foreground shadow-[inset_0_-4px_0_var(--ball-band)]">
 	<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
 		<h1 class="font-pixel text-2xl font-bold tracking-wide">
-			<a href={resolve('/')} class="flex items-center gap-2"><BallMark size={28} />verity</a>
+			<a href={resolve('/')} class="flex items-center gap-2"><Logo size={32} tile />verity</a>
 		</h1>
 		<div class="flex items-center gap-2">
 			{#if inPlace}
@@ -221,7 +222,7 @@
 		<section
 			class="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed bg-card px-6 py-16 text-center"
 		>
-			<BallMark size={72} class="animate-[wobble_2.4s_ease-in-out_infinite]" />
+			<Logo size={64} class="animate-[wobble_2.4s_ease-in-out_infinite]" />
 			<h2 class="font-pixel text-2xl font-bold">No save loaded</h2>
 			<p class="max-w-md text-muted-foreground">
 				Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
