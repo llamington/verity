@@ -212,6 +212,10 @@ images. The decompilations aren't on disk; read single files with
   TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` (and three
   more), ESLint `strictTypeChecked` + `stylisticTypeChecked`; generated shadcn components keep
   the untyped rules. Optional WASM request fields use `#[tsify(optional, type = "T | undefined")]`.
+- **CI** (`.github/workflows/ci.yml`): three jobs (Rust tests and lint, DS build, web types/lint/
+  component tests), each run only when its part changed (`dorny/paths-filter`; shared Cargo/
+  toolchain/workflow files run all). Docs-only pushes run nothing. Playwright journeys need the
+  gitignored saves, so they stay local.
 - `gen` is a 2024 keyword: the module is `verity::generate`, variables are `generation`.
 - The .NET oracle needs `DOTNET_ROOT=$HOME/.dotnet`. It is built by `scripts/oracle-smoke.sh` /
   `scripts/build-data.sh`; the binary is `tools/pkhex-oracle/bin/Release/net9.0/PkhexOracle`.
