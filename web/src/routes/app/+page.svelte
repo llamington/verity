@@ -7,6 +7,7 @@
 	import MonTile from '#lib/components/MonTile.svelte';
 	import PokemonSummary from '#lib/components/PokemonSummary.svelte';
 	import LegalityReport from '#lib/components/LegalityReport.svelte';
+	import PokemonEditor from '#lib/components/PokemonEditor.svelte';
 	import {
 		openSave,
 		loadLegalityData,
@@ -14,7 +15,9 @@
 		type Overview,
 		type BoxView,
 		type Summary,
-		type Legality
+		type Legality,
+		type Choices,
+		type EditRequest
 	} from '#lib/verity.js';
 
 	const GAMES: Record<string, string> = {
@@ -41,6 +44,7 @@
 		if (!session) return;
 		const s = session;
 		selected = { box, slot };
+		editing = false;
 		summary = s.summary(box, slot);
 		legality = undefined;
 		legalityError = '';
@@ -50,14 +54,31 @@
 			if (session !== s || selected?.box !== box || selected.slot !== slot) return;
 			legality = s.legality(box, slot);
 			summary = s.summary(box, slot);
+			choices ??= s.choices();
 		} catch (err) {
 			legalityError = `Couldn't load the legality data: ${err instanceof Error ? err.message : err}`;
 		}
 	}
 
+	/** Bumped after every applied edit, so views re-read the save. */
+	let version = $state(0);
+	let editing = $state(false);
+	let choices: Choices | undefined = $state.raw();
+
 	const box: BoxView | undefined = $derived(
-		session && overview ? session.boxView(boxIndex) : undefined
+		session && overview && version >= 0 ? session.boxView(boxIndex) : undefined
 	);
+
+	function applyEdit(edit: EditRequest, legalMode: boolean): string | undefined {
+		if (!session || !selected) return 'nothing open';
+		const why = session.apply(selected.box, selected.slot, edit, legalMode);
+		if (why) return why;
+		summary = session.summary(selected.box, selected.slot);
+		legality = session.legality(selected.box, selected.slot);
+		overview = session.overview();
+		version++;
+		return undefined;
+	}
 
 	async function onFile(e: Event) {
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
@@ -70,6 +91,7 @@
 			fileName = file.name;
 			boxIndex = 0;
 			selected = undefined;
+			choices = undefined;
 		} catch (err) {
 			session = overview = undefined;
 			error = `Couldn't open ${file.name}: ${err instanceof Error ? err.message : err}`;
@@ -177,8 +199,37 @@
 						</Sheet.Description>
 					</Sheet.Header>
 					<div class="flex flex-col gap-4 px-4 pb-6">
-						<LegalityReport {legality} error={legalityError} />
-						<PokemonSummary {summary} {legality} />
+						<div class="flex gap-2">
+							<Button
+								size="sm"
+								variant={editing ? 'outline' : 'secondary'}
+								onclick={() => (editing = false)}>Summary</Button
+							>
+							<Button
+								size="sm"
+								variant={editing ? 'secondary' : 'outline'}
+								disabled={!choices || !legality}
+								onclick={() => (editing = true)}>Edit</Button
+							>
+						</div>
+						{#if editing && choices && session && selected}
+							{@const s = session}
+							{@const at = selected}
+							{#key version}
+								<PokemonEditor
+									{summary}
+									{choices}
+									preview={(e) => s.preview(at.box, at.slot, e)}
+									apply={applyEdit}
+									closestIvs={overview.generation === 4
+										? (ivs) => s.closestIvs(at.box, at.slot, new Uint8Array(ivs))
+										: undefined}
+								/>
+							{/key}
+						{:else}
+							<LegalityReport {legality} error={legalityError} />
+							<PokemonSummary {summary} {legality} />
+						{/if}
 					</div>
 				{/if}
 			</Sheet.Content>

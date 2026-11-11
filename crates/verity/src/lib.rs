@@ -7,6 +7,7 @@ extern crate std;
 extern crate alloc;
 
 pub mod data;
+pub mod edit;
 pub mod gen;
 pub mod gift;
 pub mod legality;
