@@ -8,7 +8,7 @@ N navy outline, R red shield, C cream check, G gold sparkle, . transparent.
 from pathlib import Path
 
 GRID = [
-    "..NNNNNNNNNNNN..",
+    ".NNNNNNNNNNNNNN.",
     ".NRRRRRRRRRRRRN.",
     ".NRRGRRRRRRRRRN.",
     ".NRGGGRRRRRRRRN.",
@@ -18,14 +18,15 @@ GRID = [
     ".NRCCRRRCCRRRRN.",
     ".NRRCCRCCRRRRRN.",
     ".NRRRCCCRRRRRRN.",
-    "..NRRRCRRRRRRN..",
+    ".NNRRRCRRRRRRNN.",
     "..NRRRRRRRRRRN..",
-    "...NRRRRRRRRN...",
-    "....NRRRRRRN....",
-    ".....NNRRNN.....",
-    ".......NN.......",
+    "..NNRRRRRRRRNN..",
+    "...NNRRRRRRNN...",
+    "....NNNRRNNN....",
+    "......NNNN......",
 ]
-# The outline is mirror-symmetric (only the sparkle and check aren't).
+# The outline is mirror-symmetric (only the sparkle and check aren't), and each step joins the
+# next along an edge, so the diagonals look as heavy as the straight sides.
 assert all(len(r) == 16 for r in GRID) and len(GRID) == 16
 assert all(r.replace("G", "R").replace("C", "R") == r.replace("G", "R").replace("C", "R")[::-1] for r in GRID)
 COLOURS = {"N": "#1F2537", "R": "#E3350D", "C": "#F8F4EA", "G": "#F5B83D"}
