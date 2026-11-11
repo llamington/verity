@@ -11,7 +11,17 @@ const dst = join(web, 'src/lib/wasm');
 
 execFileSync(
 	'wasm-pack',
-	['build', '../crates/verity-wasm', '--target', 'web', '--release', '--out-dir', tmp, '--no-pack'],
+	[
+		'build',
+		'../crates/verity-wasm',
+		'--target',
+		'web',
+		// CI only needs the bindings and their types; a dev build skips LTO and wasm-opt.
+		process.env['VERITY_WASM_DEV'] ? '--dev' : '--release',
+		'--out-dir',
+		tmp,
+		'--no-pack'
+	],
 	{ cwd: web, stdio: 'inherit' }
 );
 mkdirSync(dst, { recursive: true });
