@@ -16,6 +16,7 @@
     {"wait": 60},
     {"screenshot": "00-overview.png"},
     {"press": ["Down"], "frames": 2},
+    {"press": ["Down"], "frames": 2},
     {"press": ["A"], "frames": 2},
     {"wait": 90},
     {"screenshot": "01-list.png"},

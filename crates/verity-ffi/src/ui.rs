@@ -201,7 +201,7 @@ fn decode(gen4: bool, raw: &[u16], out: &mut [u16]) {
     out[n] = 0;
 }
 
-fn personal_for(kind: SaveKind) -> Option<GameData<'static>> {
+pub(crate) fn personal_for(kind: SaveKind) -> Option<GameData<'static>> {
     let k = match kind {
         SaveKind::DP => BlobKind::Dp,
         SaveKind::Pt => BlobKind::Pt,

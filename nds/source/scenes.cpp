@@ -348,6 +348,7 @@ public:
             ui::title_right(bottom(), "* unsaved");
         count_ = 0;
         items_[count_++] = kBoxes;
+        items_[count_++] = kBag;
         items_[count_++] = kGifts;
         if (i.kind == kBlack2White2)
             items_[count_++] = kUnova;
@@ -392,6 +393,11 @@ public:
             message_[0] = 0;
             ui::push(box_view());
         }
+        if (item == kBag)
+        {
+            message_[0] = 0;
+            ui::push(bag());
+        }
         if (item == kGifts)
         {
             message_[0] = 0;
@@ -414,11 +420,11 @@ public:
 
 private:
     bool confirm_leave_ = false;
-    enum { kBoxes, kGifts, kSave, kClose, kUnova };
+    enum { kBoxes, kGifts, kSave, kClose, kUnova, kBag };
     static constexpr uint8_t kBlack2White2 = 5;
-    static constexpr const char* kItems[5] = {"Boxes and party", "Mystery gifts", "Save to SD card",
-                                              "Close", "Memory Link and keys"};
-    int items_[5];
+    static constexpr const char* kItems[6] = {"Boxes and party", "Mystery gifts", "Save to SD card",
+                                              "Close", "Memory Link and keys", "Bag"};
+    int items_[6];
     int count_ = 0;
     ListView list_;
     char message_[48] = "";
@@ -633,6 +639,342 @@ private:
         ui::text(top(), x, c.line(), UI_MUTED "Collect it in-game from the");
         ui::text(top(), x, c.line(), UI_MUTED "%s", core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
                                                                                   : "deliveryman in any Poke Mart.");
+    }
+};
+
+// ---- Bag ------------------------------------------------------------------------------------
+
+class Bag : public ui::Scene
+{
+public:
+    void enter() override
+    {
+        if (!core::data_available())
+        {
+            ui::clear(top());
+            ui::frame_clear(top());
+            ui::title(top(), "Bag");
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), ui::kInsetTop, l.line(), "Game data is missing.");
+            ui::text(top(), ui::kInsetTop, l.line(), UI_MUTED "B goes back.");
+            ui::clear(bottom());
+            ui::title(bottom(), "Bag");
+            ui::hints(bottom(), "B:Back");
+            return;
+        }
+        load();
+        draw();
+    }
+
+    bool update(const ui::Input& in) override
+    {
+        if (!core::data_available())
+            return !(in.down & KEY_B);
+        if (mode_ == kCount)
+            return update_count(in);
+        if (mode_ == kAdd)
+            return update_add(in);
+        if (in.down & KEY_B)
+        {
+            ui::item_icon(true, 0, 0, nullptr, nullptr);
+            return false;
+        }
+        if (in.rep & (KEY_LEFT | KEY_RIGHT))
+        {
+            pouch_ = (pouch_ + (in.rep & KEY_LEFT ? pouches_ - 1 : 1)) % pouches_;
+            list_.selected = list_.scroll = 0;
+            message_[0] = 0;
+            load();
+            draw();
+            return true;
+        }
+        bool changed;
+        int a = list_.update(in, &changed);
+        if (changed)
+        {
+            message_[0] = 0;
+            draw();
+        }
+        ui::bar(0, list_.bar_y(), list_.count > 0, list_.pitch);
+        int sel = list_.selected;
+        if ((in.down & KEY_X) && sel < count_)
+            remove(sel);
+        else if (a >= 0 && a == count_)
+            open_add();
+        else if (a >= 0 && items_[a].locked)
+            report(kEventItem);
+        else if (a >= 0 && max_count() > 1)
+        {
+            mode_ = kCount;
+            count_edit_ = items_[a].count;
+            draw();
+        }
+        return true;
+    }
+
+private:
+    enum Mode { kList, kCount, kAdd };
+    static constexpr int kMaxItems = 300;
+    // verity_bag_status_text code for an event item (checked in verity-ffi's bag tests).
+    static constexpr uint8_t kEventItem = 4;
+    static constexpr const char* kPouchNames[8] = {"Items",    "Key Items", "TMs & HMs",  "Mail",
+                                                   "Medicine", "Berries",   "Poke Balls", "Battle Items"};
+    Mode mode_ = kList;
+    verity_pouch_view pv_[8];
+    int pouches_ = 0, pouch_ = 0;
+    verity_bag_item items_[kMaxItems];
+    int count_ = 0;
+    uint16_t addable_[kMaxItems];
+    int addable_count_ = 0;
+    int count_edit_ = 1;
+    ListView list_ = spaced_list();
+    ListView add_list_ = spaced_list();
+    char message_[40] = "";
+
+    uint32_t names() const
+    {
+        return core::doc().info.generation == 5 ? VERITY_NAME_ITEMS5 : VERITY_NAME_ITEMS4;
+    }
+    int max_count() const { return pv_[pouch_].max_count; }
+
+    void load()
+    {
+        auto& d = core::doc();
+        pouches_ = (int)verity_bag_pouches(d.buf, d.len, pv_, 8);
+        if (pouch_ >= pouches_)
+            pouch_ = 0;
+        count_ = (int)verity_bag_items(d.buf, d.len, (uint8_t)pouch_, items_, kMaxItems);
+        list_.count = count_ + 1;  // the last row adds an item
+        list_.clamp();
+    }
+
+    void report(uint8_t code, const char* done = "")
+    {
+        snprintf(message_, sizeof(message_), "%s", code ? verity_bag_status_text(code) : done);
+    }
+
+    void changed(uint8_t code, const char* done)
+    {
+        if (code == 0)
+            core::doc().dirty = true;
+        report(code, done);
+        load();
+    }
+
+    void remove(int i)
+    {
+        auto& d = core::doc();
+        char what[40];
+        snprintf(what, sizeof(what), "Removed %s", ui::name(names(), items_[i].item));
+        changed(verity_bag_remove(d.buf, d.len, (uint8_t)pouch_, (uint16_t)i), what);
+        draw();
+    }
+
+    bool update_count(const ui::Input& in)
+    {
+        int before = count_edit_;
+        if (in.rep & KEY_RIGHT)
+            count_edit_++;
+        if (in.rep & KEY_LEFT)
+            count_edit_--;
+        if (in.rep & KEY_UP)
+            count_edit_ += 10;
+        if (in.rep & KEY_DOWN)
+            count_edit_ -= 10;
+        if (count_edit_ < 1)
+            count_edit_ = 1;
+        if (count_edit_ > max_count())
+            count_edit_ = max_count();
+        if (in.down & (KEY_A | KEY_B))
+        {
+            if (in.down & KEY_A)
+            {
+                auto& d = core::doc();
+                int i = list_.selected;
+                changed(verity_bag_set_count(d.buf, d.len, (uint8_t)pouch_, (uint16_t)i,
+                                             (uint16_t)count_edit_),
+                        "Count set");
+            }
+            mode_ = kList;
+            draw();
+        }
+        else if (count_edit_ != before)
+            draw();
+        ui::bar(0, list_.bar_y(), true, list_.pitch);
+        return true;
+    }
+
+    void open_add()
+    {
+        auto& d = core::doc();
+        addable_count_ = (int)verity_bag_addable(d.buf, d.len, (uint8_t)pouch_, addable_, kMaxItems);
+        if (addable_count_ == 0)
+        {
+            snprintf(message_, sizeof(message_), "Nothing more fits this pouch");
+            draw();
+            return;
+        }
+        mode_ = kAdd;
+        add_list_.selected = add_list_.scroll = 0;
+        add_list_.count = addable_count_;
+        message_[0] = 0;
+        draw();
+    }
+
+    bool update_add(const ui::Input& in)
+    {
+        if (in.down & KEY_B)
+        {
+            mode_ = kList;
+            draw();
+            return true;
+        }
+        bool moved;
+        int a = add_list_.update(in, &moved);
+        if (moved)
+            draw();
+        ui::bar(0, add_list_.bar_y(), true, add_list_.pitch);
+        if (a < 0)
+            return true;
+        auto& d = core::doc();
+        uint16_t item = addable_[a];
+        char what[40];
+        snprintf(what, sizeof(what), "Added %s", ui::name(names(), item));
+        changed(verity_bag_add(d.buf, d.len, (uint8_t)pouch_, item, 1), what);
+        mode_ = kList;
+        // Select the new item (sorted pouches put it in order), then set its count.
+        for (int i = 0; i < count_; i++)
+            if (items_[i].item == item)
+                list_.selected = i;
+        list_.clamp();
+        if (max_count() > 1 && list_.selected < count_ && items_[list_.selected].item == item)
+        {
+            mode_ = kCount;
+            count_edit_ = 1;
+        }
+        draw();
+        return true;
+    }
+
+    void draw()
+    {
+        draw_top();
+        if (mode_ == kAdd)
+            draw_add_list();
+        else
+            draw_list();
+    }
+
+    void bottom_frame(const char* title, const char* hints)
+    {
+        ui::clear(bottom());
+        ui::frame_clear(bottom());
+        ui::title(bottom(), "%s", title);
+        ui::panel(bottom(), 0, list_.first_row, 32, 20);
+        ui::hints(bottom(), hints);
+    }
+
+    void draw_list()
+    {
+        bool item = list_.selected < count_;
+        const char* hints = mode_ == kCount              ? "</>:1|Up/Dn:10|A:Set|B:Cancel"
+                            : !item                      ? "A:Add|</>:Pouch|B:Back"
+                            : items_[list_.selected].locked ? "</>:Pouch|B:Back"
+                            : max_count() > 1            ? "A:Count|X:Remove|</>:Pouch|B:Back"
+                                                         : "X:Remove|</>:Pouch|B:Back";
+        bottom_frame(kPouchNames[pv_[pouch_].kind & 7], hints);
+        char n[24];
+        snprintf(n, sizeof(n), "%d/%d", pouch_ + 1, pouches_);
+        ui::title_right(bottom(), n);
+        for (int r = 0; r < list_.rows; r++)
+        {
+            int i = list_.scroll + r;
+            if (i > count_)
+                break;
+            int y = list_.text_y(i);
+            if (i == count_)
+            {
+                ui::text(bottom(), kListX, y, UI_MUTED "+ Add an item");
+                break;
+            }
+            const auto& it = items_[i];
+            char what[40];
+            snprintf(what, sizeof(what), "%s", ui::name(names(), it.item));
+            ui::fit(what, 200 - kListX);
+            ui::text(bottom(), kListX, y, "%s%s", it.locked ? UI_MUTED : "", what);
+            int count = mode_ == kCount && i == list_.selected ? count_edit_ : it.count;
+            if (it.locked)
+                ui::text_right(bottom(), 244, y, UI_MUTED "event");
+            else if (max_count() > 1)
+                ui::text_right(bottom(), 244, y, mode_ == kCount && i == list_.selected ? "< %d >" : "x%d",
+                               count);
+        }
+    }
+
+    void draw_add_list()
+    {
+        bottom_frame("Add an item", "A:Add|L/R:Page|B:Cancel");
+        for (int r = 0; r < add_list_.rows; r++)
+        {
+            int i = add_list_.scroll + r;
+            if (i >= addable_count_)
+                break;
+            char what[40];
+            snprintf(what, sizeof(what), "%s", ui::name(names(), addable_[i]));
+            ui::fit(what, 244 - kListX);
+            ui::text(bottom(), kListX, add_list_.text_y(i), "%s", what);
+        }
+    }
+
+    void draw_top()
+    {
+        ui::clear(top());
+        ui::frame_clear(top());
+        ui::title(top(), "Bag");
+        if (core::doc().dirty)
+            ui::title_right(top(), "* unsaved");
+        const int x = ui::kInsetTop;
+        // Every pouch with how many items it holds; the open one is not muted.
+        ui::panel(top(), 1, 2, 30, (pouches_ * ui::kPitch + 8 + 7) / 8);
+        ui::Lines l(2);
+        for (int p = 0; p < pouches_; p++)
+        {
+            int y = l.line();
+            const char* m = p == pouch_ ? "" : UI_MUTED;
+            ui::text(top(), x, y, "%s%s %s", m, p == pouch_ ? ">" : " ", kPouchNames[pv_[p].kind & 7]);
+            ui::text_right(top(), 232, y, "%s%u / %u", m, pv_[p].count, pv_[p].slots);
+        }
+        // The selected item: its icon (from a ROM), name and count.
+        uint16_t item = 0;
+        if (mode_ == kAdd && add_list_.selected < addable_count_)
+            item = addable_[add_list_.selected];
+        else if (mode_ != kAdd && list_.selected < count_)
+            item = items_[list_.selected].item;
+        int row = 16;
+        uint8_t tiles[512];
+        uint16_t colors[16];
+        bool icon = item && core::item_icon(core::doc().info.generation, item, tiles, colors);
+        ui::item_icon(true, 16, row * 8 + 4, icon ? tiles : nullptr, colors);
+        if (item)
+        {
+            ui::panel(top(), 1, row, 30, 4);
+            int tx = icon ? 48 : x;
+            ui::text(top(), tx, row * 8 + 4, "%s", ui::name(names(), item));
+            const auto* it = mode_ == kAdd ? nullptr : &items_[list_.selected];
+            if (it && it->locked)
+                ui::text(top(), tx, row * 8 + 16, UI_MUTED "Event item: from Mystery Gift");
+            else if (it)
+                ui::text(top(), tx, row * 8 + 16, UI_MUTED "Count" UI_MUTED "  %d / %d",
+                         mode_ == kCount ? count_edit_ : it->count, max_count());
+            else
+                ui::text(top(), tx, row * 8 + 16, UI_MUTED "A adds one");
+        }
+        if (message_[0])
+        {
+            ui::panel(top(), 1, 21, 30, 2);
+            ui::text(top(), x, 21 * 8 + 4, "%s", message_);
+        }
     }
 };
 
@@ -2764,6 +3106,7 @@ ui::Scene* box_view() { return new BoxView(); }
 ui::Scene* add_wizard(uint8_t b, uint8_t s) { return new AddWizard(b, s); }
 ui::Scene* editor(uint8_t b, uint8_t s) { return new Editor(b, s); }
 ui::Scene* gifts() { return new Gifts(); }
+ui::Scene* bag() { return new Bag(); }
 ui::Scene* unova_link() { return new UnovaLink(); }
 
 }  // namespace scenes

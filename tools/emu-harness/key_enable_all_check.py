@@ -45,7 +45,7 @@ def new_game():
 
 def verity_ui():
     steps = [{"wait": 90}, {"hold": ["L"], "frames": 40}, {"wait": 2}]
-    steps += press("A", 60, 2) + press("Down", 5, 2) * 2 + press("A", 120, 2)
+    steps += press("A", 60, 2) + press("Down", 5, 2) * 3 + press("A", 120, 2)
     steps += [{"screenshot": "list.png"}] + press("A", 60, 2) + [{"screenshot": "preview.png"}]
     steps += press("A", 30, 2) + [{"screenshot": "done.png"}] + press("B", 30, 2)
     return steps + press("Down", 5, 2) + press("A", 240, 2) + [{"screenshot": "saved.png"}]

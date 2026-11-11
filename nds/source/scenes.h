@@ -14,6 +14,7 @@ ui::Scene* add_wizard(uint8_t box_index, uint8_t slot);
 ui::Scene* editor(uint8_t box_index, uint8_t slot);
 // Gen 4 Mystery Gifts for the open save.
 ui::Scene* gifts();
+ui::Scene* bag();
 // B2W2: Memory Link from a BW save, and keys from another B2W2 save.
 ui::Scene* unova_link();
 
