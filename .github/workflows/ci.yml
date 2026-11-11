@@ -14,9 +14,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Which parts of the repo changed; each job below runs only for its part. A docs-only push
-  # runs none of them. Anything shared (the core crate, Cargo files, the toolchain, this
-  # workflow) runs everything that depends on it.
   changes:
     name: Changed parts
     runs-on: ubuntu-latest
