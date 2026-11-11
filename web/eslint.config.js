@@ -11,13 +11,19 @@ const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
 	js.configs.recommended,
-	ts.configs.recommended,
+	ts.configs.strictTypeChecked,
+	ts.configs.stylisticTypeChecked,
 	svelte.configs.recommended,
 	prettier,
 	svelte.configs.prettier,
 	{
-		languageOptions: { globals: { ...globals.browser, ...globals.node } },
+		languageOptions: {
+			globals: { ...globals.browser, ...globals.node },
+			parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname }
+		},
 		rules: {
+			// Interpolating counts, levels and IDs is fine; objects and unknowns still aren't.
+			'@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
 			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
 			'no-undef': 'off'
@@ -39,8 +45,10 @@ export default defineConfig(
 		rules: {}
 	},
 	{
-		// shadcn-svelte components pass `href` through from callers, which resolve it.
+		// shadcn-svelte components are generated and re-added by its CLI, so they get the
+		// untyped rules only. They pass `href` through from callers, which resolve it.
 		files: ['src/lib/components/ui/**'],
+		extends: [ts.configs.disableTypeChecked],
 		rules: { 'svelte/no-navigation-without-resolve': 'off' }
 	}
 );

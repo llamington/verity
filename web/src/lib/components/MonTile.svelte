@@ -2,7 +2,16 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import type { Mon } from '#lib/verity.js';
 
-	let { mon, onselect }: { mon: Mon | null | undefined; onselect?: () => void } = $props();
+	let {
+		mon,
+		onselect,
+		onadd
+	}: {
+		mon: Mon | null | undefined;
+		onselect?: () => void;
+		/** Makes an empty slot a button that adds a Pokémon. */
+		onadd?: () => void;
+	} = $props();
 
 	const label = $derived(mon ? (mon.speciesName ?? `#${mon.species}`) : '');
 	const nicknamed = $derived(!!mon && !mon.egg && mon.nicknamed);
@@ -36,6 +45,14 @@
 	</button>
 {:else if mon}
 	<div class={tile} data-testid="mon">{@render body(mon)}</div>
+{:else if onadd}
+	<button
+		type="button"
+		onclick={onadd}
+		class="flex min-h-16 cursor-pointer items-center justify-center rounded-md border border-dashed text-muted-foreground transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+		aria-label="Add a Pokémon here"
+		data-testid="empty"><span aria-hidden="true">+</span></button
+	>
 {:else}
 	<div class="min-h-16 rounded-md border border-dashed" aria-label="Empty slot"></div>
 {/if}

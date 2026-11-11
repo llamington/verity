@@ -2,6 +2,11 @@
 	"extends": "$app/tsconfig",
 	"compilerOptions": {
 		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"noPropertyAccessFromIndexSignature": true,
 		"types": ["$app/types", "node"]
 	},
 	"include": [
@@ -9,7 +14,10 @@
 		"vite.config.ts",
 		"prettier.config.js",
 		"eslint.config.js",
-		"playwright.config.ts"
+		"playwright.config.ts",
+		"vitest.shims.d.ts",
+		".storybook/*.ts",
+		"scripts/*.js"
 	],
 	"exclude": ["src/lib/wasm/*.js"]
 }

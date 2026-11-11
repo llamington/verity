@@ -68,22 +68,24 @@ test('writes back in place through the File System Access API', async ({ page })
 			const handle = {
 				kind: 'file',
 				name: 'white2.sav',
-				getFile: async () => new File([stored], 'white2.sav'),
-				queryPermission: async () => 'granted',
-				createWritable: async () => {
+				getFile: () => Promise.resolve(new File([stored], 'white2.sav')),
+				queryPermission: () => Promise.resolve('granted'),
+				createWritable: () => {
 					let next = new Uint8Array();
-					return {
-						write: async (b: Uint8Array) => {
+					return Promise.resolve({
+						write: (b: Uint8Array) => {
 							next = new Uint8Array(b);
+							return Promise.resolve();
 						},
-						close: async () => {
+						close: () => {
 							stored = next;
+							return Promise.resolve();
 						}
-					};
+					});
 				}
 			};
 			Object.assign(window, {
-				showOpenFilePicker: async () => [handle],
+				showOpenFilePicker: () => Promise.resolve([handle]),
 				__stored: () => stored
 			});
 		},

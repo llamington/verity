@@ -8,3 +8,5 @@ pub mod egg4;
 pub mod status;
 pub mod wild4;
 pub mod wild5;
+#[cfg(feature = "alloc")]
+pub mod wizard;

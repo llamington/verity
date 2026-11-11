@@ -12,8 +12,12 @@ use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
+use verity::data::encounters::EncounterData;
 use verity::data::{string_table as st, GameData, Strings};
 use verity::edit::{self, Edit, Met, Nickname};
+use verity::gen::status::GenStatus;
+use verity::gen::wild4::Lead;
+use verity::gen::wizard;
 use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
 use verity::legality::moves4::MoveResult;
@@ -253,6 +257,10 @@ pub struct Choices {
     pub ribbons: Vec<String>,
     /// Longest nickname (5 for Japanese and Korean Pokémon, enforced by `preview`).
     pub nickname_max: u8,
+    /// Nature names by id (0-24).
+    pub natures: Vec<String>,
+    /// Balls the add-Pokémon wizard offers (as the DS).
+    pub wild_balls: Vec<Named>,
 }
 
 /// A met location, level and date.
@@ -269,37 +277,37 @@ pub struct MetRequest {
 #[derive(Deserialize, Tsify, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct EditRequest {
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | undefined")]
     pub held_item: Option<u16>,
     /// Four move ids (0 for empty). PP are refilled and PP Ups cleared.
-    #[tsify(optional)]
+    #[tsify(optional, type = "number[] | undefined")]
     pub moves: Option<Vec<u16>>,
     /// The PID from [`Session::closest_ivs`], sent with its IVs.
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | undefined")]
     pub pid: Option<u32>,
     /// HP, Atk, Def, Spe, SpA, SpD.
-    #[tsify(optional)]
+    #[tsify(optional, type = "number[] | undefined")]
     pub ivs: Option<Vec<u8>>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number[] | undefined")]
     pub evs: Option<Vec<u8>>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | undefined")]
     pub level: Option<u8>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | undefined")]
     pub friendship: Option<u8>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | undefined")]
     pub ball: Option<u8>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "MetRequest | undefined")]
     pub met: Option<MetRequest>,
     /// Cool, Beauty, Cute, Smart, Tough, Sheen.
-    #[tsify(optional)]
+    #[tsify(optional, type = "number[] | undefined")]
     pub contest: Option<Vec<u8>>,
     /// One flag per [`Choices::ribbons`] entry.
-    #[tsify(optional)]
+    #[tsify(optional, type = "boolean[] | undefined")]
     pub ribbons: Option<Vec<bool>>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "string | undefined")]
     pub nickname: Option<String>,
     /// Back to the species name (ignored when `nickname` is set).
-    #[tsify(optional)]
+    #[tsify(optional, type = "boolean | undefined")]
     pub reset_nickname: Option<bool>,
 }
 
@@ -312,26 +320,11 @@ impl EditRequest {
     fn to_edit(&self, pk: &Pkm) -> Result<Edit, JsError> {
         let met = match &self.met {
             None => None,
-            Some(m) => {
-                let bad = || JsError::new("met date: YYYY-MM-DD between 2000 and 2099 expected");
-                let parts: Vec<u16> = m
-                    .date
-                    .split('-')
-                    .map(|p| p.parse().map_err(|_| bad()))
-                    .collect::<Result<_, _>>()?;
-                let [y, mo, d] = parts[..] else {
-                    return Err(bad());
-                };
-                if !(2000..=2099).contains(&y) || !(1..=12).contains(&mo) || !(1..=31).contains(&d)
-                {
-                    return Err(bad());
-                }
-                Some(Met {
-                    location: m.location,
-                    level: m.level,
-                    date: [(y - 2000) as u8, mo as u8, d as u8],
-                })
-            }
+            Some(m) => Some(Met {
+                location: m.location,
+                level: m.level,
+                date: parse_date(&m.date)?,
+            }),
         };
         let ribbons = match &self.ribbons {
             None => None,
@@ -399,6 +392,134 @@ fn nickname(n: &str, pk: &Pkm) -> Result<Nickname, JsError> {
         }
     }
     Ok(Nickname::new(&units))
+}
+
+/// Balls the DS wizard offers: Poké, Great, Ultra, Master, then Net to Premier.
+const WIZARD_BALLS: [u8; 14] = [4, 3, 2, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+/// One wild slot for the wizard.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct WildSlot {
+    /// Pass as [`WildAdd::encounter`].
+    pub index: u16,
+    pub location: Named,
+    pub form: u8,
+    pub level_min: u8,
+    pub level_max: u8,
+    /// Grass, Surf, Old Rod, ...
+    pub kind: String,
+    pub slot_number: u8,
+    pub can_radar: bool,
+}
+
+/// A wild Pokémon to add; absent fields mean any.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct WildAdd {
+    pub version: u8,
+    pub species: u16,
+    /// The chosen slot's form (0 with no slot chosen).
+    #[serde(default)]
+    pub form: u8,
+    #[tsify(optional, type = "number | undefined")]
+    pub encounter: Option<u16>,
+    #[tsify(optional, type = "number | undefined")]
+    pub level: Option<u8>,
+    #[tsify(optional, type = "number | undefined")]
+    pub nature: Option<u8>,
+    /// 0 male, 1 female.
+    #[tsify(optional, type = "number | undefined")]
+    pub gender: Option<u8>,
+    #[serde(default)]
+    pub shiny: bool,
+    /// `none`, `synchronize` (needs `nature`), `cuteCharm` (needs `gender`) or `radar`
+    /// (Gen 4 only; a radar chain makes it shiny).
+    pub lead: String,
+    #[tsify(optional, type = "number | undefined")]
+    pub ball: Option<u8>,
+    /// `YYYY-MM-DD`.
+    pub met_date: String,
+    pub seed: u32,
+}
+
+/// A bred Gen 4 egg to add; absent fields mean any.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EggAdd {
+    pub version: u8,
+    pub species: u16,
+    #[tsify(optional, type = "number | undefined")]
+    pub nature: Option<u8>,
+    #[tsify(optional, type = "number | undefined")]
+    pub gender: Option<u8>,
+    #[serde(default)]
+    pub shiny: bool,
+    /// Already hatched rather than still an egg.
+    #[serde(default)]
+    pub hatched: bool,
+    /// `YYYY-MM-DD`: the egg date (and met date when hatched).
+    pub date: String,
+    pub seed: u32,
+}
+
+fn list<T: Tsify + Serialize>(items: impl Iterator<Item = T>) -> Result<Vec<Ts<T>>, JsError> {
+    items.map(|t| Ok(t.into_ts()?)).collect()
+}
+
+fn wizard_data(version: u8) -> Result<&'static EncounterData<'static>, JsError> {
+    let (c4, c5) = if version >= 20 {
+        (None, context5())
+    } else {
+        (context4(), None)
+    };
+    wizard::wild_data(c4, c5, version).ok_or_else(|| JsError::new("legality data missing"))
+}
+
+fn slot_kind(gen: u8, t: u8) -> &'static str {
+    const G4: [&str; 15] = [
+        "Grass",
+        "Surf",
+        "Old Rod",
+        "Good Rod",
+        "Super Rod",
+        "Rock Smash",
+        "Headbutt",
+        "Headbutt",
+        "Bug Contest",
+        "Honey Tree",
+        "Safari",
+        "Safari",
+        "Safari rod",
+        "Safari rod",
+        "Safari rod",
+    ];
+    const G5: [&str; 6] = [
+        "Standard",
+        "Grass",
+        "Surf",
+        "Super Rod",
+        "Swarm",
+        "Hidden Grotto",
+    ];
+    let list: &[&str] = if gen == 4 { &G4 } else { &G5 };
+    list.get(t as usize).copied().unwrap_or("?")
+}
+
+/// `YYYY-MM-DD` (2000-2099) as years since 2000, month, day.
+fn parse_date(s: &str) -> Result<[u8; 3], JsError> {
+    let bad = || JsError::new("date: YYYY-MM-DD between 2000 and 2099 expected");
+    let parts: Vec<u16> = s
+        .split('-')
+        .map(|p| p.parse().map_err(|_| bad()))
+        .collect::<Result<_, _>>()?;
+    let [y, m, d] = parts[..] else {
+        return Err(bad());
+    };
+    if !(2000..=2099).contains(&y) || !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return Err(bad());
+    }
+    Ok([(y - 2000) as u8, m as u8, d as u8])
 }
 
 /// The result of [`Session::preview`].
@@ -556,6 +677,16 @@ impl Session {
             locations: locations(gen),
             ribbons: edit::RIBBONS.iter().map(|r| (*r).into()).collect(),
             nickname_max: 10,
+            natures: (0..25)
+                .map(|n| named(st::NATURES, n).name.unwrap_or_default())
+                .collect(),
+            wild_balls: WIZARD_BALLS
+                .iter()
+                .map(|&b| Named {
+                    id: b as u16,
+                    name: named(items, ball_item(b)).name,
+                })
+                .collect(),
         }
         .into_ts()?)
     }
@@ -669,6 +800,150 @@ impl Session {
         self.dirty = false;
     }
 
+    /// The games whose wild slots and eggs the wizard offers, the save's own first (D/P, HG/SS,
+    /// B/W and B2/W2 saves don't record which of the pair they are).
+    #[wasm_bindgen(js_name = wizardVersions)]
+    pub fn wizard_versions(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+        let save = self.open();
+        let v: &[u8] = match save.kind() {
+            SaveKind::DP => &[10, 11],
+            SaveKind::Pt => &[12],
+            SaveKind::HGSS => &[7, 8],
+            SaveKind::BW if save.game_version() == 21 => &[21, 20],
+            SaveKind::BW => &[20, 21],
+            SaveKind::B2W2 if save.game_version() == 23 => &[23, 22],
+            SaveKind::B2W2 => &[22, 23],
+        };
+        list(v.iter().map(|&v| Named {
+            id: v as u16,
+            name: Some(origin_name(v).into()),
+        }))
+    }
+
+    /// Species with wild slots in `version` (needs the legality blobs).
+    #[wasm_bindgen(js_name = wildSpecies)]
+    pub fn wild_species(&mut self, version: u8) -> Result<Vec<Ts<Named>>, JsError> {
+        let data = wizard_data(version)?;
+        list(
+            wizard::wild_species(data, version)
+                .into_iter()
+                .map(|s| named(st::SPECIES, s)),
+        )
+    }
+
+    /// The wild slots of `species` in `version`.
+    #[wasm_bindgen(js_name = wildEncounters)]
+    pub fn wild_encounters(
+        &mut self,
+        version: u8,
+        species: u16,
+    ) -> Result<Vec<Ts<WildSlot>>, JsError> {
+        let data = wizard_data(version)?;
+        let gen = if version >= 20 { 5 } else { 4 };
+        list(
+            wizard::wild_encounters(data, version, species)
+                .into_iter()
+                .map(|(index, e)| WildSlot {
+                    index,
+                    location: location(gen, e.location()),
+                    form: e.form(),
+                    level_min: e.level_min(),
+                    level_max: e.level_max(),
+                    kind: slot_kind(gen, e.slot_type()).into(),
+                    slot_number: e.slot_number(),
+                    can_radar: gen == 4 && e.can_radar(),
+                }),
+        )
+    }
+
+    /// Species a Gen 4 egg can be of (empty for Gen 5 saves, which the DS doesn't breed yet).
+    #[wasm_bindgen(js_name = eggSpecies)]
+    pub fn egg_species(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+        if self.open().generation() != 4 {
+            return Ok(vec![]);
+        }
+        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
+        list(
+            wizard::egg_species(ctx)
+                .into_iter()
+                .map(|s| named(st::SPECIES, s)),
+        )
+    }
+
+    /// Generates a legal wild Pokémon and writes it to the empty slot at `box_index` (-1 for the
+    /// end of the party) and `slot`. Returns why it failed, or nothing when written.
+    #[wasm_bindgen(js_name = addWild)]
+    pub fn add_wild(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        req: Ts<WildAdd>,
+    ) -> Result<Option<String>, JsError> {
+        let r = req.to_rust()?;
+        let lead = match r.lead.as_str() {
+            "synchronize" => match r.nature {
+                Some(n) => Lead::Synchronize(n),
+                None => return Ok(Some("Synchronize: choose a nature".into())),
+            },
+            "cuteCharm" => match r.gender {
+                Some(g) => Lead::CuteCharm { gender: g },
+                None => return Ok(Some("Cute Charm: choose a gender".into())),
+            },
+            "radar" => Lead::PokeRadarChain,
+            _ => Lead::None,
+        };
+        let w = wizard::WildRequest {
+            version: r.version,
+            species: r.species,
+            form: r.form,
+            encounter: r.encounter,
+            level: r.level,
+            nature: r.nature,
+            gender: r.gender,
+            shiny: r.shiny,
+            lead,
+            ball: r.ball,
+            met_date: parse_date(&r.met_date)?,
+            seed: r.seed,
+        };
+        let at = self.empty_slot(box_index, slot)?;
+        let gen = self.open().generation();
+        let (c4, c5) = if gen == 5 {
+            (None, context5())
+        } else {
+            (context4(), None)
+        };
+        let mut save = self.open();
+        let out = wizard::insert_wild(&mut save, c4, c5, &w, at);
+        Ok(self.added(out))
+    }
+
+    /// Builds a legal bred Gen 4 egg (or the Pokémon hatched from it) into the empty slot.
+    #[wasm_bindgen(js_name = addEgg)]
+    pub fn add_egg(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        req: Ts<EggAdd>,
+    ) -> Result<Option<String>, JsError> {
+        let r = req.to_rust()?;
+        let e = wizard::EggRequest {
+            version: r.version,
+            species: r.species,
+            nature: r.nature,
+            gender: r.gender,
+            shiny: r.shiny,
+            hatched: r.hatched,
+            date: parse_date(&r.date)?,
+            seed: r.seed,
+        };
+        let at = self.empty_slot(box_index, slot)?;
+        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
+        let mut save = self.open();
+        let out = wizard::insert_egg(&mut save, ctx, &e, at);
+        Ok(self.added(out))
+    }
+
     /// The save file as it stands, for downloading.
     pub fn bytes(&self) -> Vec<u8> {
         self.save.clone()
@@ -693,6 +968,35 @@ impl Session {
             return Err(JsError::new("no Pokémon there"));
         }
         Ok((save.kind(), pk))
+    }
+
+    /// The empty slot to add to: a box slot, or the party's next slot.
+    fn empty_slot(&mut self, box_index: i32, slot: u8) -> Result<Slot, JsError> {
+        let save = self.open();
+        let at = if box_index < 0 {
+            let n = save.party_count();
+            if n >= 6 {
+                return Err(JsError::new("the party is full"));
+            }
+            Slot::Party(n as u8)
+        } else {
+            Slot::Box(box_index as u8, slot)
+        };
+        if save.pkm(at).map_err(err)?.species() != 0 {
+            return Err(JsError::new("that slot isn't empty"));
+        }
+        let _ = slot;
+        Ok(at)
+    }
+
+    fn added(&mut self, out: Result<(), GenStatus>) -> Option<String> {
+        match out {
+            Ok(()) => {
+                self.dirty = true;
+                None
+            }
+            Err(s) => Some(s.text().into()),
+        }
     }
 
     fn check_save(&mut self) -> SaveCheck {

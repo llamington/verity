@@ -28,9 +28,9 @@ export const canWriteInPlace = (): boolean =>
 export async function pickSave(): Promise<OpenedFile | undefined> {
 	const picker = (window as PickerWindow).showOpenFilePicker;
 	if (!picker) throw new Error('This browser has no file picker with write access.');
-	let handle: FileSystemFileHandle;
+	let handles: FileSystemFileHandle[];
 	try {
-		[handle] = await picker({
+		handles = await picker({
 			types: [
 				{
 					description: 'Pokémon save',
@@ -42,6 +42,8 @@ export async function pickSave(): Promise<OpenedFile | undefined> {
 		if (e instanceof DOMException && e.name === 'AbortError') return undefined;
 		throw e;
 	}
+	const handle = handles[0];
+	if (!handle) return undefined;
 	const file = await handle.getFile();
 	return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), handle };
 }
@@ -78,7 +80,9 @@ export function download(name: string, bytes: Uint8Array): void {
 	document.body.append(a);
 	a.click();
 	a.remove();
-	setTimeout(() => URL.revokeObjectURL(url), 10_000);
+	setTimeout(() => {
+		URL.revokeObjectURL(url);
+	}, 10_000);
 }
 
 /** `Platinum.sav` → `Platinum.original.sav`. */
