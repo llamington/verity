@@ -144,7 +144,7 @@ jobs:
       - run: npx vitest --run
 
   deploy:
-    name: Deploy web (Cloudflare Pages)
+    name: Deploy web (Cloudflare Workers)
     needs: [changes, web]
     # Pushes to main whose web checks passed. Without the Cloudflare secrets the site is still
     # built (so the build stays tested) and the upload is skipped.
@@ -181,12 +181,15 @@ jobs:
       - name: Build the site (release WASM, blobs in static/data)
         run: npm run build
         working-directory: web
+      # Static files on Workers (web/wrangler.jsonc); the Worker is created on first deploy.
       - name: Deploy
         if: env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
-        working-directory: web
-        run: |
-          npx --yes wrangler@4 pages project create verity --production-branch=main 2>/dev/null || true
-          npx --yes wrangler@4 pages deploy build --project-name=verity --branch=main
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: deploy
       - name: No Cloudflare secrets
         if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == ''
         run: echo "::notice::Site built; deploy skipped (set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)."

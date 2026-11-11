@@ -17,7 +17,7 @@ and gaps are in `docs/research/p5-plan.md`.
 Svelte, Solid and Astro: **SvelteKit 3** (static adapter, every page prerendered; the editor at
 `/app` renders in the browser only and is `noindex`), strict TypeScript, **Tailwind v4**,
 **shadcn-svelte** (preset "nova"; components are copied into `web/src/lib/components/ui`),
-**Storybook 10** (Chromatic add-on removed), Vitest and Playwright. Hosting target: Cloudflare Pages
+**Storybook 10** (Chromatic add-on removed), Vitest and Playwright. Hosting target: Cloudflare Workers static assets (switched from Pages 2026-11-11; Pages is deprecated)
 (free), not set up yet. Node is managed with **mise** (user installed it; `~/.local/bin/mise`),
 pinned by `.node-version` at the repo root (26, the LTS). Run npm through `mise exec --` unless the
 shell has mise activated. The root `package.json` is an npm workspace root (`web/` is the
@@ -116,7 +116,7 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   lacks; `fonts.e2e.ts`), the landing page (features, saves, credits, not-affiliated notice).
 - **Deploy (ci.yml `deploy` job):** on pushes to main after the web job, builds blobs
   (`scripts/build-data.sh` with setup-dotnet; PKHeX.Core comes from NuGet), WASM and the site,
-  then `wrangler pages deploy` to project `verity`, **only once the user adds the
+  then `cloudflare/wrangler-action@v4` runs `wrangler deploy` (`web/wrangler.jsonc`, Worker `verity`), **only once the user adds the
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets** (otherwise builds and skips).
   `web/static/_headers`: immutable bundles, revalidated blobs. To check after the first
   deploy: whether Cloudflare compresses the `.bin` blobs (served as application/octet-stream,

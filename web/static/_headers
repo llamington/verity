@@ -1,4 +1,4 @@
-# Cloudflare Pages response headers.
+# Cloudflare response headers (Workers static assets read this file).
 
 # Content-hashed bundles (JS, CSS, WASM, fonts) never change under one name.
 /_app/immutable/*
