@@ -4,6 +4,7 @@ members = [
     "crates/verity-ffi",
     "crates/verity-rom",
     "crates/datagen",
+    "crates/verity-wasm",
 ]
 resolver = "2"
 exclude = ["fuzz"]
