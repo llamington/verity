@@ -1,4 +1,4 @@
-# Handoff (2026-11-11)
+# Handoff (2026-11-11, end of session)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
@@ -70,7 +70,20 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   nickname/date rules, preview/apply, add, finalize), Storybook play functions (PokemonEditor,
   AddPokemon, MonTile; run by `npx vitest --run`, also on CI), and 14 Playwright journeys.
   `verity-wasm` is split: `Editor` (plain Rust, `Invalid` errors) and `Session` (JS wrapper).
-- Next: Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing pages, deploy.
+- **Mystery Gifts done (2026-11-11):** `verity::gift::catalog` (list, deliver, statuses, dates;
+  shared with the DS), `Editor::gifts`/`deliver_gift`, `GiftList` component, route `/app/gifts`
+  (gift blobs fetched on first visit). Tests: front_end.rs, editor.rs, GiftList stories,
+  `gifts.e2e.ts`.
+- **Routing (user, 2026-11-11):** add routes only when a new screen needs one. `/app` is a layout
+  owning the open save (`web/src/lib/editor.svelte.ts`: `doc`); Boxes (`/app`) and Mystery Gifts
+  (`/app/gifts`) are child routes; new screens become sibling routes + a SECTIONS entry in
+  `routes/app/+layout.svelte`. Shallow routing for the drawer (Back closes it) was proposed and
+  not picked.
+- **Fixed 2026-11-11:** saving needed a Pokémon opened first (move data came with the legality
+  data); opening now fetches `Editor::save_blobs` (game + moves).
+- **Proposed, not picked:** run the WASM in a Web Worker (closest IVs/generation block the main
+  thread), real `<form>`s in the editor/wizard, remember the file handle in IndexedDB.
+- Next: bag (Gen 4/5 items), Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
 

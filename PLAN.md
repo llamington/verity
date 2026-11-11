@@ -559,7 +559,8 @@ A browser build of the core, after the DS loads its font and graphics from the u
     except move descriptions and power/accuracy/category, which the DS reads from the ROM).
   - Add Pokémon: wild generation (Gen 4 and Gen 5 wizards), eggs, Pal Park and Poké Transfer
     origins (`verity_gen_insert`, `verity_wild_*`, `verity_egg_*`) (done).
-  - Mystery Gift list and delivery, Gen 4 and Gen 5 (`verity_events_list`, `verity_event_inject`).
+  - Mystery Gift list and delivery, Gen 4 and Gen 5 (`verity_events_list`, `verity_event_inject`)
+    (done).
   - Bag/items (Gen 4 and Gen 5), the misc tabs.
   - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`).
   - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
