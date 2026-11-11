@@ -3,7 +3,7 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import type { Summary, Named, Legality } from '#lib/verity.js';
 
-	let { summary, legality }: { summary: Summary; legality?: Legality } = $props();
+	let { summary, legality }: { summary: Summary; legality?: Legality | undefined } = $props();
 
 	// The save stores stats as HP, Atk, Def, Spe, SpA, SpD; show them in the games' order.
 	const ORDER = [0, 1, 2, 4, 5, 3];

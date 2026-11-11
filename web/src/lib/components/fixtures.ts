@@ -57,5 +57,7 @@ export const choices: Choices = {
 	balls: [n(1, 'Master Ball'), n(4, 'Poké Ball'), n(5, 'Safari Ball')],
 	locations: [n(126, 'New Bark Town'), n(127, 'Cherrygrove City'), n(2000, 'Day-Care Couple')],
 	ribbons: Array.from({ length: 80 }, (_, i) => `Ribbon ${i + 1}`),
-	nicknameMax: 10
+	nicknameMax: 10,
+	natures: ['Hardy', 'Lonely', 'Brave', 'Adamant', 'Naughty'],
+	wildBalls: [n(4, 'Poké Ball'), n(3, 'Great Ball'), n(2, 'Ultra Ball')]
 };

@@ -17,6 +17,7 @@
 	import PokemonSummary from '#lib/components/PokemonSummary.svelte';
 	import LegalityReport from '#lib/components/LegalityReport.svelte';
 	import PokemonEditor from '#lib/components/PokemonEditor.svelte';
+	import AddPokemon from '#lib/components/AddPokemon.svelte';
 	import {
 		openSave,
 		loadLegalityData,
@@ -27,8 +28,11 @@
 		type Summary,
 		type Legality,
 		type Choices,
-		type EditRequest
+		type EditRequest,
+		type WildAdd,
+		type EggAdd
 	} from '#lib/verity.js';
+	import { errorText } from '#lib/utils.js';
 
 	const GAMES: Record<string, string> = {
 		dp: 'Diamond / Pearl',
@@ -59,15 +63,51 @@
 	let boxIndex = $state(0);
 
 	/** The open Pokémon: box index (-1 for the party) and slot. */
-	let selected: { box: number; slot: number } | undefined = $state();
+	let selected: { box: number; slot: number } | undefined = $state.raw();
 	let summary: Summary | undefined = $state.raw();
 	let legality: Legality | undefined = $state.raw();
 	let legalityError = $state('');
 
+	/** The empty slot the add-Pokémon wizard fills (box -1: the party's next slot). */
+	let adding: { box: number; slot: number } | undefined = $state();
+	let addReady = $state(false);
+
+	async function startAdd(box: number, slot: number) {
+		if (!session) return;
+		const s = session;
+		selected = undefined;
+		adding = { box, slot };
+		addReady = false;
+		legalityError = '';
+		try {
+			await loadLegalityData(s);
+			if (session !== s) return;
+			choices ??= s.choices();
+			addReady = true;
+		} catch (err) {
+			legalityError = `Couldn't load the legality data: ${errorText(err)}`;
+		}
+	}
+
+	/** After a successful add: refresh and show the new Pokémon. */
+	function added(why: string | undefined): string | undefined {
+		if (why || !session || !adding) return why;
+		const at = adding.box < 0 ? { box: -1, slot: overview?.party.length ?? 0 } : adding;
+		overview = session.overview();
+		version++;
+		dirty = true;
+		saveMessage = '';
+		adding = undefined;
+		void select(at.box, at.slot);
+		return undefined;
+	}
+
 	async function select(box: number, slot: number) {
 		if (!session) return;
 		const s = session;
-		selected = { box, slot };
+		adding = undefined;
+		const at = { box, slot };
+		selected = at;
 		editing = false;
 		summary = s.summary(box, slot);
 		legality = undefined;
@@ -75,12 +115,12 @@
 		try {
 			await loadLegalityData(s);
 			// Ignore a result for a Pokémon that is no longer open.
-			if (session !== s || selected?.box !== box || selected.slot !== slot) return;
+			if (session !== s || selected !== at) return;
 			legality = s.legality(box, slot);
 			summary = s.summary(box, slot);
 			choices ??= s.choices();
 		} catch (err) {
-			legalityError = `Couldn't load the legality data: ${err instanceof Error ? err.message : err}`;
+			legalityError = `Couldn't load the legality data: ${errorText(err)}`;
 		}
 	}
 
@@ -126,7 +166,7 @@
 			fileChecksumsOk = true;
 			overview = session.overview();
 		} catch (err) {
-			saveError = err instanceof Error ? err.message : String(err);
+			saveError = errorText(err);
 		} finally {
 			saving = false;
 		}
@@ -149,7 +189,7 @@
 			selected = undefined;
 			choices = undefined;
 		} catch (err) {
-			error = `Couldn't open ${f.name}: ${err instanceof Error ? err.message : err}`;
+			error = `Couldn't open ${f.name}: ${errorText(err)}`;
 		}
 	}
 
@@ -164,7 +204,7 @@
 			const f = await pickSave();
 			if (f) open(f);
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			error = errorText(err);
 		}
 	}
 
@@ -227,6 +267,7 @@
 	{/if}
 
 	{#if overview && box}
+		{@const ov = overview}
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>{overview.trainer.name}</Card.Title>
@@ -268,8 +309,9 @@
 				<Button
 					variant="outline"
 					size="sm"
-					onclick={() => original && download(backupName(fileName), original)}
-					>Download original</Button
+					onclick={() => {
+						if (original) download(backupName(fileName), original);
+					}}>Download original</Button
 				>
 			{/if}
 			<Button size="sm" disabled={!dirty || saving} onclick={save}>
@@ -283,6 +325,9 @@
 				{#each overview.party as mon, i (i)}
 					<MonTile {mon} onselect={() => select(-1, i)} />
 				{/each}
+				{#if overview.party.length < 6}
+					<MonTile mon={null} onadd={() => startAdd(-1, ov.party.length)} />
+				{/if}
 			</div>
 		</section>
 
@@ -292,32 +337,58 @@
 					variant="outline"
 					size="sm"
 					aria-label="Previous box"
-					onclick={() => (boxIndex = (boxIndex + overview!.boxCount - 1) % overview!.boxCount)}
-					>‹</Button
+					onclick={() => (boxIndex = (boxIndex + ov.boxCount - 1) % ov.boxCount)}>‹</Button
 				>
 				<h2 class="font-medium" data-testid="box-name">{box.name}</h2>
 				<Button
 					variant="outline"
 					size="sm"
 					aria-label="Next box"
-					onclick={() => (boxIndex = (boxIndex + 1) % overview!.boxCount)}>›</Button
+					onclick={() => (boxIndex = (boxIndex + 1) % ov.boxCount)}>›</Button
 				>
 			</div>
 			<div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
 				{#each box.slots as mon, i (i)}
-					<MonTile {mon} onselect={() => select(boxIndex, i)} />
+					<MonTile {mon} onselect={() => select(boxIndex, i)} onadd={() => startAdd(boxIndex, i)} />
 				{/each}
 			</div>
 		</section>
 
 		<Sheet.Root
-			open={!!selected}
+			open={!!selected || !!adding}
 			onOpenChange={(open) => {
-				if (!open) selected = undefined;
+				if (!open) selected = adding = undefined;
 			}}
 		>
 			<Sheet.Content class="w-full overflow-y-auto sm:max-w-md">
-				{#if summary}
+				{#if adding && session && overview}
+					{@const s = session}
+					{@const at = adding}
+					<Sheet.Header>
+						<Sheet.Title>Add a Pokémon</Sheet.Title>
+						<Sheet.Description>
+							{at.box < 0 ? `Party slot ${at.slot + 1}` : `${box.name}, slot ${at.slot + 1}`}
+						</Sheet.Description>
+					</Sheet.Header>
+					<div class="px-4 pb-6">
+						{#if legalityError}
+							<p class="text-destructive">{legalityError}</p>
+						{:else if !addReady || !choices}
+							<p class="text-muted-foreground">Loading the encounter data…</p>
+						{:else}
+							<AddPokemon
+								versions={s.wizardVersions()}
+								{choices}
+								generation={overview.generation}
+								wildSpecies={(v: number) => s.wildSpecies(v)}
+								wildEncounters={(v: number, sp: number) => s.wildEncounters(v, sp)}
+								eggSpecies={() => s.eggSpecies()}
+								addWild={(r: WildAdd) => added(s.addWild(at.box, at.slot, r))}
+								addEgg={(r: EggAdd) => added(s.addEgg(at.box, at.slot, r))}
+							/>
+						{/if}
+					</div>
+				{:else if summary}
 					<Sheet.Header>
 						<Sheet.Title>
 							{summary.mon.egg ? 'Egg' : (summary.mon.speciesName ?? `#${summary.mon.species}`)}
@@ -349,7 +420,7 @@
 								<PokemonEditor
 									{summary}
 									{choices}
-									preview={(e) => s.preview(at.box, at.slot, e)}
+									preview={(e: EditRequest) => s.preview(at.box, at.slot, e)}
 									apply={applyEdit}
 									closestIvs={overview.generation === 4
 										? (ivs) => s.closestIvs(at.box, at.slot, new Uint8Array(ivs))

@@ -7,6 +7,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import * as Select from '#lib/components/ui/native-select/index.js';
 	import LegalityReport from '#lib/components/LegalityReport.svelte';
+	import { errorText } from '#lib/utils.js';
 	import type { Choices, EditRequest, IvFix, Named, Preview, Summary } from '#lib/verity.js';
 
 	let {
@@ -23,7 +24,7 @@
 		/** Returns why it was refused, or nothing when written. */
 		apply: (edit: EditRequest, legalMode: boolean) => string | undefined;
 		/** Gen 4 wild catches only; absent otherwise. */
-		closestIvs?: (ivs: number[]) => IvFix;
+		closestIvs?: ((ivs: number[]) => IvFix) | undefined;
 	} = $props();
 
 	// The save stores stats as HP, Atk, Def, Spe, SpA, SpD; the form shows the games' order.
@@ -94,7 +95,7 @@
 		try {
 			return { preview: preview(request) };
 		} catch (e) {
-			return { error: e instanceof Error ? e.message : String(e) };
+			return { error: errorText(e) };
 		}
 	});
 
@@ -114,7 +115,7 @@
 				? `Closest legal spread: ${fix.distance} IV point${fix.distance === 1 ? '' : 's'} away (PID changes too).`
 				: 'Already a legal spread.';
 		} catch (e) {
-			ivNote = e instanceof Error ? e.message : String(e);
+			ivNote = errorText(e);
 		}
 	}
 
@@ -252,7 +253,9 @@
 						aria-label="{LABELS[ORDER.indexOf(i)]} IV"
 						class="px-1 text-center"
 						value={ivs[i]}
-						oninput={(e) => setIv(i, e.currentTarget.valueAsNumber)}
+						oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+							setIv(i, e.currentTarget.valueAsNumber);
+						}}
 					/>
 				{/each}
 				<span class="pr-1 text-left text-muted-foreground">EV</span>

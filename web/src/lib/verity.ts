@@ -60,5 +60,8 @@ export type {
 	Choices,
 	EditRequest,
 	Preview,
-	IvFix
+	IvFix,
+	WildAdd,
+	EggAdd,
+	WildSlot
 } from '#lib/wasm/verity_wasm.js';

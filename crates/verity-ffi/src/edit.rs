@@ -3,7 +3,7 @@
 
 use core::slice;
 
-use verity::gen::api4::{self, EncounterChoice, Error, GenRequest, IvRequest};
+use verity::gen::api4::{self, Error};
 use verity::gen::wild4::Lead;
 use verity::safety::{self, SaveIssue};
 use verity::save::{SaveKind, Slot};
@@ -11,43 +11,14 @@ use verity::save::{SaveKind, Slot};
 use crate::ui::{legal, open, VerityLoc};
 use crate::VerityErr;
 
-fn group(version: u8) -> Option<&'static [u8]> {
-    match version {
-        10 => Some(b"SlotsD"),
-        11 => Some(b"SlotsP"),
-        12 => Some(b"SlotsPt"),
-        7 => Some(b"SlotsHG"),
-        8 => Some(b"SlotsSS"),
-        20 => Some(b"SlotsW"),
-        21 => Some(b"SlotsB"),
-        22 => Some(b"SlotsW2"),
-        23 => Some(b"SlotsB2"),
-        _ => None,
-    }
-}
+use verity::gen::wizard;
 
-fn enc_data(
-    ctx: &'static verity::legality::analysis4::Context4<'static>,
-    version: u8,
-) -> &'static verity::data::encounters::EncounterData<'static> {
-    if matches!(version, 7 | 8) {
-        &ctx.enc_hgss
-    } else {
-        &ctx.enc_dppt
-    }
-}
-
-/// The encounter tables holding `version`'s wild slots.
+/// The encounter tables holding `version`'s wild slots (builds only the context it needs).
 fn wild_data(version: u8) -> Option<&'static verity::data::encounters::EncounterData<'static>> {
     if matches!(version, 20..=23) {
-        let ctx = legal::context5()?;
-        Some(if matches!(version, 20 | 21) {
-            &ctx.enc_bw
-        } else {
-            &ctx.enc_b2w2
-        })
+        wizard::wild_data(None, Some(legal::context5()?), version)
     } else {
-        Some(enc_data(legal::context()?, version))
+        wizard::wild_data(Some(legal::context()?), None, version)
     }
 }
 
@@ -76,30 +47,16 @@ pub struct VerityEncounter {
 /// `out` must point to `cap` writable `u16`s.
 #[no_mangle]
 pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: usize) -> usize {
-    let Some(g) = group(version) else {
+    let Some(data) = wild_data(version) else {
         return 0;
     };
     if out.is_null() {
         return 0;
     }
     let out = slice::from_raw_parts_mut(out, cap);
-    let mut seen = [false; 650];
-    let ed = match wild_data(version) {
-        Some(d) => d,
-        None => return 0,
-    };
-    for e in ed.group(g) {
-        if let Some(s) = seen.get_mut(e.species() as usize) {
-            *s = true;
-        }
-    }
-    let mut n = 0;
-    for (sp, &s) in seen.iter().enumerate().skip(1) {
-        if s && n < cap {
-            out[n] = sp as u16;
-            n += 1;
-        }
-    }
+    let species = wizard::wild_species(data, version);
+    let n = species.len().min(cap);
+    out[..n].copy_from_slice(&species[..n]);
     n
 }
 
@@ -115,7 +72,7 @@ pub unsafe extern "C" fn verity_wild_encounters(
     out: *mut VerityEncounter,
     cap: usize,
 ) -> usize {
-    let (Some(g), Some(ed)) = (group(version), wild_data(version)) else {
+    let Some(data) = wild_data(version) else {
         return 0;
     };
     if out.is_null() {
@@ -123,12 +80,12 @@ pub unsafe extern "C" fn verity_wild_encounters(
     }
     let out = slice::from_raw_parts_mut(out, cap);
     let mut n = 0;
-    for (i, e) in ed.group(g).enumerate() {
-        if e.species() != species || n >= cap {
-            continue;
-        }
+    for (index, e) in wizard::wild_encounters(data, version, species)
+        .into_iter()
+        .take(cap)
+    {
         out[n] = VerityEncounter {
-            index: i as u16,
+            index,
             location: e.location(),
             species: e.species(),
             form: e.form(),
@@ -178,62 +135,6 @@ pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
     GenStatus::c_text(code).as_ptr()
 }
 
-/// The Gen 5 half of `verity_gen_insert`.
-fn insert5(save: &mut verity::save::Save, r: &VerityGenRequest, loc: VerityLoc) -> u8 {
-    use verity::gen::wild5::{self, Error5, Request5};
-    let (Some(g), Some(ctx)) = (group(r.version), legal::context5()) else {
-        return GenStatus::Unsupported as u8;
-    };
-    if !matches!(r.version, 20..=23) {
-        return GenStatus::Unsupported as u8;
-    }
-    let ed = if matches!(r.version, 20 | 21) {
-        &ctx.enc_bw
-    } else {
-        &ctx.enc_b2w2
-    };
-    let picked = if r.encounter_index == 0xFFFF {
-        let count = ed.group(g).filter(|e| e.species() == r.species).count();
-        if count == 0 {
-            return GenStatus::NoEncounter as u8;
-        }
-        ed.group(g)
-            .filter(|e| e.species() == r.species)
-            .nth(r.seed as usize % count)
-    } else {
-        ed.group(g).nth(r.encounter_index as usize)
-    };
-    let Some(encounter) = picked else {
-        return GenStatus::NotInEncounter as u8;
-    };
-    if encounter.species() != r.species {
-        return GenStatus::NotInEncounter as u8;
-    }
-    let opt = |v: u8| (v != 0xFF).then_some(v);
-    let q = Request5 {
-        encounter,
-        level: opt(r.level),
-        nature: opt(r.nature),
-        gender: opt(r.gender),
-        shiny: r.shiny != 0,
-        ball: opt(r.ball),
-        date: r.met_date,
-        seed: r.seed as u64 | 1,
-    };
-    let built = match wild5::generate(ctx, &api4::trainer_of(save), &q) {
-        Ok(p) => p,
-        Err(Error5::LevelOutsideSlot) => return GenStatus::LevelOutsideSlot as u8,
-        Err(Error5::GenderImpossible) => return GenStatus::GenderImpossible as u8,
-        Err(Error5::ShinyImpossible) => return GenStatus::ShinyInGrotto as u8,
-        Err(Error5::BallNotAllowed) => return GenStatus::BallNotAllowed as u8,
-        Err(Error5::Illegal) => return GenStatus::Internal as u8,
-    };
-    match wild5::insert(ctx, save, slot_of(loc), &built) {
-        Ok(()) => GenStatus::Ok as u8,
-        Err(_) => GenStatus::Unsafe as u8,
-    }
-}
-
 /// C ABI: generates a legal Pokémon for the save's trainer and writes it to `loc` (through the
 /// game-safe validator, with Pokédex side effects). The save is not finalised; call
 /// `verity_save_finalize` before writing it out.
@@ -255,28 +156,6 @@ pub unsafe extern "C" fn verity_gen_insert(
     let Some(mut save) = open(buf, len) else {
         return GenStatus::Internal as u8;
     };
-    if matches!(save.kind(), SaveKind::BW | SaveKind::B2W2) {
-        return insert5(&mut save, &r, loc);
-    }
-    if !matches!(save.kind(), SaveKind::DP | SaveKind::Pt | SaveKind::HGSS)
-        || group(r.version).is_none()
-    {
-        return GenStatus::Unsupported as u8;
-    }
-    let Some(ctx) = legal::context() else {
-        return GenStatus::Unsupported as u8;
-    };
-    let encounter = if r.encounter_index == 0xFFFF {
-        EncounterChoice::Any
-    } else {
-        match enc_data(ctx, r.version)
-            .group(group(r.version).unwrap())
-            .nth(r.encounter_index as usize)
-        {
-            Some(e) => EncounterChoice::Slot(e),
-            None => return GenStatus::NotInEncounter as u8,
-        }
-    };
     let opt = |v: u8| (v != 0xFF).then_some(v);
     let lead = match r.lead {
         1 => Lead::Synchronize(r.lead_param),
@@ -286,37 +165,30 @@ pub unsafe extern "C" fn verity_gen_insert(
         3 => Lead::PokeRadarChain,
         _ => Lead::None,
     };
-    let g = GenRequest {
+    let w = wizard::WildRequest {
         version: r.version,
         species: r.species,
         form: r.form,
-        encounter,
+        encounter: (r.encounter_index != 0xFFFF).then_some(r.encounter_index),
         level: opt(r.level),
         nature: opt(r.nature),
         gender: opt(r.gender),
-        ability: None,
-        shiny: r.shiny != 0 || lead == Lead::PokeRadarChain,
+        shiny: r.shiny != 0,
         lead,
-        hidden_power_type: None,
-        ivs: IvRequest::Random,
         ball: opt(r.ball),
-        moves: None,
         met_date: r.met_date,
-        seed: r.seed as u64 | 1,
-        budget: 20_000,
+        seed: r.seed,
     };
-    let built = match api4::generate(ctx, &save, &g) {
-        Ok(b) => b,
-        Err(e) => return status(e) as u8,
-    };
-    let slot = if loc.box_index == 0xFF {
-        Slot::Party(loc.slot)
+    // Build only the context this save needs.
+    let gen5 = matches!(save.kind(), SaveKind::BW | SaveKind::B2W2);
+    let (c4, c5) = if gen5 {
+        (None, legal::context5())
     } else {
-        Slot::Box(loc.box_index, loc.slot)
+        (legal::context(), None)
     };
-    match api4::insert(ctx, &mut save, slot, &built.pkm) {
+    match wizard::insert_wild(&mut save, c4, c5, &w, slot_of(loc)) {
         Ok(()) => GenStatus::Ok as u8,
-        Err(e) => status(e) as u8,
+        Err(s) => s as u8,
     }
 }
 
@@ -601,20 +473,16 @@ pub struct VerityEggRequest {
 /// `out` must point to `cap` writable `u16`s.
 #[no_mangle]
 pub unsafe extern "C" fn verity_egg_species(version: u8, out: *mut u16, cap: usize) -> usize {
-    let (Some(_), Some(ctx)) = (group(version), legal::context()) else {
+    let (Some(_), Some(ctx)) = (wizard::slots_group(version), legal::context()) else {
         return 0;
     };
     if out.is_null() {
         return 0;
     }
     let out = slice::from_raw_parts_mut(out, cap);
-    let mut n = 0;
-    for sp in 1..=493u16 {
-        if n < cap && verity::legality::analysis4::can_be_egg(ctx, sp) {
-            out[n] = sp;
-            n += 1;
-        }
-    }
+    let species = wizard::egg_species(ctx);
+    let n = species.len().min(cap);
+    out[..n].copy_from_slice(&species[..n]);
     n
 }
 
@@ -641,33 +509,20 @@ pub unsafe extern "C" fn verity_egg_insert(
     let Some(ctx) = legal::context() else {
         return GenStatus::Unsupported as u8;
     };
-    if !matches!(save.kind(), SaveKind::DP | SaveKind::Pt | SaveKind::HGSS) {
-        return GenStatus::Unsupported as u8;
-    }
     let opt = |v: u8| (v != 0xFF).then_some(v);
-    let e = verity::gen::egg4::EggRequest {
+    let e = wizard::EggRequest {
         version: r.version,
         species: r.species,
         nature: opt(r.nature),
         gender: opt(r.gender),
-        ability: None,
         shiny: r.shiny != 0,
-        ivs: IvRequest::Random,
-        moves: None,
         hatched: r.hatched != 0,
-        hatch_location: None,
-        egg_date: r.date,
-        met_date: r.date,
-        seed: r.seed as u64 | 1,
-        budget: 20_000,
+        date: r.date,
+        seed: r.seed,
     };
-    let built = match verity::gen::egg4::generate(ctx, &api4::trainer_of(&save), &e) {
-        Ok(p) => p,
-        Err(err) => return status(err) as u8,
-    };
-    match api4::insert(ctx, &mut save, slot_of(loc), &built) {
+    match wizard::insert_egg(&mut save, ctx, &e, slot_of(loc)) {
         Ok(()) => GenStatus::Ok as u8,
-        Err(err) => status(err) as u8,
+        Err(s) => s as u8,
     }
 }
 
