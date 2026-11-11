@@ -157,7 +157,7 @@ fn sprites_from_roms() {
             .join("../../target")
             .join(format!("sprites-{}.ppm", name.trim_end_matches(".nds")));
         let mut f = File::create(out).unwrap();
-        write!(f, "P6 {w} {h} 255\n").unwrap();
+        writeln!(f, "P6 {w} {h} 255").unwrap();
         f.write_all(&img).unwrap();
     }
 }

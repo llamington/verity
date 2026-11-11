@@ -13,9 +13,16 @@ and gaps are in `docs/research/p5-plan.md`.
 
 - **Spacing:** 12 px text pitch, 16 px menus and grouped panels across the app
   (`docs/research/ui-stack.md`, Spacing).
-- **Sprites:** the games' front sprites, type and category icons, balls and markings
-  (`sprites4/5.vspr`, `docs/research/rom-sprites.md`). First start takes about 20 s in melonDS;
-  untested on hardware.
+- **Sprites** (user asked for "more Pokémon charm"): the games' front sprites, type and category
+  icons, balls and markings (`sprites4/5.vspr`, `docs/research/rom-sprites.md`). The box view's top
+  screen is laid out like the summary (sprite with the ball behind it, verdict, type icons, gender
+  and shiny shapes, markings in the title bar); the editor shows the sprite beside shorter key
+  hints; move details use the type and category icons. First start takes about 20 s in melonDS
+  (3-4 s before); untested on hardware. `make emu-tour` checks every screen (`ui-rom-font.json`
+  now waits 1200 frames for the caches; `tour.sh` clears `build/emu/tour-nds` first).
+- **Ideas the user hasn't picked yet** (from the "Pokémon charm" list): box wallpapers from the save
+  and ROM, per-game window themes, motion (bobbing box icons, screen slides), menu sounds and cries
+  from the ROM's sound archive. The stats hexagon was dropped.
 
 - **Ribbon images:** `verity-rom::ribbons` (`ribbons.vrib` from the best ROM; Gen 5 tables are in
   overlays, read with `Rom::overlay`); the ribbon list shows the highlighted ribbon on the top
@@ -73,7 +80,8 @@ and gaps are in `docs/research/p5-plan.md`.
 **Earlier M8 work:** `crates/verity-rom` (used only by `verity-ffi`; the core crate doesn't depend
 on it) reads the NDS file system, NARCs, LZ10/11, BLZ (in place) and the fonts; findings in
 `docs/research/rom-font.md`. On boot the DS loads its caches from `/_nds/verity/` (`font.vfnt`,
-`icons.vicn`, `moves4.vmov`, `moves5.vmov`, `items4.vitm`, `items5.vitm`) or scans the SD card (depth 3) for the best `.nds`
+`icons.vicn`, `ribbons.vrib`, `moves4.vmov`, `moves5.vmov`, `items4.vitm`, `items5.vitm`,
+`sprites4.vspr`, `sprites5.vspr`) or scans the SD card (depth 3) for the best `.nds`
 (Gen 5 > Korean Gen 4 > Gen 4) plus the best of each generation, and builds them (2-4 s, reading
 each file whole). `make emu-font` checks it with stand-in ROMs holding only what verity reads
 (`tools/emu-harness/standin_rom.py`, written under `build/`). Decisions (user): no Nintendo assets
@@ -84,8 +92,7 @@ with voicing-mark keys, Korean jamo composing into syllables (`verity-ffi/src/ke
 
 Box icons from the ROM: `docs/research/rom-icons.md`.
 
-Rest of M8: battle sprites (summary screen) are not planned yet; decide whether they're worth it
-before P12 (the DS has no screen that shows one today).
+Rest of M8: front sprites are done (see Resume here); back sprites and animations aren't used.
 
 After that: **P12 web version** (in PLAN, user decisions 2026-11-10). WASM holds code only; data
 blobs are fetched per game; text uses browser fonts; sprites are hotlinked at runtime from the
@@ -109,6 +116,11 @@ Done this session (2026-11-10), all committed and pushed:
 
 Open items:
 
+- Sprite gaps: the editor's sprite shows the Pokémon as saved (form or shiny edits appear after
+  Apply); Spinda's spots aren't drawn; Diamond/Pearl sprites are untested and their forms aren't
+  read; without a ROM the box view has no sprite and the text starts at the panel's edge.
+- ♂ and ♀ are drawn as 7x7 shapes (`ui::shape`), since the ROM fonts' signs need a second shade
+  (same cause as "é" below).
 - Gen 5 ROM font: "é" (Poké Ball) draws as a blob. The small Gen 5 font's shadow pixels are part
   of the letter shape, and the DS text renderer is 1 bit, so é's shaded counter fills in. A fix
   needs a second text shade for shadow pixels (`VerityGlyph` carries one mask). Found 2026-11-10,
