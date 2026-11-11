@@ -551,11 +551,12 @@ A browser build of the core, after the DS loads its font and graphics from the u
   Parity checklist (DS screens and `verity-ffi` entry points):
   - Open and probe a save, checksums, trainer overview, box and party browsing (done).
   - Summary and legality report per Pokémon, issue text, whole-save check before saving
-    (`verity_legality`, `verity_issue_text`, `verity_save_check`).
+    (`verity_legality`, `verity_issue_text`, `verity_save_check`) (done).
   - Editor with preview and apply: species, form, level, nickname, OT, IVs/EVs (closest legal IVs),
     nature, ability, moves with descriptions and type/category, held item, ball, met data,
     markings, ribbons with the ribbon check (`verity_edit_*`, `verity_closest_ivs`,
-    `verity_move_*`, `verity_items_*`, `verity_ribbons_check`, `verity_location_name`).
+    `verity_move_*`, `verity_items_*`, `verity_ribbons_check`, `verity_location_name`) (done
+    except move descriptions and power/accuracy/category, which the DS reads from the ROM).
   - Add Pokémon: wild generation (Gen 4 and Gen 5 wizards), eggs, Pal Park and Poké Transfer
     origins (`verity_gen_insert`, `verity_wild_*`, `verity_egg_*`).
   - Mystery Gift list and delivery, Gen 4 and Gen 5 (`verity_events_list`, `verity_event_inject`).
@@ -564,7 +565,7 @@ A browser build of the core, after the DS loads its font and graphics from the u
   - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
     overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle).
   - Save: finalize, verify read-back, write via the File System Access API in Chromium, download
-    elsewhere.
+    elsewhere (done).
 - **Event data (user, 2026-11-10):** ship the Mystery Gift blobs (`gifts4/5.bin`,
   `events4/5.bin`) as they are, full cards included, fetched only when the gift or legality
   screens need them. The user judged the legal risk acceptable (most likely outcome is a DMCA
