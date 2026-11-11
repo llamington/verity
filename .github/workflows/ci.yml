@@ -73,38 +73,6 @@ jobs:
         run: ls -l target/armv5te-none-eabi/release/libverity_ffi.a
 
   web:
-              - *shared
-              - 'web/**'
-              - 'crates/verity/**'
-              - 'crates/verity-wasm/**'
-
-  test:
-    name: Native test & lint
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install pinned toolchain
-        run: rustup show active-toolchain || rustup toolchain install
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-
-  arm9:
-    name: DS core build (armv5te)
-    needs: changes
-    if: needs.changes.outputs.ds == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install pinned toolchain
-        run: rustup show active-toolchain || rustup toolchain install
-      - run: cargo build-ds
-      - name: Size
-        run: ls -l target/armv5te-none-eabi/release/libverity_ffi.a
-
-  web:
     name: Web (types, lint, components)
     needs: changes
     if: needs.changes.outputs.web == 'true'
