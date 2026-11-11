@@ -67,9 +67,17 @@
 			addCount = 1;
 		}}
 	>
-		<Tabs.List class="h-auto w-full flex-wrap">
+		<!-- Wrapping chips: on a phone the pouches take two or three rows. -->
+		<Tabs.List
+			class="h-auto w-full flex-wrap justify-start gap-1.5 bg-transparent p-0 group-data-horizontal/tabs:h-auto"
+		>
 			{#each pouches as p, i (p.name)}
-				<Tabs.Trigger value={String(i)}>{p.name} ({p.items.length})</Tabs.Trigger>
+				<Tabs.Trigger
+					value={String(i)}
+					class="h-8 flex-none rounded-full border-2 border-border bg-card px-3 font-semibold data-active:border-primary data-active:bg-primary data-active:text-primary-foreground dark:data-active:border-primary dark:data-active:bg-primary dark:data-active:text-primary-foreground"
+					>{p.name}
+					<span class="text-xs opacity-70">({p.items.length})</span></Tabs.Trigger
+				>
 			{/each}
 		</Tabs.List>
 	</Tabs.Root>
