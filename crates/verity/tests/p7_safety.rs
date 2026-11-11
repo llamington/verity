@@ -492,10 +492,14 @@ fn emptied_white2(keep_one: bool) -> Option<Vec<u8>> {
 
 #[test]
 fn p7_empty_party_is_only_safe_before_the_first_pokemon() {
-    let r = rules(SaveKind::B2W2);
+    // Needs the data blobs and the corpus, which CI doesn't have.
+    if !ready() {
+        return;
+    }
     let Some(mut fresh) = emptied_white2(false) else {
         return;
     };
+    let r = rules(SaveKind::B2W2);
     assert_eq!(check_save(&r, &Save::open(&mut fresh).unwrap()), Ok(()));
     let mut in_progress = emptied_white2(true).unwrap();
     assert_eq!(
