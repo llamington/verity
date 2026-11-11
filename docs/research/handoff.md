@@ -1,4 +1,4 @@
-# Handoff (2026-11-10)
+# Handoff (2026-11-11)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
@@ -29,25 +29,31 @@ mise activated.
   into `static/data` (both gitignored); `predev`/`prebuild` run it. Imports use `#lib/...` with full
   paths (`#lib/verity.js`, `#lib/components/ui/button/index.js`), not `$lib`. Links use
   `resolve()` from `$app/paths` (lint rule).
-- Shows the trainer card, party and boxes (names, levels, nickname flag, shiny, egg, checksums).
-  `npx playwright test` opens Platinum, HeartGold, Black and White 2 saves from the gitignored
-  corpus (skips without it) and checks a non-save is refused. `npm run check` and `npm run lint`
-  are clean.
-- npm 11 blocks install scripts; esbuild's was denied and esbuild works without it. `npm audit`
-  lists 14 low/moderate issues, all in dev tooling.
-- Next: Pokémon detail and legality verdicts (needs the full Gen 4/5 contexts, see
-  `verity-ffi/src/ui.rs` `context()`), editing and saving (File System Access API in Chromium,
-  download elsewhere), sprites (P12 hotlink plan), the per-game landing pages for SEO, and deploy.
-  Cloudflare Pages' builders have no Rust, so deploy from a GitHub Action (needs a Cloudflare API
-  token from the user; deploying is the one step that needs the user).
-- Suggested order: summary + legality report (needs the Gen 4/5 contexts in `verity-wasm`,
-  attaching every blob `verity-ffi/src/ui.rs` `context()`/`context5()` uses; fetch them lazily),
-  then editing with preview/apply, saving (finalize, verify, File System Access API or download),
-  add Pokémon (wild, eggs), Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing
-  pages, deploy. For each DS screen, mirror its `ui-*.json` harness script as a Playwright test,
-  and add Storybook stories for new components. Reuse the logic behind the `verity-ffi` C
-  functions rather than reimplementing it; move shared code into `verity` if both need it.
-- `copy-data.js` copies only the game and string blobs today; extend it as screens need more.
+- **Done (2026-11-10/11):** trainer card, party and boxes; per-Pokémon summary drawer with the
+  legality verdict, origin and per-move checks; the editor (DS tabs Main/Stats/Moves/Met/Misc,
+  live game-safe + legality preview, legal/game-safe mode, closest legal IVs on Gen 4, nickname
+  rules); saving (`finalize()` = checksums + whole-save check, File System Access write-back with
+  read-back in Chromium, download elsewhere, "Download original" backup, unsaved-changes dialog
+  and `beforeunload`). Playwright: `editor.e2e.ts`, `edit.e2e.ts` (mirrors `ui-edit.json`,
+  `ui-closest-ivs.json`), `save.e2e.ts` (mirrors `ui-leave.json`; the FSA handle is mocked).
+- **Shared code moved into `verity`** so both front ends call it: `legality::verdict` (contexts
+  from blobs, check dispatch, "not checked" reasons), `edit` (field edits, ribbon list),
+  `gen::status::GenStatus` (generator outcome texts), `safety::PkmIssue::text`.
+- **Fixed on both front ends:** changing moves on a Pokémon with PP Ups failed the game-safe
+  check (PP were filled for the old PP Ups, then the PP Ups cleared).
+- WASM API (`crates/verity-wasm`): global `attach(name, bytes)` / `attached(name)`; `Session`:
+  `overview`, `boxView`, `summary`, `legality`, `legalityBlobs`, `choices`, `preview`, `apply`,
+  `closestIvs`, `saveCheck`, `finalize`, `markSaved`, `dirty`, `bytes`. `web/src/lib/verity.ts`
+  fetches blobs once per page (`loadLegalityData`).
+- `npm run core:wasm` builds into `node_modules/.cache/verity-wasm` and copies only changed files
+  (wasm-pack empties its output folder, which made a running `vite dev` 500 after tests).
+- Gaps vs the DS editor: move descriptions and power/accuracy/category come from the ROM on the
+  DS; the web has no source for them yet (PKHeX has no descriptions). Species/form/OT/nature/
+  ability/markings aren't editable on the DS either, so they're not in the web editor.
+- Pre-existing: `cargo build -p verity --no-default-features` fails (gen::egg4 needs alloc); the
+  DS build (`cargo build-ds`) is fine.
+- Next: add Pokémon (wild wizards Gen 4/5, eggs, Pal Park/Transfer origins), Mystery Gifts, bag,
+  Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
 
