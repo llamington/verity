@@ -8,7 +8,7 @@ and gaps are in `docs/research/p5-plan.md`.
 **Next tasks (user, 2026-11-10), in order:**
 
 1. PLAN P12 (the web version), in progress: **make the web app feature complete with the DS
-   app** (user, 2026-11-10). The parity checklist is in PLAN P12. Work through it without
+   app** (user, 2026-11-10). Bag done; next Memory Link and keys. The parity checklist is in PLAN P12. Work through it without
    stopping between items; stop only for real blockers. The stats hexagon is dropped.
 2. Event data: ship the gift/event blobs unchanged, full cards included (user, 2026-11-10, after
    weighing the legal risk as low). Don't strip card text.
@@ -88,7 +88,21 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   the deploy job. Open choice for the user then: squash merges (lint the PR title) or merge
   commits (lint every commit, as now). Requiring PRs needs GitHub Pro or a public repo (rulesets
   are refused on this private Free-plan repo). Until then, keep pushing to main.
-- Next: bag (Gen 4/5 items), Memory Link/keys, misc tabs, sprites, landing pages, deploy.
+- **Bag done (2026-11-11), DS and web** (the DS had none; the user chose both). `verity::bag`
+  (shared): pouch lists are a new game-blob table (`pouch_items`, PKHeX `IItemStorage.GetItems`
+  minus its internal `Unreleased` lists, copied into the oracle), so **rerun
+  `scripts/build-data.sh`** on a checkout with old blobs. Edits keep pouches packed and the TM and
+  Berry pouches in game order, and pick items by position (the Black corpus save holds one item
+  twice). **Event key items are read-only** (user, 2026-11-11): Member Card, Oak's Letter, Azure
+  Flute, Secret Key, Enigma Stone, Liberty Pass. The game unlocks their events when the
+  deliveryman hands them over (the Liberty Pass also has `Misc5.IsLibertyTicketActivated`), so
+  they come from Mystery Gift. No Liberty Pass toggle and no legality check for an event item
+  without its card (PKHeX has none). Web: `/app/bag` (`BagEditor`, `bag.e2e.ts`). DS: "Bag" under
+  Boxes and party (`verity_bag_*`, `ui-bag.json` in `make emu-ui`). Menu rows below it moved
+  down one; the UI scripts were updated.
+- Known, not new: in `make emu-ui`, `ui-add-w2.json` can't place its Pokémon because box 24 of
+  `gen5_white2.sav` is full (P11 clears box 24 slot 20 first), so it ends in the editor unsaved.
+- Next: Memory Link/keys on the web, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
 
