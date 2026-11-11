@@ -80,6 +80,7 @@ emu-font: emu-harness nds
 emu-ui: emu-harness nds
 	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
 	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-start.json --out build/emu/ui-start
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json --out build/emu/ui-boxes
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-touch.json --out build/emu/ui-touch
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons
