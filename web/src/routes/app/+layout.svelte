@@ -2,12 +2,13 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Card from '#lib/components/ui/card/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { backupName, canWriteInPlace, download, pickSave } from '#lib/files.js';
 	import { doc } from '#lib/editor.svelte.js';
 	import { errorText } from '#lib/utils.js';
+	import BallMark from '#lib/components/BallMark.svelte';
+	import { badgeSlots, gameGradient } from '#lib/theme.js';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -58,12 +59,14 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<main class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6">
-	<header class="flex flex-wrap items-center justify-between gap-3">
-		<h1 class="text-xl font-semibold"><a href={resolve('/')}>verity</a></h1>
+<header class="bg-primary text-primary-foreground shadow-[inset_0_-4px_0_var(--ball-band)]">
+	<div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+		<h1 class="font-pixel text-2xl font-bold tracking-wide">
+			<a href={resolve('/')} class="flex items-center gap-2"><BallMark size={28} />verity</a>
+		</h1>
 		<div class="flex items-center gap-2">
 			{#if inPlace}
-				<Button size="sm" onclick={onPick}>Open a save…</Button>
+				<Button size="sm" variant="secondary" onclick={onPick}>Open a save…</Button>
 				<!-- Kept for drag-and-drop style uploads and tests; saves opened here download. -->
 				<input
 					type="file"
@@ -84,47 +87,85 @@
 						data-testid="file"
 					/>
 					<span
-						class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+						class="inline-flex h-8 items-center rounded-md bg-secondary px-3 text-sm font-semibold text-secondary-foreground"
 						>Open a save…</span
 					>
 				</label>
 			{/if}
 		</div>
-	</header>
+	</div>
+</header>
 
+<main class="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6">
 	{#if doc.error}
 		<p class="text-destructive" role="alert">{doc.error}</p>
 	{/if}
 
 	{#if doc.overview}
 		{@const ov = doc.overview}
-		<Card.Root>
-			<Card.Header>
-				<Card.Title>{ov.trainer.name}</Card.Title>
-				<Card.Description>
-					{GAMES[ov.game] ?? ov.game} · {doc.fileName}
-				</Card.Description>
-			</Card.Header>
-			<Card.Content class="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-				<span>ID {String(ov.trainer.tid).padStart(5, '0')}</span>
-				<span>Money ${ov.trainer.money.toLocaleString()}</span>
-				<span>Badges {ov.trainer.badges}</span>
-				<span>Played {ov.trainer.played}</span>
-				{#if doc.dirty}
-					<Badge variant="outline">Checksums updated on save</Badge>
-				{:else if doc.fileChecksumsOk}
-					<Badge variant="secondary">Checksums OK</Badge>
-				{:else}
-					<Badge variant="destructive">Checksums bad</Badge>
-				{/if}
-			</Card.Content>
-		</Card.Root>
+		{@const slots = badgeSlots(ov.game)}
+		<section
+			aria-label="Trainer card"
+			class="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg ring-1 ring-black/10"
+			style:background-image={gameGradient(ov.game)}
+		>
+			<BallMark
+				size={180}
+				outline
+				class="pointer-events-none absolute -top-10 -right-10 text-white opacity-20"
+			/>
+			<div class="relative flex flex-col gap-4">
+				<div class="flex flex-wrap items-end justify-between gap-2">
+					<div>
+						<p class="font-pixel text-xs tracking-widest uppercase opacity-80">Trainer card</p>
+						<h2 class="font-pixel text-3xl font-bold drop-shadow-sm">{ov.trainer.name}</h2>
+						<p class="text-sm opacity-85">{GAMES[ov.game] ?? ov.game} · {doc.fileName}</p>
+					</div>
+					{#if doc.dirty}
+						<Badge class="bg-white/20 text-white">Checksums updated on save</Badge>
+					{:else if doc.fileChecksumsOk}
+						<Badge class="bg-white/20 text-white">Checksums OK</Badge>
+					{:else}
+						<Badge variant="destructive">Checksums bad</Badge>
+					{/if}
+				</div>
+				<dl
+					class="grid grid-cols-2 gap-2 rounded-xl bg-black/20 p-3 text-sm backdrop-blur-sm sm:grid-cols-4"
+				>
+					{#each [['ID No.', String(ov.trainer.tid).padStart(5, '0')], ['Money', `$${ov.trainer.money.toLocaleString()}`], ['Badges', String(ov.trainer.badges)], ['Time', ov.trainer.played]] as [k, v] (k)}
+						<div class="flex flex-col">
+							<dt class="text-xs tracking-wide uppercase opacity-75">{k}</dt>
+							<dd class="text-lg font-extrabold tabular-nums">{v}</dd>
+						</div>
+					{/each}
+				</dl>
+				<ul class="flex flex-wrap gap-1.5" aria-label="{ov.trainer.badges} badges">
+					{#each { length: slots }, i (i)}
+						<li
+							class="size-4 rotate-45 rounded-[3px] border-2 {i < ov.trainer.badges
+								? 'border-white bg-gradient-to-br from-amber-200 to-amber-500 shadow-[0_0_6px_rgb(253_230_138/0.8)]'
+								: 'border-white/40 bg-black/20'}"
+						></li>
+					{/each}
+				</ul>
+			</div>
+		</section>
 
 		<div
-			class="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"
+			class="flex flex-wrap items-center gap-2 rounded-xl border-2 border-dashed bg-card p-3 text-sm {doc.dirty
+				? 'border-primary/60'
+				: ''}"
 			data-testid="save-bar"
 		>
-			<span class="mr-auto" role="status">
+			<span class="mr-auto flex items-center gap-2" role="status">
+				<span
+					aria-hidden="true"
+					class="size-2.5 rounded-full {doc.saveError
+						? 'bg-destructive'
+						: doc.dirty
+							? 'animate-pulse bg-primary'
+							: 'bg-legal'}"
+				></span>
 				{#if doc.saveError}
 					<span class="text-destructive">{doc.saveError}</span>
 				{:else if doc.dirty}
@@ -149,24 +190,33 @@
 			</Button>
 		</div>
 
-		<nav aria-label="Sections" class="flex gap-1 border-b">
+		<nav
+			aria-label="Sections"
+			class="flex flex-wrap gap-1.5 self-start rounded-full bg-muted p-1.5"
+		>
 			{#each sections as s (s.href)}
 				{@const current = page.url.pathname === s.href}
 				<a
 					href={s.href}
 					aria-current={current ? 'page' : undefined}
-					class="-mb-px border-b-2 px-3 py-2 text-sm {current
-						? 'border-primary font-medium'
-						: 'border-transparent text-muted-foreground hover:text-foreground'}">{s.label}</a
+					class="rounded-full px-4 py-1.5 text-sm font-semibold transition-colors {current
+						? 'bg-primary text-primary-foreground shadow-sm'
+						: 'text-muted-foreground hover:bg-card hover:text-foreground'}">{s.label}</a
 				>
 			{/each}
 		</nav>
 
 		{@render children()}
 	{:else if !doc.error}
-		<p class="text-muted-foreground">
-			Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
-		</p>
+		<section
+			class="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed bg-card px-6 py-16 text-center"
+		>
+			<BallMark size={72} class="animate-[wobble_2.4s_ease-in-out_infinite]" />
+			<h2 class="font-pixel text-2xl font-bold">No save loaded</h2>
+			<p class="max-w-md text-muted-foreground">
+				Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
+			</p>
+		</section>
 	{/if}
 </main>
 

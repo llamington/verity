@@ -1,4 +1,6 @@
 <script lang="ts">
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import CircleX from '@lucide/svelte/icons/circle-x';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import type { Legality } from '#lib/verity.js';
 
@@ -9,15 +11,15 @@
 
 <section class="flex flex-col gap-2" data-testid="legality" aria-live="polite">
 	<div class="flex flex-wrap items-center gap-2">
-		<h3 class="font-medium">Legality</h3>
+		<h3 class="font-pixel text-base font-bold">Legality</h3>
 		{#if error}
 			<Badge variant="outline">Not checked</Badge>
 		{:else if !legality}
 			<Badge variant="outline">Checking…</Badge>
 		{:else if legality.status === 'legal'}
-			<Badge class="bg-emerald-600 text-white dark:bg-emerald-500">Legal</Badge>
+			<Badge class="bg-legal text-white"><CircleCheck aria-hidden="true" />Legal</Badge>
 		{:else if legality.status === 'illegal'}
-			<Badge variant="destructive">Illegal</Badge>
+			<Badge variant="destructive"><CircleX aria-hidden="true" />Illegal</Badge>
 		{:else}
 			<Badge variant="outline">Not checked</Badge>
 		{/if}

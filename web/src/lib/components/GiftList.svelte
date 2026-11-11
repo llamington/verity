@@ -3,14 +3,20 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
+	import GiftIcon from '@lucide/svelte/icons/gift';
+	import Sprite from '#lib/components/Sprite.svelte';
+	import ItemIcon from '#lib/components/ItemIcon.svelte';
 	import type { Gift } from '#lib/verity.js';
 
 	let {
 		gifts,
+		game,
 		deliver
 	}: {
 		/** The gifts offered to this save's game and language. */
 		gifts: Gift[];
+		/** The save's game id; with it, Pokémon gifts show their sprite. */
+		game?: string | undefined;
 		/** Returns why it was refused, or nothing when delivered. */
 		deliver: (gift: Gift, date: string) => string | undefined;
 	} = $props();
@@ -73,12 +79,34 @@
 		{gifts.length} gifts for this game and language, {readyCount} ready. Showing {shown.length}.
 	</p>
 
-	<ul class="flex flex-col divide-y rounded-lg border" aria-label="Gifts">
+	<ul class="flex flex-col gap-2" aria-label="Gifts">
 		{#each shown as g (key(g))}
 			{@const result = results[key(g)]}
-			<li class="flex flex-wrap items-center gap-x-4 gap-y-1 p-3" data-testid="gift">
+			<li
+				class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border-2 border-l-8 bg-card p-3 shadow-sm {g.ready
+					? 'border-l-shiny'
+					: 'border-l-muted-foreground/30 opacity-80'}"
+				data-testid="gift"
+			>
+				<span
+					class="flex size-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-secondary"
+					aria-hidden="true"
+				>
+					{#if g.species && game}
+						<Sprite
+							{game}
+							mon={{ species: g.species, form: 0, female: false, shiny: false, egg: false }}
+							name=""
+							size={44}
+						/>
+					{:else if g.item}
+						<ItemIcon name={g.gives} size={28} />
+					{:else}
+						<GiftIcon size={22} class="text-primary" />
+					{/if}
+				</span>
 				<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span class="font-medium">{g.title}</span>
+					<span class="font-bold" data-testid="gift-title">{g.title}</span>
 					<span class="text-muted-foreground">
 						{g.gives}{g.gives !== g.kind ? ` · ${g.kind}` : ''}
 						{#if g.ot}· OT {g.ot} · ID {id(g)}{/if}
@@ -87,9 +115,7 @@
 					</span>
 				</div>
 				{#if result}
-					<span class={result.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}
-						>{result.text}</span
-					>
+					<span class={result.ok ? 'font-bold text-legal' : 'text-destructive'}>{result.text}</span>
 				{:else if !g.ready}
 					<Badge variant="outline">{g.status}</Badge>
 				{/if}
@@ -104,7 +130,7 @@
 				>
 			</li>
 		{:else}
-			<li class="p-3 text-muted-foreground">No gifts match.</li>
+			<li class="rounded-xl border-2 border-dashed p-3 text-muted-foreground">No gifts match.</li>
 		{/each}
 	</ul>
 	<p class="text-xs text-muted-foreground">

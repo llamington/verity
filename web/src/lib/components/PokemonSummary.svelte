@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
+	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Sprite from '#lib/components/Sprite.svelte';
+	import TypeBadge from '#lib/components/TypeBadge.svelte';
+	import ItemIcon from '#lib/components/ItemIcon.svelte';
+	import { typeSwatch } from '#lib/theme.js';
 	import type { Summary, Named, Legality } from '#lib/verity.js';
 
 	let {
@@ -26,25 +30,47 @@
 	const species = $derived(mon.speciesName ?? `#${mon.species}`);
 	const gender = $derived(['♂', '♀', ''][summary.gender] ?? '');
 	const hex = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0');
+	const tint = $derived(summary.types[0] ? typeSwatch(summary.types[0].id).bg : 'var(--muted)');
+	const tint2 = $derived(summary.types[1] ? typeSwatch(summary.types[1].id).bg : tint);
+	/** A stat bar's fill, 0 to 1. */
+	const fill = (v: number, max: number) => Math.min(1, v / max);
+	/** HP-bar colours: green, then yellow below half, red below a fifth. */
+	const hpColour = (f: number) =>
+		f >= 0.5 ? 'oklch(0.72 0.19 145)' : f >= 0.2 ? 'oklch(0.82 0.17 90)' : 'oklch(0.63 0.22 27)';
 </script>
 
 <div class="flex flex-col gap-4 text-sm" data-testid="summary">
-	<div class="flex items-center gap-3">
+	<div
+		class="relative flex items-center gap-3 overflow-hidden rounded-2xl p-3"
+		style:background-image="linear-gradient(135deg, color-mix(in oklch, {tint} 35%, transparent), color-mix(in
+		oklch, {tint2} 20%, transparent))"
+	>
 		{#if game && !mon.egg}
-			<Sprite {game} {mon} name={species} size={80} />
+			<div
+				class="flex size-24 shrink-0 items-center justify-center rounded-full bg-card/70 shadow-inner ring-4 ring-white/50 dark:ring-white/10"
+			>
+				<Sprite {game} {mon} name={species} size={80} />
+			</div>
 		{/if}
 		<div class="flex min-w-0 flex-col gap-1">
 			<div class="flex flex-wrap items-baseline gap-2">
-				<span class="text-lg font-semibold">{mon.egg ? 'Egg' : mon.nickname}</span>
-				{#if gender}<span aria-label={summary.gender ? 'female' : 'male'}>{gender}</span>{/if}
+				<span class="font-pixel text-2xl font-bold">{mon.egg ? 'Egg' : mon.nickname}</span>
+				{#if gender}<span
+						class="text-lg font-bold {summary.gender ? 'text-female' : 'text-male'}"
+						aria-label={summary.gender ? 'female' : 'male'}>{gender}</span
+					>{/if}
 				{#if mon.level != null && !mon.egg}
-					<span class="text-muted-foreground">Lv. {mon.level}</span>
+					<span class="font-bold text-muted-foreground">Lv. {mon.level}</span>
 				{/if}
 			</div>
 			<div class="flex flex-wrap items-center gap-1">
-				<span class="text-muted-foreground">{species}{mon.form ? ` (form ${mon.form})` : ''}</span>
-				{#each summary.types as t (t.id)}<Badge variant="outline">{name(t)}</Badge>{/each}
-				{#if mon.shiny}<Badge variant="secondary">Shiny</Badge>{/if}
+				<span class="mr-1 text-muted-foreground"
+					>{species}{mon.form ? ` (form ${mon.form})` : ''}</span
+				>
+				{#each summary.types as t (t.id)}<TypeBadge type={t} />{/each}
+				{#if mon.shiny}<Badge class="bg-shiny text-black"
+						><Sparkles aria-hidden="true" />Shiny</Badge
+					>{/if}
 				{#if !mon.checksumOk}<Badge variant="destructive">Bad checksum</Badge>{/if}
 			</div>
 		</div>
@@ -56,9 +82,15 @@
 		<dt class="text-muted-foreground">Ability</dt>
 		<dd>{name(summary.ability)}{summary.hiddenAbility ? ' (hidden)' : ''}</dd>
 		<dt class="text-muted-foreground">Held item</dt>
-		<dd>{summary.heldItem.id ? name(summary.heldItem) : 'None'}</dd>
+		<dd class="flex items-center gap-1">
+			{#if summary.heldItem.id}<ItemIcon name={summary.heldItem.name} size={20} />{name(
+					summary.heldItem
+				)}{:else}None{/if}
+		</dd>
 		<dt class="text-muted-foreground">Ball</dt>
-		<dd>{name(summary.ball)}</dd>
+		<dd class="flex items-center gap-1">
+			<ItemIcon name={summary.ball.name} size={20} />{name(summary.ball)}
+		</dd>
 		<dt class="text-muted-foreground">Friendship</dt>
 		<dd>{summary.friendship}</dd>
 		<dt class="text-muted-foreground">PID</dt>
@@ -68,15 +100,18 @@
 	<Separator />
 
 	<div>
-		<h3 class="mb-1 font-medium">Moves</h3>
-		<ol class="flex flex-col gap-1" data-testid="moves">
+		<h3 class="mb-2 font-pixel text-base font-bold">Moves</h3>
+		<ol class="grid gap-1.5" data-testid="moves">
 			{#each summary.moves as m, i (i)}
 				{@const check = legality?.moves[i]}
-				<li class="flex flex-wrap items-center gap-2">
+				<li
+					class="flex flex-wrap items-center gap-2 rounded-lg border-l-4 bg-muted/60 px-2 py-1.5"
+					style:border-left-color={m.moveType ? typeSwatch(m.moveType.id).bg : 'var(--border)'}
+				>
 					{#if m.id}
-						<span class="font-medium">{m.name ?? `#${m.id}`}</span>
-						{#if m.moveType}<Badge variant="outline">{name(m.moveType)}</Badge>{/if}
-						<span class="text-muted-foreground">PP {m.pp}</span>
+						{#if m.moveType}<TypeBadge type={m.moveType} />{/if}
+						<span class="font-bold">{m.name ?? `#${m.id}`}</span>
+						<span class="ml-auto text-xs font-bold text-muted-foreground">PP {m.pp}</span>
 					{:else}
 						<span class="text-muted-foreground">—</span>
 					{/if}
@@ -92,30 +127,36 @@
 
 	<Separator />
 
-	<table class="w-full text-right tabular-nums" data-testid="stats">
-		<thead class="text-muted-foreground">
-			<tr>
-				<th class="text-left font-normal"></th>
-				{#each LABELS as l (l)}<th class="font-normal">{l}</th>{/each}
-			</tr>
-		</thead>
-		<tbody>
-			{#if summary.stats}
-				<tr>
-					<th class="text-left font-normal text-muted-foreground">Stat</th>
-					{#each ORDER as i (i)}<td>{summary.stats[i]}</td>{/each}
-				</tr>
-			{/if}
-			<tr>
-				<th class="text-left font-normal text-muted-foreground">IV</th>
-				{#each ORDER as i (i)}<td>{summary.ivs[i]}</td>{/each}
-			</tr>
-			<tr>
-				<th class="text-left font-normal text-muted-foreground">EV</th>
-				{#each ORDER as i (i)}<td>{summary.evs[i]}</td>{/each}
-			</tr>
-		</tbody>
-	</table>
+	<div data-testid="stats">
+		<div
+			class="grid grid-cols-[2.5rem_2.5rem_1fr_2rem_2.5rem] items-center gap-x-2 gap-y-1 text-right tabular-nums"
+		>
+			<span></span>
+			<span class="text-xs text-muted-foreground">{summary.stats ? 'Stat' : ''}</span>
+			<span></span>
+			<span class="text-xs text-muted-foreground">IV</span>
+			<span class="text-xs text-muted-foreground">EV</span>
+			{#each ORDER as i, n (i)}
+				<span class="text-left text-xs font-bold text-muted-foreground">{LABELS[n]}</span>
+				<span class="font-bold">{summary.stats?.[i] ?? ''}</span>
+				{@const f = summary.stats
+					? fill(summary.stats[i] ?? 0, 400)
+					: fill(summary.ivs[i] ?? 0, 31)}
+				<span
+					class="h-2.5 overflow-hidden rounded-full border border-foreground/15 bg-muted"
+					aria-hidden="true"
+				>
+					<span
+						class="block h-full rounded-full"
+						style:width="{f * 100}%"
+						style:background-color={hpColour(f)}
+					></span>
+				</span>
+				<span class={summary.ivs[i] === 31 ? 'font-bold text-legal' : ''}>{summary.ivs[i]}</span>
+				<span class="text-muted-foreground">{summary.evs[i]}</span>
+			{/each}
+		</div>
+	</div>
 
 	<Separator />
 

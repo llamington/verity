@@ -22,7 +22,7 @@ for (const file of ['gen4_platinum.sav', 'gen5_white2.sav']) {
 		await expect(list).toBeVisible({ timeout: 15_000 });
 		await list.getByLabel('Ready only').check();
 		const first = list.getByTestId('gift').first();
-		const title = (await first.locator('span.font-medium').textContent()) ?? '';
+		const title = (await first.getByTestId('gift-title').textContent()) ?? '';
 		await first.getByRole('button').click();
 		await expect(first).toContainText('Delivered');
 		await expect(page.getByTestId('save-bar')).toContainText('Unsaved changes.');

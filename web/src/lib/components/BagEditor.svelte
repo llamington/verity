@@ -6,6 +6,7 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/native-select/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import ItemIcon from '#lib/components/ItemIcon.svelte';
 	import type { Named, Pouch } from '#lib/verity.js';
 
 	let {
@@ -74,11 +75,16 @@
 	</Tabs.Root>
 
 	{#if pouch}
-		<ul class="flex flex-col divide-y rounded-lg border" aria-label={pouch.name}>
+		<ul
+			class="flex flex-col divide-y overflow-hidden rounded-xl border-2 bg-card shadow-sm [&>li:nth-child(even)]:bg-muted/50"
+			aria-label={pouch.name}
+		>
 			{#each pouch.items as it, i (`${String(i)}:${String(it.item.id)}`)}
 				{@const label = name(it.item)}
 				<li class="flex flex-wrap items-center gap-x-4 gap-y-1 p-2 pl-3" data-testid="bag-item">
-					<span class="min-w-0 flex-1 font-medium">{label}</span>
+					<span class="flex min-w-0 flex-1 items-center gap-2 font-semibold"
+						><ItemIcon name={it.item.name} />{label}</span
+					>
 					{#if it.locked}
 						<Badge variant="outline">Event item</Badge>
 						<span class="text-muted-foreground">×{it.count}</span>
