@@ -58,6 +58,10 @@ mise activated.
   `ui-add-hgss.json`, `ui-add-w2.json` and `ui-egg.json`, saves and re-opens; the party test uses
   `sd/saves/Pokemon Platinum.sav` (3 in the party). Pal Park and Poké Transfer Pokémon are judged
   (summary) but not created, as on the DS.
+- **Testing rule (user, 2026-11-11):** test logic at the lowest layer it lives in (Rust core,
+  the WASM binding's Rust, Svelte components via Vitest/Storybook); Playwright only for
+  end-to-end journeys. The current 21 Playwright tests mostly check Rust logic and are due to be
+  moved down (proposed, not started).
 - Next: Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
