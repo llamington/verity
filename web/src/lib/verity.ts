@@ -72,5 +72,6 @@ export type {
 	WildSlot,
 	Gift,
 	Pouch,
-	BagItem
+	BagItem,
+	UnovaPlan
 } from '#lib/wasm/verity_wasm.js';

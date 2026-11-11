@@ -563,7 +563,8 @@ A browser build of the core, after the DS loads its font and graphics from the u
     (done).
   - Bag/items (Gen 4 and Gen 5) (done 2026-11-11, on both front ends: the DS had no bag screen,
     and the user chose to build one there too). The misc tabs are the editor's Misc tab (done).
-  - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`).
+  - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`) (done
+    2026-11-11).
   - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
     overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle).
   - Save: finalize, verify read-back, write via the File System Access API in Chromium, download

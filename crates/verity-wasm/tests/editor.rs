@@ -527,3 +527,51 @@ fn bag_refuses_event_items() {
     let why = ed.bag_add(key, 574, 1).unwrap().unwrap();
     assert!(why.contains("Mystery Gift"), "{why}");
 }
+
+#[test]
+fn unova_link_plans_links_and_enables() {
+    let Some(mut ed) = open("gen5_white2.sav", "b2w2") else {
+        return;
+    };
+    let Ok(black) = fs::read(root().join("corpus/real/pkhex-avalonia/gen5_black.sav")) else {
+        return;
+    };
+    assert!(ed.has_unova_link());
+    let p = ed.unova_plan(&black).unwrap();
+    assert_eq!(p.mode, "memoryLink");
+    assert!(p.ready, "{}", p.status);
+    assert!(p.trainer.is_some_and(|t| !t.is_empty()));
+    assert!(!ed.dirty(), "a plan changes nothing");
+    assert_eq!(ed.unova_link(&black, 42), Ok(None));
+    assert!(ed.dirty());
+
+    let junk = ed.unova_plan(&[0; 64]).unwrap();
+    assert_eq!((junk.mode.as_str(), junk.ready), ("unusable", false));
+    assert_eq!(junk.trainer, None);
+    assert_eq!(
+        ed.unova_link(&[0; 64], 1).unwrap().as_deref(),
+        Some("Needs a valid B/W or B2/W2 save")
+    );
+
+    let e = ed.unova_enable_plan().unwrap();
+    assert_eq!(e.mode, "enableAll");
+    if e.ready {
+        assert!(!e.keys.is_empty());
+        assert_eq!(ed.unova_enable_all(), Ok(None));
+    }
+    let done = ed.unova_enable_plan().unwrap();
+    assert_eq!(
+        (done.ready, done.status.as_str()),
+        (false, "No new keys to enable")
+    );
+}
+
+#[test]
+fn unova_link_is_for_black2_white2_only() {
+    let Some(mut ed) = open("gen5_black.sav", "bw") else {
+        return;
+    };
+    assert!(!ed.has_unova_link());
+    assert!(ed.unova_enable_plan().is_err());
+    assert!(ed.unova_link(&[0; 64], 1).is_err());
+}

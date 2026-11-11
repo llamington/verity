@@ -24,6 +24,9 @@
 		{ href: resolve('/app/bag'), label: 'Bag' },
 		{ href: resolve('/app/gifts'), label: 'Mystery Gifts' }
 	];
+	const LINK = { href: resolve('/app/link'), label: 'Memory Link' };
+	// Memory Link and keys exist in Black 2 and White 2 only.
+	const sections = $derived(doc.session?.hasUnovaLink() ? [...SECTIONS, LINK] : SECTIONS);
 	const inPlace = canWriteInPlace();
 
 	async function onPick() {
@@ -147,7 +150,7 @@
 		</div>
 
 		<nav aria-label="Sections" class="flex gap-1 border-b">
-			{#each SECTIONS as s (s.href)}
+			{#each sections as s (s.href)}
 				{@const current = page.url.pathname === s.href}
 				<a
 					href={s.href}
