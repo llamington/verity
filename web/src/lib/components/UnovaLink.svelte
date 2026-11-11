@@ -23,6 +23,8 @@
 	let other: { name: string; bytes: Uint8Array; plan: UnovaPlan } | undefined = $state.raw();
 	let enabling: UnovaPlan | undefined = $state.raw();
 	let message: { ok: boolean; text: string } | undefined = $state();
+	/** Bumped after a link, so a fresh input can pick the same file again. */
+	let inputKey = $state(0);
 
 	const TITLES: Record<string, string> = {
 		memoryLink: 'Memory Link',
@@ -32,10 +34,7 @@
 	};
 
 	async function onFile(e: Event & { currentTarget: HTMLInputElement }) {
-		const input = e.currentTarget;
-		const f = input.files?.[0];
-		// Cleared, so picking the same file again (after linking) reads it again.
-		input.value = '';
+		const f = e.currentTarget.files?.[0];
 		message = undefined;
 		enabling = undefined;
 		if (!f) return;
@@ -55,6 +54,7 @@
 			? { ok: false, text: why }
 			: { ok: true, text: `Linked with ${other.name}. Save to keep it.` };
 		other = undefined;
+		inputKey++;
 	}
 
 	function onEnable() {
@@ -111,7 +111,9 @@
 
 	<div class="flex flex-col gap-1">
 		<Label for="unova-file">Partner save</Label>
-		<Input id="unova-file" type="file" accept=".sav,.dsv" onchange={onFile} />
+		{#key inputKey}
+			<Input id="unova-file" type="file" accept=".sav,.dsv" onchange={onFile} />
+		{/key}
 	</div>
 	{#if other}
 		<span class="text-muted-foreground">{other.name}</span>
