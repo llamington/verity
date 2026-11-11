@@ -126,7 +126,13 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   link a source archive. Event data in the blobs: the user accepted the risk (2026-11-10).
 - Commit `7fefcff` (docs type) also holds the web Memory Link feature: a failed commit-msg hook
   left the files staged. Not rewritten (already on main).
-- Next: the PR workflow switch (see above), then the open items below.
+- **Waiting on the user (asked 2026-11-11):** (1) Cloudflare secrets, (2) make the repo public
+  or not (GPLv3 source + PR rulesets on Free), (3) squash merges vs merge commits for the PR
+  workflow. CI's deploy job already builds the site from scratch (blobs via NuGet PKHeX.Core)
+  and skips the upload.
+- Storybook tests: don't use `userEvent.upload` (raises unhandled errors in Vitest browser mode,
+  failing CI); set `files` from a DataTransfer and `fireEvent.change` (see UnovaLink stories).
+- Next: the PR workflow switch once the user answers, then the open items below.
 
 **Done 2026-11-10 (all committed and pushed):**
 
