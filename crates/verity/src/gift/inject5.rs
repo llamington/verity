@@ -3,7 +3,7 @@
 //! gift over and marks it collected. Block layout from PKHeX `MysteryBlock5`; what the game writes
 //! was checked against genuine saves, see `docs/research/events-region.md`.
 
-use super::pgf::{Event5, Pgf, PGF_SIZE};
+use super::pgf::{Event5, PGF_SIZE, Pgf};
 use crate::save::{Save, SaveKind};
 
 const FLAGS_SIZE: usize = 0x100;

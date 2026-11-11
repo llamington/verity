@@ -9,3 +9,6 @@ repository.workspace = true
 [dependencies]
 serde_json = "1"
 verity = { path = "../verity" }
+
+[lints]
+workspace = true

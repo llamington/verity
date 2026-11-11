@@ -7,7 +7,7 @@ pub mod gen5;
 pub mod gen5_blocks;
 
 pub use crc16::crc16_ccitt;
-pub use detect::{detect, SaveKind};
+pub use detect::{SaveKind, detect};
 
 use crate::pkm::{Format, Pkm, SIZE_4PARTY, SIZE_4STORED, SIZE_5PARTY, SIZE_5STORED};
 

@@ -5,9 +5,9 @@
 //! Receiving only enables: a received key can't be passed on, and the sender's save doesn't change.
 //! The city key only passes between Black 2 and White 2.
 
-use super::{is_valid, MemLinkError};
+use super::{MemLinkError, is_valid};
 use crate::save::gen5::Layout5;
-use crate::save::{read_u32, SaveKind};
+use crate::save::{SaveKind, read_u32};
 
 pub const KEY_COUNT: usize = 5;
 

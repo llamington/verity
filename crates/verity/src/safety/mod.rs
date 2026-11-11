@@ -14,7 +14,7 @@ use crate::data::{GameData, MoveData};
 use crate::pkm::derived::exp_for_level;
 use crate::pkm::{Format, Pkm};
 use crate::save::{Save, SaveError, SaveKind, Slot};
-use crate::text::{value_to_char_g4, TERMINATOR};
+use crate::text::{TERMINATOR, value_to_char_g4};
 
 /// Why a Pokémon is unsafe for the game.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -407,13 +407,13 @@ pub fn checked_set_pkm(r: &Rules, save: &mut Save, slot: Slot, pk: &Pkm) -> Resu
     backup[..len].copy_from_slice(before);
     let count = save.party_count();
     save.set_pkm(slot, pk).map_err(WriteError::Io)?;
-    if matches!(slot, Slot::Party(_)) {
-        if let Err(e) = check_party(r, save) {
-            save.set_slot_raw(slot, &backup[..len])
-                .map_err(WriteError::Io)?;
-            save.set_party_count(count);
-            return Err(WriteError::Save(e));
-        }
+    if matches!(slot, Slot::Party(_))
+        && let Err(e) = check_party(r, save)
+    {
+        save.set_slot_raw(slot, &backup[..len])
+            .map_err(WriteError::Io)?;
+        save.set_party_count(count);
+        return Err(WriteError::Save(e));
     }
     Ok(())
 }

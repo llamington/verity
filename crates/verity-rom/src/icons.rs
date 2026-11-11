@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use crate::narc::Narc;
 use crate::nds::{FileRange, Game, Rom};
-use crate::{u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, u16_at, u32_at};
 
 const ANCHOR4: [u8; 10] = [0, 1, 1, 1, 0, 0, 0, 0, 2, 2];
 const ANCHOR5: [u8; 10] = [0, 0x11, 0x11, 0x11, 0, 0, 0, 0, 0x22, 0x22];
@@ -311,11 +311,7 @@ fn load5<S: Source>(rom: &mut Rom<S>) -> Result<IconSet> {
         .ok_or(Error::Format("icon palette table"))?;
     let pal_of = |group: usize, female: bool| {
         let b = table[group + if group >= egg { shift } else { 0 }];
-        if female {
-            b >> 4
-        } else {
-            b & 0xF
-        }
+        if female { b >> 4 } else { b & 0xF }
     };
     let (bytes, narc) = read_narc(rom, path)?;
     let member = |i: usize| -> Result<&[u8]> {

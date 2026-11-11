@@ -5,16 +5,16 @@
 
 use alloc::vec::Vec;
 
-use super::analysis4::{evolution_move_of, CheckId, Matched, Report};
+use super::analysis4::{CheckId, Matched, Report, evolution_move_of};
 use super::breed4::{self, Breed, EggMove};
 use super::evo::{Evo4, EvoCriteria, EvoPkm};
-use super::moves4::{finalize, MoveResult};
-use crate::data::encounters::{flag, Encounter, EncounterData, EncounterKind};
-use crate::data::{move_table as mt, GameData, MoveData, Strings};
+use super::moves4::{MoveResult, finalize};
+use crate::data::encounters::{Encounter, EncounterData, EncounterKind, flag};
+use crate::data::{GameData, MoveData, Strings, move_table as mt};
 use crate::gift::pgf::{Gifts5, Pgf};
-use crate::pkm::derived::{exp_for_level, gender_from_pid};
 use crate::pkm::Pkm;
-use crate::rng::finder::{analyze, AnalyzeInput, PidType};
+use crate::pkm::derived::{exp_for_level, gender_from_pid};
+use crate::rng::finder::{AnalyzeInput, PidType, analyze};
 
 const VERSION_W: u8 = 20;
 const VERSION_B: u8 = 21;
@@ -549,10 +549,10 @@ impl Context5<'_> {
 
     fn can_learn_b2w2(&self, evo: &EvoCriteria, current_form: u8, mv: u16) -> Option<MoveResult> {
         let g = &self.b2w2;
-        if let Some(level) = Self::level_learn(g, evo.species, evo.form, mv) {
-            if level <= evo.level_max {
-                return Some(MoveResult::LevelUp { level });
-            }
+        if let Some(level) = Self::level_learn(g, evo.species, evo.form, mv)
+            && level <= evo.level_max
+        {
+            return Some(MoveResult::LevelUp { level });
         }
         let pi = g.species_form(evo.species, evo.form);
         let raw = pi.raw();
@@ -613,10 +613,10 @@ impl Context5<'_> {
             if evo.species as usize >= self.bw.personal_count() {
                 continue;
             }
-            if let Some(level) = Self::level_learn(&self.bw, evo.species, evo.form, mv) {
-                if level <= evo.level_max {
-                    result[i] = MoveResult::LevelUp { level };
-                }
+            if let Some(level) = Self::level_learn(&self.bw, evo.species, evo.form, mv)
+                && level <= evo.level_max
+            {
+                result[i] = MoveResult::LevelUp { level };
             }
         }
     }
@@ -717,10 +717,8 @@ impl Context5<'_> {
         if pk.species() == 646 {
             let form = pk.form();
             for (mv, allowed) in [(558, form == 1), (559, form == 2), (184, form == 0)] {
-                if !allowed {
-                    if let Some(i) = current.iter().position(|&c| c == mv) {
-                        result[i] = MoveResult::Unobtainable;
-                    }
+                if !allowed && let Some(i) = current.iter().position(|&c| c == mv) {
+                    result[i] = MoveResult::Unobtainable;
                 }
             }
         }
@@ -1587,10 +1585,12 @@ fn verify_names(ctx: &Context5, pk: &Pkm, e_species: u16, enc: Option<&Enc5>, re
         return;
     }
     let species = pk.species();
-    if let Some(g) = gift {
-        if pk.is_nicknamed() && !g.is_egg() && !g.is_nicknamed() {
-            report.flag(CheckId::Nickname);
-        }
+    if let Some(g) = gift
+        && pk.is_nicknamed()
+        && !g.is_egg()
+        && !g.is_nicknamed()
+    {
+        report.flag(CheckId::Nickname);
     }
     if pk.is_nicknamed() {
         if nick.iter().any(|&c| (0x4E00..=0x9FFF).contains(&c)) {

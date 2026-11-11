@@ -46,11 +46,7 @@ fn adjustment(gain: i32, amp: i32) -> i32 {
     if gain % factor >= 5 {
         boost += 1;
     }
-    if amp == -1 {
-        boost
-    } else {
-        -boost
-    }
+    if amp == -1 { boost } else { -boost }
 }
 
 fn gained_sum(s: &[u8; 6], nature: u8, initial: &[u8; 6]) -> i32 {

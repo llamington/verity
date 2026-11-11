@@ -118,18 +118,18 @@ pub fn build_game(j: &Value, evolutions: &Value) -> Vec<u8> {
         &[j["max_species"].as_u64().unwrap() as u16],
     );
 
-    if let Some(t) = j["type_tutors"].as_array() {
-        if t.iter().any(|e| !ints(e).is_empty()) {
-            let mut bits = vec![0u8; count * 8];
-            for (i, e) in t.iter().enumerate() {
-                for (b, v) in ints(e).iter().enumerate() {
-                    if *v != 0 && b < 64 {
-                        bits[i * 8 + b / 8] |= 1 << (b % 8);
-                    }
+    if let Some(t) = j["type_tutors"].as_array()
+        && t.iter().any(|e| !ints(e).is_empty())
+    {
+        let mut bits = vec![0u8; count * 8];
+        for (i, e) in t.iter().enumerate() {
+            for (b, v) in ints(e).iter().enumerate() {
+                if *v != 0 && b < 64 {
+                    bits[i * 8 + b / 8] |= 1 << (b % 8);
                 }
             }
-            w.table(gt::TYPE_TUTORS, 8, bits);
         }
+        w.table(gt::TYPE_TUTORS, 8, bits);
     }
 
     let mut levelup = vec![Vec::new(); count];
@@ -314,7 +314,7 @@ fn truthy(v: &Value, key: &str) -> bool {
 
 /// Encodes one PKHeX template (exported by `Describe`) as a 68-byte record.
 pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
-    use verity::data::encounters::{flag, EncounterKind, NO_AREA, TEMPLATE_LEN};
+    use verity::data::encounters::{EncounterKind, NO_AREA, TEMPLATE_LEN, flag};
     let kind = EncounterKind::from_pkhex_name(t["kind"].as_str().unwrap())
         .unwrap_or_else(|| panic!("unknown kind {}", t["kind"]));
     let mut r = vec![0u8; TEMPLATE_LEN];
@@ -361,10 +361,10 @@ pub fn encode_template(t: &Value, area: Option<(u16, &Value)>) -> Vec<u8> {
     if t.get("PID").is_some() {
         flags |= flag::HAS_PID;
     }
-    if let Some((_, a)) = area {
-        if truthy(a, "IsCoronetFeebasArea") {
-            flags |= flag::CORONET_FEEBAS;
-        }
+    if let Some((_, a)) = area
+        && truthy(a, "IsCoronetFeebasArea")
+    {
+        flags |= flag::CORONET_FEEBAS;
     }
     if truthy(t, "RibbonNational") {
         flags |= flag::RIBBON_NATIONAL;
@@ -487,7 +487,7 @@ pub fn build_g3_origin(j: &Value, evolutions: &Value, encounters: &Value) -> Vec
 }
 
 pub fn build_encounters(j: &Value) -> Vec<u8> {
-    use verity::data::encounters::{table, AREA_LEN, RANGE_SLOTS, SLOT_LEN, TEMPLATE_LEN};
+    use verity::data::encounters::{AREA_LEN, RANGE_SLOTS, SLOT_LEN, TEMPLATE_LEN, table};
     let mut templates = Vec::new();
     let mut slots = Vec::new();
     let mut areas = Vec::new();
@@ -759,10 +759,13 @@ pub fn build_all(exports: &Path, out: &Path) -> Vec<(String, usize)> {
         );
     }
     let tables = load(&exports.join("move_tables.json"));
-    for gen in [4, 5] {
+    for generation in [4, 5] {
         put(
-            format!("moves{gen}.bin"),
-            build_moves(&load(&exports.join(format!("moves{gen}.json"))), &tables),
+            format!("moves{generation}.bin"),
+            build_moves(
+                &load(&exports.join(format!("moves{generation}.json"))),
+                &tables,
+            ),
         );
     }
     put(

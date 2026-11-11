@@ -4,8 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use verity::gift::inject5::{available, check, inject, Refusal5};
-use verity::gift::pgf::{Events5, Gifts5, Pgf, PGF_SIZE};
+use verity::gift::inject5::{Refusal5, available, check, inject};
+use verity::gift::pgf::{Events5, Gifts5, PGF_SIZE, Pgf};
 use verity::save::Save;
 
 const DATE: (u16, u8, u8) = (2026, 11, 9);

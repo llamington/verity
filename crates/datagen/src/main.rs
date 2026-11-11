@@ -17,7 +17,9 @@ fn main() {
             println!("{total:>8}  total");
         }
         _ => {
-            eprintln!("usage: datagen text4 <text4.json> <out.rs>\n       datagen build <exports-dir> <blobs-dir>");
+            eprintln!(
+                "usage: datagen text4 <text4.json> <out.rs>\n       datagen build <exports-dir> <blobs-dir>"
+            );
             std::process::exit(1);
         }
     }

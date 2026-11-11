@@ -2,13 +2,13 @@
 //! `MoveBreed.GetExpectedMoves`; nothing leaves [`generate`] without passing [`analyze4`].
 
 use super::api4::{Error, IvRequest, VERSION_D, VERSION_HG, VERSION_P, VERSION_PT, VERSION_SS};
-use super::build4::{safe_language, Trainer4};
+use super::build4::{Trainer4, safe_language};
 use super::wild4::{GenError, Rand};
-use crate::legality::analysis4::{analyze4, can_be_egg, Context4};
+use crate::legality::analysis4::{Context4, analyze4, can_be_egg};
 use crate::legality::breed4;
 use crate::pkm::derived::{exp_for_level, gender_from_pid};
 use crate::pkm::{Format, Pkm, SIZE_4STORED};
-use crate::text::{encode4, Clear, TERMINATOR};
+use crate::text::{Clear, TERMINATOR, encode4};
 
 /// Day Care egg location (PKHeX `Locations.Daycare4`).
 const DAYCARE4: u16 = 2000;

@@ -2,10 +2,10 @@
 //! `Legality/RNG/ClassicEra/Gen4/MethodK.cs` and `SlotMethodK.cs` (25.12.21); shared types and
 //! frame helpers come from [`super::method_j`].
 
-use super::lcrng::{next_n, prev16, prev_seed};
+use super::lcrng::{next_n, prev_seed, prev16};
 use super::method_j::{
-    original_level_valid, reversal_window, sequential_pid, slot_regular, slot_surf, Frame,
-    LeadRequired, LeadSeed, Slot4, SlotType4,
+    Frame, LeadRequired, LeadSeed, Slot4, SlotType4, original_level_valid, reversal_window,
+    sequential_pid, slot_regular, slot_surf,
 };
 
 // Summary of random determinations (Method K):
@@ -56,11 +56,7 @@ pub fn slot_super_rod(roll: u32) -> u8 {
 }
 
 pub fn slot_rock_smash(roll: u32) -> u8 {
-    if roll >= 80 {
-        1
-    } else {
-        0
-    }
+    if roll >= 80 { 1 } else { 0 }
 }
 
 pub fn slot_bug_contest(roll: u32) -> u8 {
@@ -363,10 +359,10 @@ fn try_match(
     let p0 = seed >> 16;
     if nature_from_rand(p0) == nature as u32 {
         let ctx = Frame::new(enc, seed, level_min, level_max, format);
-        if let Some(mut r) = try_match_no_sync(&ctx) {
-            if check_activation(enc, &mut r) {
-                return Some(r);
-            }
+        if let Some(mut r) = try_match_no_sync(&ctx)
+            && check_activation(enc, &mut r)
+        {
+            return Some(r);
         }
         if depth != 4 && enc.rerolls_for_31 {
             return recurse_4x(enc, level_min, level_max, seed, nature, format, depth + 1);
@@ -481,10 +477,10 @@ fn try_match_no_sync(ctx: &Frame) -> Option<LeadSeed> {
     {
         return lead(s, L::IntimidateKeenEyeFail);
     }
-    if enc.pressure_level <= ctx.level_max {
-        if let Some(s) = slot_valid_hustle_vital(ctx) {
-            return lead(s, L::PressureHustleSpirit);
-        }
+    if enc.pressure_level <= ctx.level_max
+        && let Some(s) = slot_valid_hustle_vital(ctx)
+    {
+        return lead(s, L::PressureHustleSpirit);
     }
     None
 }
@@ -565,10 +561,10 @@ fn slot_valid_static_magnet(ctx: &Frame) -> Option<(u32, LeadRequired)> {
         if is_static_magnet_fail(ctx.prev3()) {
             return None;
         }
-        if enc.is_fixed_level() || level_valid(ctx, ctx.prev1()) {
-            if let Some(l) = enc.static_magnet_lead(ctx.prev2()) {
-                return Some((ctx.seed4(), l));
-            }
+        if (enc.is_fixed_level() || level_valid(ctx, ctx.prev1()))
+            && let Some(l) = enc.static_magnet_lead(ctx.prev2())
+        {
+            return Some((ctx.seed4(), l));
         }
     } else {
         if is_static_magnet_fail(ctx.prev2()) {
@@ -611,7 +607,7 @@ pub fn lead_info4_hgss(
     format: u8,
     ratio: impl Fn(u16) -> u8,
 ) -> LeadSeed {
-    use super::finder::{is_cute_charm, PidType};
+    use super::finder::{PidType, is_cute_charm};
     let mut kind = pidiv.kind;
     match kind {
         PidType::ChainShiny => {

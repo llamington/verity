@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::evo::EvoCriteria;
-use super::ranch4::{self, RanchGift, RANCH_GIFTS};
+use super::ranch4::{self, RANCH_GIFTS, RanchGift};
 use crate::data::encounters::{Encounter, EncounterData};
 use crate::gift::pcd::Gift4;
 use crate::rng::finder::{AnalyzeInput, PidIv, PidType};
@@ -582,10 +582,10 @@ pub fn wild_slots<'a>(
         .filter(|_| !gift_egg_only)
     {
         for e in ed.group(g) {
-            if let Some(evo) = evo_of(e.species()) {
-                if trade_match_exact(&e, pk, evo) {
-                    seq.push((Enc4::Data(e), false));
-                }
+            if let Some(evo) = evo_of(e.species())
+                && trade_match_exact(&e, pk, evo)
+            {
+                seq.push((Enc4::Data(e), false));
             }
         }
     }

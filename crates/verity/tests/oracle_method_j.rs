@@ -2,11 +2,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::Value;
-use verity::data::encounters::EncounterData;
 use verity::data::GameData;
+use verity::data::encounters::EncounterData;
 use verity::pkm::{Format, Pkm};
-use verity::rng::finder::{analyze, AnalyzeInput};
-use verity::rng::method_j::{lead_info4_dppt, Slot4};
+use verity::rng::finder::{AnalyzeInput, analyze};
+use verity::rng::method_j::{Slot4, lead_info4_dppt};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use crate::narc::Narc;
 use crate::nds::{Game, Rom};
-use crate::{u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, u16_at, u32_at};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Metrics {

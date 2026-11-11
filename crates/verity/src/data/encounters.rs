@@ -552,7 +552,7 @@ impl<'a> EncounterData<'a> {
         (start..start + (len & !RANGE_SLOTS) as usize, slots)
     }
 
-    pub fn group_encounters(&self, g: usize) -> impl Iterator<Item = Encounter<'a>> + 'a {
+    pub fn group_encounters(&self, g: usize) -> impl Iterator<Item = Encounter<'a>> + 'a + use<'a> {
         let this = *self;
         let (range, slots) = self.group_range(g);
         range.filter_map(move |i| {
@@ -566,7 +566,11 @@ impl<'a> EncounterData<'a> {
 
     /// The slots of a slot group met at `location`, in table order. Scans only each record's
     /// area index, since a group has thousands of slots and the legality check needs a few.
-    pub fn slots_at(&self, name: &[u8], location: u16) -> impl Iterator<Item = Encounter<'a>> + 'a {
+    pub fn slots_at(
+        &self,
+        name: &[u8],
+        location: u16,
+    ) -> impl Iterator<Item = Encounter<'a>> + 'a + use<'a> {
         let this = *self;
         let g = (0..self.group_count()).find(|&g| self.group_name(g) == name);
         let range = g.map_or(0..0, |g| self.group_range(g).0);
@@ -580,15 +584,11 @@ impl<'a> EncounterData<'a> {
                 last = Some(area);
                 here = this.area(area).is_some_and(|a| a.location() == location);
             }
-            if here {
-                this.slot(i)
-            } else {
-                None
-            }
+            if here { this.slot(i) } else { None }
         })
     }
 
-    pub fn group(&self, name: &[u8]) -> impl Iterator<Item = Encounter<'a>> + 'a {
+    pub fn group(&self, name: &[u8]) -> impl Iterator<Item = Encounter<'a>> + 'a + use<'a> {
         let this = *self;
         let g = (0..self.group_count()).find(|&g| self.group_name(g) == name);
         g.into_iter().flat_map(move |g| this.group_encounters(g))

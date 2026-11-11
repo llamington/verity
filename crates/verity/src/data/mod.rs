@@ -234,7 +234,7 @@ impl<'a> GameData<'a> {
     }
 
     /// Level-up moves for a table index as (level, move).
-    pub fn levelup(&self, index: usize) -> impl Iterator<Item = (u8, u16)> + 'a {
+    pub fn levelup(&self, index: usize) -> impl Iterator<Item = (u8, u16)> + 'a + use<'a> {
         Indexed(self.blob.bytes(game_table::LEVELUP))
             .get(index)
             .as_chunks::<4>()
@@ -244,7 +244,11 @@ impl<'a> GameData<'a> {
     }
 
     /// Level-up moves from one of the Gen 3 per-game tables ([`game_table::LEVELUP_RS`] etc.).
-    pub fn levelup_from(&self, id: u16, index: usize) -> impl Iterator<Item = (u8, u16)> + 'a {
+    pub fn levelup_from(
+        &self,
+        id: u16,
+        index: usize,
+    ) -> impl Iterator<Item = (u8, u16)> + 'a + use<'a> {
         Indexed(self.blob.bytes(id))
             .get(index)
             .as_chunks::<4>()
@@ -274,7 +278,7 @@ impl<'a> GameData<'a> {
     }
 
     /// Forward evolutions for a table index (PKHeX `EvolutionTree.Forward.GetForward`).
-    pub fn evolutions(&self, index: usize) -> impl Iterator<Item = Evolution> + 'a {
+    pub fn evolutions(&self, index: usize) -> impl Iterator<Item = Evolution> + 'a + use<'a> {
         Indexed(self.blob.bytes(game_table::EVOLUTIONS))
             .get(index)
             .as_chunks::<8>()

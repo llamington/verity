@@ -3,7 +3,7 @@
 //! `Frame/FrameCheckDetails.cs`, `Frame/LeadRequired.cs`, `ClassicEra/LeadSeed.cs` and the
 //! Gen 4 part of `ClassicEra/LeadFinder.cs`.
 
-use super::lcrng::{next16, next_n, next_seed, prev16, prev_seed};
+use super::lcrng::{next_n, next_seed, next16, prev_seed, prev16};
 
 /// PKHeX `SlotType4`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -371,14 +371,14 @@ pub fn origin_seed(
 ) -> LeadSeed {
     let mut prefer = LeadSeed::default();
     loop {
-        if let Some(mut result) = try_match(enc, level_min, level_max, seed, nature, format) {
-            if check_activation(enc, &mut result.seed) {
-                if result.lead == LeadRequired::None {
-                    return result;
-                }
-                if result.lead > prefer.lead {
-                    prefer = result;
-                }
+        if let Some(mut result) = try_match(enc, level_min, level_max, seed, nature, format)
+            && check_activation(enc, &mut result.seed)
+        {
+            if result.lead == LeadRequired::None {
+                return result;
+            }
+            if result.lead > prefer.lead {
+                prefer = result;
             }
         }
         if reverse_count == 0 {
@@ -565,10 +565,10 @@ fn try_match_no_sync(ctx: &Frame) -> Option<LeadSeed> {
     {
         return lead(s, L::IntimidateKeenEyeFail);
     }
-    if enc.pressure_level <= ctx.level_max {
-        if let Some(s) = slot_valid_hustle_vital(ctx) {
-            return lead(s, L::PressureHustleSpirit);
-        }
+    if enc.pressure_level <= ctx.level_max
+        && let Some(s) = slot_valid_hustle_vital(ctx)
+    {
+        return lead(s, L::PressureHustleSpirit);
     }
     if enc.can_radar_grass() {
         return lead(ctx.seed1, L::Radar);
@@ -654,10 +654,10 @@ fn slot_valid_static_magnet(ctx: &Frame) -> Option<(u32, LeadRequired)> {
         return None;
     }
     if enc.slot_type.is_level_rand_dppt() {
-        if enc.is_fixed_level() || level_valid(ctx, ctx.prev1()) {
-            if let Some(l) = enc.static_magnet_lead(ctx.prev2()) {
-                return Some((ctx.seed4(), l));
-            }
+        if (enc.is_fixed_level() || level_valid(ctx, ctx.prev1()))
+            && let Some(l) = enc.static_magnet_lead(ctx.prev2())
+        {
+            return Some((ctx.seed4(), l));
         }
     } else if let Some(l) = enc.static_magnet_lead(ctx.prev1()) {
         return Some((ctx.seed3, l));
@@ -698,7 +698,7 @@ pub fn lead_info4_dppt(
     format: u8,
     ratio: impl Fn(u16) -> u8,
 ) -> LeadSeed {
-    use super::finder::{is_cute_charm, PidType};
+    use super::finder::{PidType, is_cute_charm};
     let shiny = {
         let x = pk.pid ^ ((pk.sid as u32) << 16 | pk.tid as u32);
         ((x >> 16) ^ (x & 0xFFFF)) < 8

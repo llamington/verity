@@ -7,7 +7,7 @@ use super::api4::{self, EncounterChoice, GenRequest, IvRequest};
 use super::status::GenStatus;
 use super::wild4::Lead;
 use crate::data::encounters::{Encounter, EncounterData};
-use crate::legality::analysis4::{can_be_egg, Context4};
+use crate::legality::analysis4::{Context4, can_be_egg};
 use crate::legality::analysis5::Context5;
 use crate::save::{Save, SaveKind, Slot};
 

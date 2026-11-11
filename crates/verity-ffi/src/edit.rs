@@ -1,17 +1,17 @@
 //! Write-side FFI for the DS front end: wild encounter lists, legal generation + insertion
-//! (P6 `gen::api4`), save finalisation and the game-safe validator (P7). Gen 4 D/P/Pt only.
+//! (P6 `generate::api4`), save finalisation and the game-safe validator (P7). Gen 4 D/P/Pt only.
 
 use core::slice;
 
-use verity::gen::api4::{self, Error};
-use verity::gen::wild4::Lead;
+use verity::generate::api4::{self, Error};
+use verity::generate::wild4::Lead;
 use verity::safety::{self, SaveIssue};
 use verity::save::{SaveKind, Slot};
 
-use crate::ui::{legal, open, VerityLoc};
 use crate::VerityErr;
+use crate::ui::{VerityLoc, legal, open};
 
-use verity::gen::wizard;
+use verity::generate::wizard;
 
 /// The encounter tables holding `version`'s wild slots (builds only the context it needs).
 fn wild_data(version: u8) -> Option<&'static verity::data::encounters::EncounterData<'static>> {
@@ -45,7 +45,7 @@ pub struct VerityEncounter {
 /// # Safety
 ///
 /// `out` must point to `cap` writable `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: usize) -> usize {
     let Some(data) = wild_data(version) else {
         return 0;
@@ -53,7 +53,9 @@ pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: us
     if out.is_null() {
         return 0;
     }
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     let species = wizard::wild_species(data, version);
     let n = species.len().min(cap);
     out[..n].copy_from_slice(&species[..n]);
@@ -65,7 +67,7 @@ pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: us
 /// # Safety
 ///
 /// `out` must point to `cap` writable `VerityEncounter`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_wild_encounters(
     version: u8,
     species: u16,
@@ -78,7 +80,9 @@ pub unsafe extern "C" fn verity_wild_encounters(
     if out.is_null() {
         return 0;
     }
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     let mut n = 0;
     for (index, e) in wizard::wild_encounters(data, version, species)
         .into_iter()
@@ -123,14 +127,14 @@ pub struct VerityGenRequest {
     pub seed: u32,
 }
 
-pub use verity::gen::status::GenStatus;
+pub use verity::generate::status::GenStatus;
 
 fn status(e: Error) -> GenStatus {
     e.into()
 }
 
 /// C ABI: human-readable text for a `verity_gen_status` (static, NUL-terminated ASCII).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
     GenStatus::c_text(code).as_ptr()
 }
@@ -142,7 +146,7 @@ pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `req` must be readable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_gen_insert(
     buf: *mut u8,
     len: usize,
@@ -152,8 +156,12 @@ pub unsafe extern "C" fn verity_gen_insert(
     if req.is_null() {
         return GenStatus::Internal as u8;
     }
-    let r = *req;
-    let Some(mut save) = open(buf, len) else {
+    // SAFETY: `req` is non-null (checked above) and points to a readable value (this function's
+    // contract).
+    let r = unsafe { *req };
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(mut save) = (unsafe { open(buf, len) }) else {
         return GenStatus::Internal as u8;
     };
     let opt = |v: u8| (v != 0xFF).then_some(v);
@@ -197,9 +205,11 @@ pub unsafe extern "C" fn verity_gen_insert(
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_save_finalize(buf: *mut u8, len: usize) -> VerityErr {
-    match open(buf, len) {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    match unsafe { open(buf, len) } {
         Some(mut s) => {
             s.finalize();
             VerityErr::Ok
@@ -224,7 +234,7 @@ pub struct VeritySaveCheck {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `out` to a writable `VeritySaveCheck`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_save_check(
     buf: *mut u8,
     len: usize,
@@ -233,7 +243,9 @@ pub unsafe extern "C" fn verity_save_check(
     if out.is_null() {
         return VerityErr::NullPointer;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return VerityErr::Unrecognized;
     };
     let mut c = VeritySaveCheck::default();
@@ -253,7 +265,9 @@ pub unsafe extern "C" fn verity_save_check(
             Err(SaveIssue::Checksums) => c.issue = 4,
         },
     }
-    *out = c;
+    // SAFETY: `out` is non-null (checked above) and points to a writable value (this function's
+    // contract).
+    unsafe { *out = c };
     VerityErr::Ok
 }
 
@@ -299,7 +313,7 @@ pub const EDIT_NICKNAME: u32 = 2048;
 pub const EDIT_NICKNAME_RESET: u32 = 4096;
 
 fn game_rules(kind: SaveKind) -> Option<safety::Rules<'static>> {
-    use crate::ui::{blob, BlobKind};
+    use crate::ui::{BlobKind, blob};
     use verity::data::{GameData, MoveData};
     let (g, m) = match kind {
         SaveKind::DP => (BlobKind::Dp, BlobKind::Moves4),
@@ -373,7 +387,7 @@ fn edited(
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `edit`, `legality`, `issue` must be valid.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_edit_preview(
     buf: *mut u8,
     len: usize,
@@ -385,22 +399,31 @@ pub unsafe extern "C" fn verity_edit_preview(
     if edit.is_null() || legality.is_null() || issue.is_null() {
         return VerityErr::NullPointer;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return VerityErr::Unrecognized;
     };
     let Some(rules) = game_rules(save.kind()) else {
         return VerityErr::BadData;
     };
-    let Some(pk) = edited(&save, &rules, loc, &*edit) else {
+    // SAFETY: `edit` is non-null (checked above) and points to a readable value (this function's
+    // contract).
+    let Some(pk) = edited(&save, &rules, loc, unsafe { &*edit }) else {
         return VerityErr::BadArgument;
     };
-    *issue = match safety::check_pkm(&rules, &pk, pk.is_party_format()) {
+    let code = match safety::check_pkm(&rules, &pk, pk.is_party_format()) {
         Ok(()) => 0,
         Err(i) => 1 + i as u8,
     };
+    // SAFETY: `issue` is non-null (checked above) and points to a writable value (this function's
+    // contract).
+    unsafe { *issue = code };
     let mut r = crate::ui::empty_legality();
     legal::check(&save, &pk, &mut r);
-    *legality = r;
+    // SAFETY: `legality` is non-null (checked above) and points to a writable value (this
+    // function's contract).
+    unsafe { *legality = r };
     VerityErr::Ok
 }
 
@@ -412,7 +435,7 @@ pub unsafe extern "C" fn verity_edit_preview(
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `edit` must be readable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_edit_apply(
     buf: *mut u8,
     len: usize,
@@ -423,13 +446,17 @@ pub unsafe extern "C" fn verity_edit_apply(
     if edit.is_null() {
         return 200;
     }
-    let Some(mut save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(mut save) = (unsafe { open(buf, len) }) else {
         return 200;
     };
     let Some(rules) = game_rules(save.kind()) else {
         return 200;
     };
-    let Some(pk) = edited(&save, &rules, loc, &*edit) else {
+    // SAFETY: `edit` is non-null (checked above) and points to a readable value (this function's
+    // contract).
+    let Some(pk) = edited(&save, &rules, loc, unsafe { &*edit }) else {
         return 200;
     };
     if mode == 0 {
@@ -447,7 +474,7 @@ pub unsafe extern "C" fn verity_edit_apply(
 }
 
 /// C ABI: whether a character can be stored in a name (always true for Gen 5's UTF-16).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn verity_char_encodable(generation: u8, c: u16) -> u8 {
     (generation != 4 || verity::text::is_encodable_g4(&[c])) as u8
 }
@@ -471,7 +498,7 @@ pub struct VerityEggRequest {
 /// # Safety
 ///
 /// `out` must point to `cap` writable `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_egg_species(version: u8, out: *mut u16, cap: usize) -> usize {
     let (Some(_), Some(ctx)) = (wizard::slots_group(version), legal::context()) else {
         return 0;
@@ -479,7 +506,9 @@ pub unsafe extern "C" fn verity_egg_species(version: u8, out: *mut u16, cap: usi
     if out.is_null() {
         return 0;
     }
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     let species = wizard::egg_species(ctx);
     let n = species.len().min(cap);
     out[..n].copy_from_slice(&species[..n]);
@@ -492,7 +521,7 @@ pub unsafe extern "C" fn verity_egg_species(version: u8, out: *mut u16, cap: usi
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `req` must be readable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_egg_insert(
     buf: *mut u8,
     len: usize,
@@ -502,8 +531,12 @@ pub unsafe extern "C" fn verity_egg_insert(
     if req.is_null() {
         return GenStatus::Internal as u8;
     }
-    let r = *req;
-    let Some(mut save) = open(buf, len) else {
+    // SAFETY: `req` is non-null (checked above) and points to a readable value (this function's
+    // contract).
+    let r = unsafe { *req };
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(mut save) = (unsafe { open(buf, len) }) else {
         return GenStatus::Internal as u8;
     };
     let Some(ctx) = legal::context() else {
@@ -546,7 +579,7 @@ const CLOSEST_IV_BUDGET: u32 = 30_000;
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes, `target` to 6 readable bytes, `out` must be valid.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_closest_ivs(
     buf: *mut u8,
     len: usize,
@@ -557,7 +590,9 @@ pub unsafe extern "C" fn verity_closest_ivs(
     if target.is_null() || out.is_null() {
         return GenStatus::Internal as u8;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return GenStatus::Internal as u8;
     };
     let Some(ctx) = legal::context() else {
@@ -569,14 +604,19 @@ pub unsafe extern "C" fn verity_closest_ivs(
     if pk.species() == 0 {
         return GenStatus::SlotUnavailable as u8;
     }
-    let goal: [u8; 6] = core::array::from_fn(|i| *target.add(i));
+    // SAFETY: `target` is non-null (checked above) and points to 6 readable bytes (this function's
+    // contract).
+    let goal: [u8; 6] = core::array::from_fn(|i| unsafe { *target.add(i) });
     match api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
         Ok(f) => {
-            *out = VerityIvFix {
+            let fix = VerityIvFix {
                 ivs: f.ivs,
                 distance: f.distance as u16,
                 pid: f.pid,
             };
+            // SAFETY: `out` is non-null (checked above) and points to a writable value (this
+            // function's contract).
+            unsafe { *out = fix };
             0
         }
         Err(e) => status(e) as u8,
@@ -584,7 +624,7 @@ pub unsafe extern "C" fn verity_closest_ivs(
 }
 
 /// C ABI: text for a game-safe issue code from `verity_edit_preview`/`verity_edit_apply`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn verity_issue_text(code: u8) -> *const u8 {
     use verity::safety::PkmIssue as I;
     const ISSUES: [I; 22] = [
@@ -620,9 +660,11 @@ pub extern "C" fn verity_issue_text(code: u8) -> *const u8 {
 }
 
 #[cfg(test)]
+// Tests call the C ABI with buffers they own and keep alive for the call.
+#[allow(clippy::undocumented_unsafe_blocks)]
 mod tests {
     use super::*;
-    use crate::ui::{verity_data_attach, verity_slot_view, BlobKind, VerityPkmView};
+    use crate::ui::{BlobKind, VerityPkmView, verity_data_attach, verity_slot_view};
     extern crate std;
 
     fn file(rel: &str) -> Option<std::vec::Vec<u8>> {

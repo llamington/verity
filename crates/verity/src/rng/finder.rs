@@ -2,9 +2,9 @@
 //! with its helpers from `CommonEvent3.cs`, `CuteCharm4.cs`, `PokewalkerRNG.GetPID`,
 //! `MonochromeRNG.GetShinyPID` and `MethodCXD.TryGetSeedStarterColo`.
 
-use super::lcrng::{next15, next_n, prev16, prev_seed};
+use super::lcrng::{next_n, next15, prev_seed, prev16};
 use super::reversal::{
-    seeds, seeds_ivs, seeds_skip, MAX_SEEDS_IV, MAX_SEEDS_PID, MAX_SEEDS_PID_SKIP,
+    MAX_SEEDS_IV, MAX_SEEDS_PID, MAX_SEEDS_PID_SKIP, seeds, seeds_ivs, seeds_skip,
 };
 use super::xdrng::{self, arng};
 
@@ -145,10 +145,10 @@ pub fn analyze(pk: &AnalyzeInput, ratio: impl Fn(u16) -> u8) -> PidIv {
     if let Some(r) = lcrng_match(top, bot, iv1, iv2) {
         return r;
     }
-    if pk.species == UNOWN {
-        if let Some(r) = lcrng_unown_match(top, bot, iv1, iv2) {
-            return r;
-        }
+    if pk.species == UNOWN
+        && let Some(r) = lcrng_unown_match(top, bot, iv1, iv2)
+    {
+        return r;
     }
     if let Some(r) = colo_starter_match(pk, iv1, iv2) {
         return r;

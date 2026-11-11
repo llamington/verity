@@ -14,7 +14,7 @@ use crate::icons::TILES;
 use crate::items::{frame, palette_n};
 use crate::narc::Narc;
 use crate::nds::{FileRange, Game, Rom};
-use crate::{u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, u16_at, u32_at};
 
 /// Ribbons in verity's list: the Sinnoh set (28 bits), the Hoenn set (32), Sinnoh contests (20).
 pub const COUNT: usize = 80;

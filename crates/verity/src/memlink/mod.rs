@@ -6,7 +6,7 @@
 pub mod keys;
 
 use crate::save::gen5::Layout5;
-use crate::save::{crc16_ccitt, detect, read_u16, read_u32, write_u16, SaveKind};
+use crate::save::{SaveKind, crc16_ccitt, detect, read_u16, read_u32, write_u16};
 
 const RAW_SAVE_LEN: usize = 0x80000;
 

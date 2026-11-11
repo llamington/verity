@@ -100,21 +100,13 @@ fn voiced(c: u16, mark: u16) -> Option<u16> {
         if mark != DAKUTEN {
             return None;
         }
-        if base == b {
-            b + 1
-        } else {
-            b
-        }
+        if base == b { b + 1 } else { b }
     } else if let Some(b) = [0x306F, 0x3072, 0x3075, 0x3078, 0x307B]
         .into_iter()
         .find(|&b| (b..b + 3).contains(&base))
     {
         let target = if mark == DAKUTEN { b + 1 } else { b + 2 };
-        if base == target {
-            b
-        } else {
-            target
-        }
+        if base == target { b } else { target }
     } else if base == 0x3046 && mark == DAKUTEN {
         0x3094 // ゔ (only ヴ survives `storable`)
     } else if base == 0x3094 && mark == DAKUTEN {
@@ -154,10 +146,10 @@ pub fn type_key(text: &mut [u16], len: &mut usize, max: usize, key: u16, generat
                     let pair = JUNG_PAIRS
                         .iter()
                         .find(|p| u16::from(p.0) == jung && u16::from(p.1) == v);
-                    if let Some(p) = pair {
-                        if set_last(text, syllable(cho, u16::from(p.2), 0)) {
-                            return true;
-                        }
+                    if let Some(p) = pair
+                        && set_last(text, syllable(cho, u16::from(p.2), 0))
+                    {
+                        return true;
                     }
                 } else if *len < max {
                     // The final moves to a new syllable (a compound final splits).
@@ -187,10 +179,10 @@ pub fn type_key(text: &mut [u16], len: &mut usize, max: usize, key: u16, generat
                     .find(|p| p.0 == f && p.1 == key)
                     .and_then(|p| jong_index(p.2))
             };
-            if let Some(j) = next {
-                if set_last(text, syllable(cho, jung, j)) {
-                    return true;
-                }
+            if let Some(j) = next
+                && set_last(text, syllable(cho, jung, j))
+            {
+                return true;
             }
         }
     }
@@ -208,7 +200,7 @@ pub fn type_key(text: &mut [u16], len: &mut usize, max: usize, key: u16, generat
 /// # Safety
 ///
 /// `text` must point to `cap` writable `u16`s and `len` to a writable `size_t` that is <= `cap`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_keyboard_type(
     text: *mut u16,
     len: *mut usize,
@@ -217,14 +209,22 @@ pub unsafe extern "C" fn verity_keyboard_type(
     key: u16,
     generation: u8,
 ) -> u8 {
+    // SAFETY: `len` is non-null (checked above) and points to a valid value (this function's
+    // contract).
     if text.is_null() || len.is_null() || unsafe { *len } > cap {
         return 0;
     }
+    // SAFETY: `text` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
     let text = unsafe { core::slice::from_raw_parts_mut(text, cap) };
+    // SAFETY: `len` is non-null (checked above) and points to a valid value (this function's
+    // contract).
     type_key(text, unsafe { &mut *len }, max, key, generation) as u8
 }
 
 #[cfg(test)]
+// Tests call the C ABI with buffers they own and keep alive for the call.
+#[allow(clippy::undocumented_unsafe_blocks)]
 mod tests {
     use super::*;
 

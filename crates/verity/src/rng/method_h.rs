@@ -1,8 +1,8 @@
 //! Method H, the wild encounter RNG of the Gen 3 games. Ported from PKHeX
 //! `Legality/RNG/ClassicEra/Gen3/MethodH.cs` and `SlotMethodH.cs`.
 
-use super::lcrng::{next16, next_n, prev16, prev_seed};
-use super::method_j::{reversal_window, sequential_pid, LeadRequired, LeadSeed};
+use super::lcrng::{next_n, next16, prev_seed, prev16};
+use super::method_j::{LeadRequired, LeadSeed, reversal_window, sequential_pid};
 
 pub const FORMAT: u8 = 3;
 const RSE_SAFARI: u8 = 57;
@@ -237,15 +237,15 @@ impl<'a> Frame<'a> {
             return ok(s, L::None);
         }
         // SyncFail: prev1 must fail the proc.
-        if self.prev1() & 1 != 0 {
-            if let Some(s) = self.from1skip() {
-                return ok(s, L::SynchronizeFail);
-            }
+        if self.prev1() & 1 != 0
+            && let Some(s) = self.from1skip()
+        {
+            return ok(s, L::SynchronizeFail);
         }
-        if self.prev1().is_multiple_of(3) {
-            if let Some(s) = self.from1skip() {
-                return ok(s, L::CuteCharmFail);
-            }
+        if self.prev1().is_multiple_of(3)
+            && let Some(s) = self.from1skip()
+        {
+            return ok(s, L::CuteCharmFail);
         }
         if let Some(s) = self.hustle_vital_fail() {
             return ok(s, L::PressureHustleSpiritFail);
@@ -260,15 +260,15 @@ impl<'a> Frame<'a> {
             return ok(s, L::PressureHustleSpirit);
         }
         // Intimidate/Keen Eye: an odd roll is the pass that aborts the encounter.
-        if self.prev1() & 1 != 1 {
-            if let Some(s) = self.from1skip() {
-                return ok(s, L::IntimidateKeenEyeFail);
-            }
+        if self.prev1() & 1 != 1
+            && let Some(s) = self.from1skip()
+        {
+            return ok(s, L::IntimidateKeenEyeFail);
         }
-        if !self.prev1().is_multiple_of(3) {
-            if let Some(s) = self.from1skip() {
-                return ok(s, L::CuteCharm);
-            }
+        if !self.prev1().is_multiple_of(3)
+            && let Some(s) = self.from1skip()
+        {
+            return ok(s, L::CuteCharm);
         }
         None
     }
@@ -309,10 +309,10 @@ fn no_lead(enc: &Slot3, b: Bounds, mut seed: u32, nature: u8) -> Option<LeadSeed
     let hoenn = enc.is_safari_hoenn();
     if hoenn {
         let block = safari_block_seed(seed);
-        if safari_block_proc(block) {
-            if let Some(s) = Frame::new(enc, block, b).regular() {
-                return none(s);
-            }
+        if safari_block_proc(block)
+            && let Some(s) = Frame::new(enc, block, b).regular()
+        {
+            return none(s);
         }
     }
     if enc.species == UNOWN {
@@ -336,26 +336,26 @@ fn match_emerald(enc: &Slot3, b: Bounds, mut seed: u32, nature: u8) -> Option<Le
     let p0 = seed >> 16;
     if enc.is_safari_hoenn() {
         let block = safari_block_seed(seed);
-        if safari_block_proc(block) {
-            if let Some(r) = Frame::new(enc, block, b).no_sync() {
-                return Some(r);
-            }
+        if safari_block_proc(block)
+            && let Some(r) = Frame::new(enc, block, b).no_sync()
+        {
+            return Some(r);
         }
         seed = prev_seed(seed);
     }
     let frame = Frame::new(enc, seed, b);
-    if p0 & 1 == 0 {
-        if let Some(s) = frame.regular() {
-            return Some(LeadSeed {
-                seed: s,
-                lead: LeadRequired::Synchronize,
-            });
-        }
+    if p0 & 1 == 0
+        && let Some(s) = frame.regular()
+    {
+        return Some(LeadSeed {
+            seed: s,
+            lead: LeadRequired::Synchronize,
+        });
     }
-    if p0 % 25 == nature as u32 {
-        if let Some(r) = frame.no_sync() {
-            return Some(r);
-        }
+    if p0 % 25 == nature as u32
+        && let Some(r) = frame.no_sync()
+    {
+        return Some(r);
     }
     None
 }
@@ -445,10 +445,10 @@ fn origin_regular(
     mut reverse: usize,
 ) -> LeadSeed {
     loop {
-        if let Some(mut r) = no_lead(enc, b, seed, nature) {
-            if activation_ok(enc, &mut r.seed) {
-                return r;
-            }
+        if let Some(mut r) = no_lead(enc, b, seed, nature)
+            && activation_ok(enc, &mut r.seed)
+        {
+            return r;
         }
         if reverse == 0 {
             return LeadSeed::default();
@@ -467,14 +467,14 @@ fn origin_emerald(
 ) -> LeadSeed {
     let mut prefer = LeadSeed::default();
     loop {
-        if let Some(mut r) = match_emerald(enc, b, seed, nature) {
-            if activation_ok(enc, &mut r.seed) {
-                if r.lead == LeadRequired::None {
-                    return r;
-                }
-                if r.lead > prefer.lead {
-                    prefer = r;
-                }
+        if let Some(mut r) = match_emerald(enc, b, seed, nature)
+            && activation_ok(enc, &mut r.seed)
+        {
+            if r.lead == LeadRequired::None {
+                return r;
+            }
+            if r.lead > prefer.lead {
+                prefer = r;
             }
         }
         if reverse == 0 {
@@ -487,16 +487,16 @@ fn origin_emerald(
         seed = prev_seed(prev_seed(seed));
     }
     loop {
-        if let Some(mut r) = match_emerald(enc, b, seed, nature) {
-            if r.lead == LeadRequired::None {
-                r.lead = LeadRequired::CuteCharm;
-                if activation_ok(enc, &mut r.seed) {
-                    if r.lead == LeadRequired::None {
-                        return r;
-                    }
-                    if r.lead > prefer.lead {
-                        prefer = r;
-                    }
+        if let Some(mut r) = match_emerald(enc, b, seed, nature)
+            && r.lead == LeadRequired::None
+        {
+            r.lead = LeadRequired::CuteCharm;
+            if activation_ok(enc, &mut r.seed) {
+                if r.lead == LeadRequired::None {
+                    return r;
+                }
+                if r.lead > prefer.lead {
+                    prefer = r;
                 }
             }
         }

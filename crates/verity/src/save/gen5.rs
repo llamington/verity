@@ -1,8 +1,8 @@
 //! Gen 5 save layout. Ported from PKHeX `PKHeX.Core/Saves/SAV5.cs`,
 //! `Blocks/BlockInfoNDS.cs`, `Substructures/Gen5/PlayerData5.cs`.
 
-use super::gen5_blocks::{Block5, BLOCKS_B2W2, BLOCKS_BW};
-use super::{crc16_ccitt, read_u16, write_u16, SaveKind, BOX_SLOTS};
+use super::gen5_blocks::{BLOCKS_B2W2, BLOCKS_BW, Block5};
+use super::{BOX_SLOTS, SaveKind, crc16_ccitt, read_u16, write_u16};
 use crate::pkm::{SIZE_5PARTY, SIZE_5STORED};
 
 pub const BOX_COUNT: usize = 24;

@@ -38,7 +38,7 @@ mise activated.
   `ui-closest-ivs.json`), `save.e2e.ts` (mirrors `ui-leave.json`; the FSA handle is mocked).
 - **Shared code moved into `verity`** so both front ends call it: `legality::verdict` (contexts
   from blobs, check dispatch, "not checked" reasons), `edit` (field edits, ribbon list),
-  `gen::status::GenStatus` (generator outcome texts), `safety::PkmIssue::text`.
+  `generate::status::GenStatus` (generator outcome texts), `safety::PkmIssue::text`.
 - **Fixed on both front ends:** changing moves on a Pokémon with PP Ups failed the game-safe
   check (PP were filled for the old PP Ups, then the PP Ups cleared).
 - WASM API (`crates/verity-wasm`): global `attach(name, bytes)` / `attached(name)`; `Session`:
@@ -50,7 +50,7 @@ mise activated.
 - Gaps vs the DS editor: move descriptions and power/accuracy/category come from the ROM on the
   DS; the web has no source for them yet (PKHeX has no descriptions). Species/form/OT/nature/
   ability/markings aren't editable on the DS either, so they're not in the web editor.
-- Pre-existing: `cargo build -p verity --no-default-features` fails (gen::egg4 needs alloc); the
+- Pre-existing: `cargo build -p verity --no-default-features` fails (generate::egg4 needs alloc); the
   DS build (`cargo build-ds`) is fine.
 - Next: add Pokémon (wild wizards Gen 4/5, eggs, Pal Park/Transfer origins), Mystery Gifts, bag,
   Memory Link/keys, misc tabs, sprites, landing pages, deploy.
@@ -190,6 +190,17 @@ images. The decompilations aren't on disk; read single files with
 
 ## Environment
 
+- **Strictness rules (user, 2026-11-11):** Rust 2024 edition. Every crate forbids `unsafe` via
+  `[workspace.lints]` except `verity-ffi` (the DS C ABI), which denies `unsafe_op_in_unsafe_fn`,
+  `clippy::undocumented_unsafe_blocks` and `clippy::missing_safety_doc`: each pointer operation
+  in its own `unsafe { }` with a `// SAFETY:` comment citing the function's `# Safety` contract
+  (and "checked above" only where a null check precedes it). FFI tests allow the comment rule.
+  Helpers taking raw pointers are `unsafe fn` (`ui::open`, the `rom.rs` `cached*`). No blanket
+  clippy cast lints (user judged them overkill; the oracle tests cover byte-level errors). Web:
+  TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` (and three
+  more), ESLint `strictTypeChecked` + `stylisticTypeChecked`; generated shadcn components keep
+  the untyped rules. Optional WASM request fields use `#[tsify(optional, type = "T | undefined")]`.
+- `gen` is a 2024 keyword: the module is `verity::generate`, variables are `generation`.
 - The .NET oracle needs `DOTNET_ROOT=$HOME/.dotnet`. It is built by `scripts/oracle-smoke.sh` /
   `scripts/build-data.sh`; the binary is `tools/pkhex-oracle/bin/Release/net9.0/PkhexOracle`.
 - PKHeX source reference (read-only): `~/src/PKHeX` at tag 25.12.21. Port from it and cite files.

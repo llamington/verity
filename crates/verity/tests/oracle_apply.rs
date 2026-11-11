@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use verity::save::{Save, Slot, BOX_SLOTS};
+use verity::save::{BOX_SLOTS, Save, Slot};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

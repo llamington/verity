@@ -16,7 +16,7 @@ use crate::icons::IconKey;
 use crate::items::palette_n;
 use crate::narc::Narc;
 use crate::nds::{FileRange, Game, Rom};
-use crate::{lz, u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, lz, u16_at, u32_at};
 
 /// Bytes of a decoded sprite: 96x96 pixels, 4 bpp.
 pub const SPRITE_BYTES: usize = 96 * 96 / 2;
@@ -79,11 +79,7 @@ fn gen4_sprite(ncgr: &[u8], forward: Option<bool>) -> Result<[u8; SPRITE_BYTES]>
         None => {
             let zeros = |b: &[u8]| b.iter().filter(|&&v| v == 0).count();
             let (f, b) = (decrypt(true), decrypt(false));
-            if zeros(&f) >= zeros(&b) {
-                f
-            } else {
-                b
-            }
+            if zeros(&f) >= zeros(&b) { f } else { b }
         }
     };
     let mut out = [0u8; SPRITE_BYTES];

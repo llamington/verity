@@ -58,7 +58,7 @@ impl<'a> Gifts4<'a> {
         Some(Gift4 { rec })
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Gift4<'a>> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = Gift4<'a>> + 'a + use<'a> {
         self.recs
             .as_chunks::<REC>()
             .0

@@ -2,8 +2,8 @@
 //! caller previews (game-safe check, legality) or writes through `safety::checked_set_pkm`.
 
 use crate::data::Strings;
-use crate::pkm::derived::exp_for_level;
 use crate::pkm::Pkm;
+use crate::pkm::derived::exp_for_level;
 use crate::safety::Rules;
 use crate::save::{Save, Slot};
 
@@ -73,10 +73,10 @@ pub fn edited(
     e: &Edit,
     names: Option<&Strings>,
 ) -> Option<Pkm> {
-    if let Slot::Party(i) = slot {
-        if i as usize >= save.party_count() {
-            return None;
-        }
+    if let Slot::Party(i) = slot
+        && i as usize >= save.party_count()
+    {
+        return None;
     }
     let mut pk = save.pkm(slot).ok()?;
     if pk.species() == 0 {

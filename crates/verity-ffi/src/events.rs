@@ -2,13 +2,13 @@
 
 use core::slice;
 
-use verity::gift::inject4::{available, check, inject, Refusal};
+use verity::gift::inject4::{Refusal, available, check, inject};
 use verity::gift::inject5;
 use verity::gift::pcd::{Gift4, Gifts4, RANGER_INDEX};
 use verity::gift::pgf::{Events5, Gifts5, Pgf};
 use verity::save::Save;
 
-use crate::ui::{blob, open, BlobKind};
+use crate::ui::{BlobKind, blob, open};
 
 /// One gift (`verity_event_view`).
 #[repr(C)]
@@ -173,7 +173,7 @@ fn date_of(days: u16) -> (u16, u8, u8) {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes and `out` to `cap` writable views.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_events_list(
     buf: *mut u8,
     len: usize,
@@ -183,10 +183,14 @@ pub unsafe extern "C" fn verity_events_list(
     if out.is_null() {
         return 0;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return 0;
     };
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     let (kind, language) = (save.kind(), save.trainer().language);
     let mut n = 0;
     if save.generation() == 5 {
@@ -224,7 +228,7 @@ pub unsafe extern "C" fn verity_events_list(
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_event_inject(
     buf: *mut u8,
     len: usize,
@@ -233,7 +237,9 @@ pub unsafe extern "C" fn verity_event_inject(
     days: u16,
 ) -> u8 {
     const UNAVAILABLE: u8 = Refusal::Unavailable as u8;
-    let Some(mut save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(mut save) = (unsafe { open(buf, len) }) else {
         return UNAVAILABLE;
     };
     if which == WHICH_GEN5 {
@@ -258,7 +264,7 @@ pub unsafe extern "C" fn verity_event_inject(
 }
 
 /// C ABI: human-readable text for a `verity_event_inject` result (static, NUL-terminated ASCII).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn verity_event_status_text(code: u8) -> *const u8 {
     let s: &'static [u8] = match code {
         0 => b"Ready\0",

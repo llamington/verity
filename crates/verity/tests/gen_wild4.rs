@@ -2,9 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use verity::data::encounters::{Encounter, EncounterData};
 use verity::data::GameData;
-use verity::gen::wild4::{closest_legal_ivs, generate, GenError, Lead, Rand, Request};
+use verity::data::encounters::{Encounter, EncounterData};
+use verity::generate::wild4::{GenError, Lead, Rand, Request, closest_legal_ivs, generate};
 use verity::rng::method_j::Slot4;
 
 fn root() -> PathBuf {

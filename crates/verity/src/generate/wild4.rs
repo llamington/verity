@@ -2,10 +2,10 @@
 //! searching frames: choose the outcome (PID or IVs), recover the seeds that produce it, then
 //! validate the frame backwards with [`method_j`], the PKHeX-equivalent checker.
 
-use crate::rng::finder::{is_cute_charm, AnalyzeInput, PidIv, PidType};
-use crate::rng::lcrng::{next15, next16, next_n};
+use crate::rng::finder::{AnalyzeInput, PidIv, PidType, is_cute_charm};
+use crate::rng::lcrng::{next_n, next15, next16};
 use crate::rng::method_j::{self, LeadRequired, LeadSeed, Slot4};
-use crate::rng::reversal::{seeds, seeds_from_ivs, MAX_SEEDS_IV, MAX_SEEDS_PID};
+use crate::rng::reversal::{MAX_SEEDS_IV, MAX_SEEDS_PID, seeds, seeds_from_ivs};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lead {

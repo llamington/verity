@@ -4,9 +4,9 @@
 //! layout ported from PKHeX `Saves/SAV4.cs` (`MysteryBlock4*`); what the game writes was checked
 //! against genuine saves, see `docs/research/events-region.md`.
 
-use crate::gift::pcd::{gift_type, Gift4, PCD_SIZE, PGT_SIZE, RANGER_INDEX};
-use crate::pkm::crypto::encrypt_45;
+use crate::gift::pcd::{Gift4, PCD_SIZE, PGT_SIZE, RANGER_INDEX, gift_type};
 use crate::pkm::SIZE_4PARTY;
+use crate::pkm::crypto::encrypt_45;
 use crate::save::{Save, SaveKind};
 
 const FLAGS_SIZE: usize = 0x100;

@@ -2,7 +2,7 @@
 //! `SAV4DP.cs`, `SAV4Pt.cs`, `SAV4HGSS.cs`, `Blocks/BlockInfo4.cs` and
 //! `Util/SAV4BlockDetection.cs`.
 
-use super::{crc16_ccitt, read_u32, write_u16, SaveKind, BOX_SLOTS};
+use super::{BOX_SLOTS, SaveKind, crc16_ccitt, read_u32, write_u16};
 use crate::pkm::{SIZE_4PARTY, SIZE_4STORED};
 
 pub const PARTITION_SIZE: usize = 0x40000;

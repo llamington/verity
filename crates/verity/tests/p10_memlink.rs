@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use verity::memlink::{apply, build, Applied, MemLinkError, Seeds};
+use verity::memlink::{Applied, MemLinkError, Seeds, apply, build};
 use verity::save::crc16_ccitt;
 
 const GIFTS: usize = 0x7E000;

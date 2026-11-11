@@ -7,10 +7,10 @@
 
 use alloc::vec::Vec;
 
-use super::build4::{build_wild4, BuildData, Trainer4};
+use super::build4::{BuildData, Trainer4, build_wild4};
 use super::wild4::{self, GenError, IvProposal, Lead, Rand, Request};
 use crate::data::encounters::{Encounter, EncounterKind};
-use crate::legality::analysis4::{analyze4, CheckId, Context4, Matched};
+use crate::legality::analysis4::{CheckId, Context4, Matched, analyze4};
 use crate::pkm::Pkm;
 use crate::rng::method_j::Slot4;
 use crate::save::{Save, SaveError, SaveKind, Slot};
@@ -302,10 +302,10 @@ fn generate_slot(
     } else {
         e.form()
     };
-    if let Some(b) = req.ball {
-        if !ball_allowed(e, b, req.version) {
-            return Err(Error::BallNotAllowed);
-        }
+    if let Some(b) = req.ball
+        && !ball_allowed(e, b, req.version)
+    {
+        return Err(Error::BallNotAllowed);
     }
     let ability_bit = match req.ability {
         Some(a) => ability_bit(ctx, req.species, form, a)?,

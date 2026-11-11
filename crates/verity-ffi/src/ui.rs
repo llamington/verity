@@ -6,7 +6,7 @@ use core::cell::Cell;
 use core::ptr;
 use core::slice;
 
-use verity::data::{string_table, GameData, Strings};
+use verity::data::{GameData, Strings, string_table};
 use verity::pkm::Pkm;
 use verity::save::{Save, SaveKind, Slot};
 
@@ -96,13 +96,15 @@ fn kind_from_u32(v: u32) -> Option<BlobKind> {
 ///
 /// `buf` must point to `len` readable bytes that stay valid and unchanged until the blob is
 /// detached or replaced.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_data_attach(kind: u32, buf: *const u8, len: usize) -> VerityErr {
     let Some(k) = kind_from_u32(kind) else {
         return VerityErr::BadArgument;
     };
     if !buf.is_null() {
-        let data = slice::from_raw_parts(buf, len);
+        // SAFETY: `buf` is non-null (checked above) and valid for `len` elements (this function's
+        // contract).
+        let data = unsafe { slice::from_raw_parts(buf, len) };
         let ok = match k {
             BlobKind::Strings => Strings::load(data).is_ok(),
             BlobKind::Moves4 | BlobKind::Moves5 => verity::data::MoveData::load(data).is_ok(),
@@ -247,21 +249,29 @@ fn view(kind: SaveKind, pk: &Pkm) -> VerityPkmView {
     };
     decode(gen4, &pk.nickname_raw(), &mut v.nickname);
     decode(gen4, &pk.ot_name_raw(), &mut v.ot_name);
-    if let Some(game) = personal_for(kind) {
-        if pk.species() != 0 && pk.species() <= game.max_species() {
-            let pi = game.species_form(pk.species(), pk.form());
-            v.level = pk.level(&pi.base_info());
-            v.types = pi.types();
-        }
+    if let Some(game) = personal_for(kind)
+        && pk.species() != 0
+        && pk.species() <= game.max_species()
+    {
+        let pi = game.species_form(pk.species(), pk.form());
+        v.level = pk.level(&pi.base_info());
+        v.types = pi.types();
     }
     v
 }
 
-pub(crate) fn open(buf: *mut u8, len: usize) -> Option<Save<'static>> {
+/// The save in the caller's buffer, or `None` for a null pointer or an unrecognised save.
+///
+/// # Safety
+///
+/// `buf` must be null or valid for `len` writable bytes, and nothing else may access those bytes
+/// while the returned `Save` is in use (it must not outlive the C call it was made in).
+pub(crate) unsafe fn open(buf: *mut u8, len: usize) -> Option<Save<'static>> {
     if buf.is_null() {
         return None;
     }
-    // SAFETY: callers pass the save buffer they own for the duration of the call.
+    // SAFETY: `buf` is non-null and valid for `len` writable bytes, unaliased while the `Save`
+    // lives (this function's contract).
     Save::open(unsafe { slice::from_raw_parts_mut(buf, len) }).ok()
 }
 
@@ -270,9 +280,11 @@ pub(crate) fn open(buf: *mut u8, len: usize) -> Option<Save<'static>> {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_box_count(buf: *mut u8, len: usize) -> u32 {
-    open(buf, len).map_or(0, |s| s.box_count() as u32)
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    (unsafe { open(buf, len) }).map_or(0, |s| s.box_count() as u32)
 }
 
 /// C ABI: box name as UTF-16 (0-terminated, `out` holds 21 units).
@@ -280,7 +292,7 @@ pub unsafe extern "C" fn verity_box_count(buf: *mut u8, len: usize) -> u32 {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `out` to 21 writable `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_box_name(
     buf: *mut u8,
     len: usize,
@@ -290,13 +302,17 @@ pub unsafe extern "C" fn verity_box_name(
     if out.is_null() {
         return VerityErr::NullPointer;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return VerityErr::Unrecognized;
     };
     let Ok(raw) = save.box_name_raw(box_index as usize) else {
         return VerityErr::BadArgument;
     };
-    let out = slice::from_raw_parts_mut(out, 21);
+    // SAFETY: `out` is non-null (checked above) and valid for `21` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, 21) };
     decode(save.generation() == 4, &raw, out);
     VerityErr::Ok
 }
@@ -306,7 +322,7 @@ pub unsafe extern "C" fn verity_box_name(
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `out` to a writable `VerityPkmView`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_slot_view(
     buf: *mut u8,
     len: usize,
@@ -316,20 +332,28 @@ pub unsafe extern "C" fn verity_slot_view(
     if out.is_null() {
         return VerityErr::NullPointer;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return VerityErr::Unrecognized;
     };
-    if let Slot::Party(i) = loc.slot() {
-        if i as usize >= save.party_count() {
-            let mut v = core::mem::zeroed::<VerityPkmView>();
-            v.types = [0xFF; 2];
-            *out = v;
-            return VerityErr::Ok;
-        }
+    if let Slot::Party(i) = loc.slot()
+        && i as usize >= save.party_count()
+    {
+        // SAFETY: `VerityPkmView` is integers and integer arrays only, so all-zero is a valid
+        // value.
+        let mut v = unsafe { core::mem::zeroed::<VerityPkmView>() };
+        v.types = [0xFF; 2];
+        // SAFETY: `out` is non-null (checked above) and points to a writable value (this function's
+        // contract).
+        unsafe { *out = v };
+        return VerityErr::Ok;
     }
     match save.pkm(loc.slot()) {
         Ok(pk) => {
-            *out = view(save.kind(), &pk);
+            // SAFETY: `out` is non-null (checked above) and points to a writable value (this
+            // function's contract).
+            unsafe { *out = view(save.kind(), &pk) };
             VerityErr::Ok
         }
         Err(_) => VerityErr::BadArgument,
@@ -345,12 +369,14 @@ pub const NAME_SPECIES: u32 = string_table::SPECIES as u32;
 /// # Safety
 ///
 /// `out` must point to `cap` writable `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_name(category: u32, id: u32, out: *mut u16, cap: usize) -> usize {
     if out.is_null() || cap == 0 {
         return 0;
     }
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     out[0] = 0;
     let Some(strings) = blob(BlobKind::Strings).and_then(|b| Strings::load(b).ok()) else {
         return 0;
@@ -377,7 +403,7 @@ pub unsafe extern "C" fn verity_name(category: u32, id: u32, out: *mut u16, cap:
 /// # Safety
 ///
 /// `out` must point to `cap` writable `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_location_name(
     generation: u8,
     id: u16,
@@ -387,7 +413,9 @@ pub unsafe extern "C" fn verity_location_name(
     if out.is_null() || cap == 0 {
         return 0;
     }
-    let out = slice::from_raw_parts_mut(out, cap);
+    // SAFETY: `out` is non-null (checked above) and valid for `cap` writable elements (this
+    // function's contract).
+    let out = unsafe { slice::from_raw_parts_mut(out, cap) };
     out[0] = 0;
     let Some(strings) = blob(BlobKind::Strings).and_then(|b| Strings::load(b).ok()) else {
         return 0;
@@ -514,10 +542,10 @@ pub(crate) mod legal {
     }
 
     pub(crate) fn check(save: &Save, pk: &Pkm, out: &mut VerityLegality) {
-        let gen = save.generation();
+        let generation = save.generation();
         // Build only what this save can need (a Gen 4 save never reads the Gen 5 encounters).
-        let c5 = if gen == 5 { context5() } else { None };
-        match verdict::check(gen, pk, context(), c5) {
+        let c5 = if generation == 5 { context5() } else { None };
+        match verdict::check(generation, pk, context(), c5) {
             Ok(r) => fill(&r, out),
             Err(why) => out.unsupported = why as u8,
         }
@@ -531,7 +559,7 @@ pub(crate) mod legal {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes; `out` to a writable `VerityLegality`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_legality(
     buf: *mut u8,
     len: usize,
@@ -541,14 +569,16 @@ pub unsafe extern "C" fn verity_legality(
     if out.is_null() {
         return VerityErr::NullPointer;
     }
-    let Some(save) = open(buf, len) else {
+    // SAFETY: `buf` is null or valid for `len` writable bytes, and the `Save` is dropped before
+    // this call returns (this function's contract).
+    let Some(save) = (unsafe { open(buf, len) }) else {
         return VerityErr::Unrecognized;
     };
     let mut r = empty_legality();
-    if let Slot::Party(i) = loc.slot() {
-        if i as usize >= save.party_count() {
-            return VerityErr::BadArgument;
-        }
+    if let Slot::Party(i) = loc.slot()
+        && i as usize >= save.party_count()
+    {
+        return VerityErr::BadArgument;
     }
     let Ok(pk) = save.pkm(loc.slot()) else {
         return VerityErr::BadArgument;
@@ -562,11 +592,15 @@ pub unsafe extern "C" fn verity_legality(
     {
         r.unsupported = 3;
     }
-    *out = r;
+    // SAFETY: `out` is non-null (checked above) and points to a writable value (this function's
+    // contract).
+    unsafe { *out = r };
     VerityErr::Ok
 }
 
 #[cfg(test)]
+// Tests call the C ABI with buffers they own and keep alive for the call.
+#[allow(clippy::undocumented_unsafe_blocks)]
 mod tests {
     use super::*;
     extern crate std;
@@ -717,12 +751,11 @@ mod tests {
                             _ => skipped += 1,
                         }
                         let name = std::format!("box{bx:02}_{sl:02}");
-                        if r.status != 0 {
-                            if let Some(p) = pkhex(&name) {
-                                if p != (r.status == 1) {
-                                    disagree.push(name);
-                                }
-                            }
+                        if r.status != 0
+                            && let Some(p) = pkhex(&name)
+                            && p != (r.status == 1)
+                        {
+                            disagree.push(name);
                         }
                     }
                 }

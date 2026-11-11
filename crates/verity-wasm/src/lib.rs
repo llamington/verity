@@ -13,18 +13,18 @@ use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
 use verity::data::encounters::EncounterData;
-use verity::data::{string_table as st, GameData, Strings};
+use verity::data::{GameData, Strings, string_table as st};
 use verity::edit::{self, Edit, Met, Nickname};
-use verity::gen::status::GenStatus;
-use verity::gen::wild4::Lead;
-use verity::gen::wizard;
+use verity::generate::status::GenStatus;
+use verity::generate::wild4::Lead;
+use verity::generate::wizard;
 use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
 use verity::legality::moves4::MoveResult;
 use verity::legality::verdict;
 use verity::pkm::{Format, Pkm};
 use verity::safety::{self, Rules};
-use verity::save::{Save, SaveKind, Slot, BOX_SLOTS};
+use verity::save::{BOX_SLOTS, Save, SaveKind, Slot};
 use verity::text;
 
 // ---- blobs ---------------------------------------------------------------------------------
@@ -383,13 +383,12 @@ fn nickname(n: &str, pk: &Pkm) -> Result<Nickname, JsError> {
     if units.len() > max {
         return Err(JsError::new(&format!("nickname: at most {max} characters")));
     }
-    if matches!(pk.format(), Format::Pk4) {
-        if let Some(c) = n
+    if matches!(pk.format(), Format::Pk4)
+        && let Some(c) = n
             .chars()
             .find(|c| !text::is_encodable_g4(&c.encode_utf16(&mut [0; 2])[..]))
-        {
-            return Err(JsError::new(&format!("nickname: Gen 4 can't store “{c}”")));
-        }
+    {
+        return Err(JsError::new(&format!("nickname: Gen 4 can't store “{c}”")));
     }
     Ok(Nickname::new(&units))
 }
@@ -476,7 +475,7 @@ fn wizard_data(version: u8) -> Result<&'static EncounterData<'static>, JsError> 
     wizard::wild_data(c4, c5, version).ok_or_else(|| JsError::new("legality data missing"))
 }
 
-fn slot_kind(gen: u8, t: u8) -> &'static str {
+fn slot_kind(generation: u8, t: u8) -> &'static str {
     const G4: [&str; 15] = [
         "Grass",
         "Surf",
@@ -502,7 +501,7 @@ fn slot_kind(gen: u8, t: u8) -> &'static str {
         "Swarm",
         "Hidden Grotto",
     ];
-    let list: &[&str] = if gen == 4 { &G4 } else { &G5 };
+    let list: &[&str] = if generation == 4 { &G4 } else { &G5 };
     list.get(t as usize).copied().unwrap_or("?")
 }
 
@@ -591,17 +590,17 @@ impl Session {
     pub fn overview(&mut self) -> Result<Ts<Overview>, JsError> {
         let save = self.open();
         let t = save.trainer();
-        let gen = save.generation();
+        let generation = save.generation();
         let party = (0..save.party_count())
             .filter_map(|i| save.pkm(Slot::Party(i as u8)).ok())
             .map(|pk| mon(save.kind(), &pk))
             .collect();
         Ok(Overview {
             game: game_id(save.kind()).into(),
-            generation: gen,
+            generation,
             checksums_ok: save.checksums_valid(),
             trainer: Trainer {
-                name: decode(&t.name_raw, gen),
+                name: decode(&t.name_raw, generation),
                 tid: t.tid,
                 sid: t.sid,
                 money: t.money,
@@ -620,8 +619,8 @@ impl Session {
     #[wasm_bindgen(js_name = boxView)]
     pub fn box_view(&mut self, index: u8) -> Result<Ts<BoxView>, JsError> {
         let save = self.open();
-        let gen = save.generation();
-        let name = decode(&save.box_name_raw(index as usize).map_err(err)?, gen);
+        let generation = save.generation();
+        let name = decode(&save.box_name_raw(index as usize).map_err(err)?, generation);
         let mut slots = Vec::with_capacity(BOX_SLOTS);
         for s in 0..BOX_SLOTS as u8 {
             let pk = save.pkm(Slot::Box(index, s)).map_err(err)?;
@@ -640,8 +639,8 @@ impl Session {
     /// [`Session::legality_blobs`] first, or the verdict is "legality data missing".
     pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Ts<Legality>, JsError> {
         let (_, pk) = self.pkm(box_index, slot)?;
-        let gen = self.open().generation();
-        Ok(judge(gen, &pk).into_ts()?)
+        let generation = self.open().generation();
+        Ok(judge(generation, &pk).into_ts()?)
     }
 
     /// The game-safe validator over the whole save (needs the game blob and `moves4`/`moves5`).
@@ -653,9 +652,13 @@ impl Session {
     /// What the editor's pickers offer for this save's game.
     pub fn choices(&mut self) -> Result<Ts<Choices>, JsError> {
         let kind = self.open().kind();
-        let gen = self.open().generation();
+        let generation = self.open().generation();
         let rules = rules(kind).ok_or_else(|| JsError::new("game data missing"))?;
-        let items = if gen == 4 { st::ITEMS4 } else { st::ITEMS5 };
+        let items = if generation == 4 {
+            st::ITEMS4
+        } else {
+            st::ITEMS5
+        };
         let held = core::iter::once(0)
             .chain(rules.game.held_items().iter())
             .map(|i| named(items, i))
@@ -664,7 +667,7 @@ impl Session {
             .map(|m| named(st::MOVES, m))
             .filter(|n| n.name.is_some())
             .collect();
-        let balls = (1..=if gen == 4 { 24 } else { 25 })
+        let balls = (1..=if generation == 4 { 24 } else { 25 })
             .map(|b| Named {
                 id: b,
                 name: named(items, ball_item(b as u8)).name,
@@ -674,7 +677,7 @@ impl Session {
             held_items: held,
             moves,
             balls,
-            locations: locations(gen),
+            locations: locations(generation),
             ribbons: edit::RIBBONS.iter().map(|r| (*r).into()).collect(),
             nickname_max: 10,
             natures: (0..25)
@@ -703,10 +706,10 @@ impl Session {
         let issue = safety::check_pkm(&rules, &pk, pk.is_party_format())
             .err()
             .map(|i| i.text().into());
-        let gen = self.open().generation();
+        let generation = self.open().generation();
         Ok(Preview {
             issue,
-            legality: judge(gen, &pk),
+            legality: judge(generation, &pk),
             summary: summary(rules.kind, &pk),
         }
         .into_ts()?)
@@ -722,8 +725,8 @@ impl Session {
         legal_mode: bool,
     ) -> Result<Option<String>, JsError> {
         let (pk, rules) = self.edited(box_index, slot, &edit.to_rust()?)?;
-        let gen = self.open().generation();
-        if legal_mode && judge(gen, &pk).status == "illegal" {
+        let generation = self.open().generation();
+        if legal_mode && judge(generation, &pk).status == "illegal" {
             return Ok(Some("illegal (legal mode)".into()));
         }
         let at = slot_at(box_index, slot);
@@ -753,13 +756,13 @@ impl Session {
         slot: u8,
         target: Vec<u8>,
     ) -> Result<Ts<IvFix>, JsError> {
-        use verity::gen::status::GenStatus;
+        use verity::generate::status::GenStatus;
         let goal: [u8; 6] = target
             .try_into()
             .map_err(|_| JsError::new("six IVs expected"))?;
         let (_, pk) = self.pkm(box_index, slot)?;
         let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
-        match verity::gen::api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
+        match verity::generate::api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
             Ok(f) => Ok(IvFix {
                 ivs: f.ivs.to_vec(),
                 pid: f.pid,
@@ -839,19 +842,19 @@ impl Session {
         species: u16,
     ) -> Result<Vec<Ts<WildSlot>>, JsError> {
         let data = wizard_data(version)?;
-        let gen = if version >= 20 { 5 } else { 4 };
+        let generation = if version >= 20 { 5 } else { 4 };
         list(
             wizard::wild_encounters(data, version, species)
                 .into_iter()
                 .map(|(index, e)| WildSlot {
                     index,
-                    location: location(gen, e.location()),
+                    location: location(generation, e.location()),
                     form: e.form(),
                     level_min: e.level_min(),
                     level_max: e.level_max(),
-                    kind: slot_kind(gen, e.slot_type()).into(),
+                    kind: slot_kind(generation, e.slot_type()).into(),
                     slot_number: e.slot_number(),
-                    can_radar: gen == 4 && e.can_radar(),
+                    can_radar: generation == 4 && e.can_radar(),
                 }),
         )
     }
@@ -907,8 +910,8 @@ impl Session {
             seed: r.seed,
         };
         let at = self.empty_slot(box_index, slot)?;
-        let gen = self.open().generation();
-        let (c4, c5) = if gen == 5 {
+        let generation = self.open().generation();
+        let (c4, c5) = if generation == 5 {
             (None, context5())
         } else {
             (context4(), None)
@@ -958,10 +961,10 @@ impl Session {
     fn pkm(&mut self, box_index: i32, slot: u8) -> Result<(SaveKind, Pkm), JsError> {
         let save = self.open();
         let at = slot_at(box_index, slot);
-        if let Slot::Party(i) = at {
-            if i as usize >= save.party_count() {
-                return Err(JsError::new("no Pokémon there"));
-            }
+        if let Slot::Party(i) = at
+            && i as usize >= save.party_count()
+        {
+            return Err(JsError::new("no Pokémon there"));
         }
         let pk = save.pkm(at).map_err(err)?;
         if pk.species() == 0 {
@@ -1079,10 +1082,10 @@ fn rules(kind: SaveKind) -> Option<Rules<'static>> {
     })
 }
 
-/// The legality verdict for `pk` in a save of `gen`.
-fn judge(gen: u8, pk: &Pkm) -> Legality {
-    let c5 = if gen == 5 { context5() } else { None };
-    match verdict::check(gen, pk, context4(), c5) {
+/// The legality verdict for `pk` in a save of `generation`.
+fn judge(generation: u8, pk: &Pkm) -> Legality {
+    let c5 = if generation == 5 { context5() } else { None };
+    match verdict::check(generation, pk, context4(), c5) {
         Ok(r) => legality(pk, &r),
         Err(why) => Legality {
             status: "unchecked".into(),
@@ -1095,11 +1098,11 @@ fn judge(gen: u8, pk: &Pkm) -> Legality {
 }
 
 /// Every named met location of a generation, in id order.
-fn locations(gen: u8) -> Vec<Named> {
+fn locations(generation: u8) -> Vec<Named> {
     let Some(s) = strings() else {
         return vec![];
     };
-    let banks: &[(u16, u16)] = if gen == 4 {
+    let banks: &[(u16, u16)] = if generation == 4 {
         &[
             (st::LOC4_0, 0),
             (st::LOC4_2000, 2000),
@@ -1117,7 +1120,7 @@ fn locations(gen: u8) -> Vec<Named> {
     for &(cat, base) in banks {
         for i in 0..s.count(cat) {
             let id = base + i as u16;
-            if let Some(name) = utf16(s.location(gen, id)) {
+            if let Some(name) = utf16(s.location(generation, id)) {
                 out.push(Named {
                     id,
                     name: Some(name),
@@ -1219,19 +1222,23 @@ fn date([y, m, d]: [u8; 3]) -> String {
     format!("{:04}-{:02}-{:02}", 2000 + y as u16, m, d)
 }
 
-fn location(gen: u8, id: u16) -> Named {
-    let name = strings().and_then(|s| utf16(s.location(gen, id)));
+fn location(generation: u8, id: u16) -> Named {
+    let name = strings().and_then(|s| utf16(s.location(generation, id)));
     Named { id, name }
 }
 
 fn summary(kind: SaveKind, pk: &Pkm) -> Summary {
-    let gen = gen_of(pk);
-    let items = if gen == 4 { st::ITEMS4 } else { st::ITEMS5 };
+    let generation = gen_of(pk);
+    let items = if generation == 4 {
+        st::ITEMS4
+    } else {
+        st::ITEMS5
+    };
     let game = game_data(kind);
     let info = game.as_ref().and_then(|g| {
         (pk.species() <= g.max_species()).then(|| g.species_form(pk.species(), pk.form()))
     });
-    let moves_blob = blob(if gen == 4 { "moves4" } else { "moves5" })
+    let moves_blob = blob(if generation == 4 { "moves4" } else { "moves5" })
         .and_then(|b| verity::data::MoveData::load(b).ok());
     let (pp, ups) = (pk.pp(), pk.pp_ups());
     let moves = pk
@@ -1267,7 +1274,7 @@ fn summary(kind: SaveKind, pk: &Pkm) -> Summary {
         exp: pk.exp(),
         nature: named(st::NATURES, pk.nature() as u16),
         ability: named(st::ABILITIES, pk.ability() as u16),
-        hidden_ability: gen == 5 && pk.hidden_ability(),
+        hidden_ability: generation == 5 && pk.hidden_ability(),
         gender: pk.gender(),
         held_item: named(items, pk.held_item()),
         ball: Named {
@@ -1280,16 +1287,16 @@ fn summary(kind: SaveKind, pk: &Pkm) -> Summary {
         evs: pk.evs().to_vec(),
         stats: info.map(|p| pk.calc_stats(&p.base_info()).to_vec()),
         friendship: pk.friendship(),
-        ot: decode(&pk.ot_name_raw(), gen),
+        ot: decode(&pk.ot_name_raw(), generation),
         ot_female: pk.ot_gender() == 1,
         tid: pk.tid(),
         sid: pk.sid(),
         language: language_name(pk.language()).into(),
         origin: origin_name(pk.version()).into(),
-        met_location: location(gen, pk.met_location()),
+        met_location: location(generation, pk.met_location()),
         met_level: pk.met_level(),
         met_date: date(pk.met_date()),
-        egg_location: location(gen, egg_loc),
+        egg_location: location(generation, egg_loc),
         egg_date: (egg_loc != 0).then(|| date(pk.egg_date())),
         fateful: pk.fateful(),
         contest: pk.contest().to_vec(),
@@ -1366,9 +1373,9 @@ fn legality(pk: &Pkm, r: &Report) -> Legality {
     }
 }
 
-fn decode(raw: &[u16], gen: u8) -> String {
+fn decode(raw: &[u16], generation: u8) -> String {
     let mut out = [0u16; 32];
-    let n = if gen == 4 {
+    let n = if generation == 4 {
         text::decode4(raw, &mut out)
     } else {
         text::decode5(raw, &mut out)

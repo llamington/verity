@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 
 use crate::narc::Narc;
 use crate::nds::{Game, Rom};
-use crate::{text, u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, text, u16_at, u32_at};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Category {
@@ -83,10 +83,10 @@ pub fn load_descriptions<S: Source>(
                 // Marker, command, parameter count, parameters.
                 let n = line.get(i + 1).copied().unwrap_or(0);
                 i += 2 + usize::from(n);
-            } else if let Some(ch) = map(c) {
-                if ch != ' ' || !(s.is_empty() || s.ends_with(' ')) {
-                    s.push(ch);
-                }
+            } else if let Some(ch) = map(c)
+                && (ch != ' ' || !(s.is_empty() || s.ends_with(' ')))
+            {
+                s.push(ch);
             }
         }
         let trimmed = s.trim_end().len();
