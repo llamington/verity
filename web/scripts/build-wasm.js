@@ -17,7 +17,7 @@ execFileSync(
 		'--target',
 		'web',
 		// CI only needs the bindings and their types; a dev build skips LTO and wasm-opt.
-		process.env.VERITY_WASM_DEV ? '--dev' : '--release',
+		process.env['VERITY_WASM_DEV'] ? '--dev' : '--release',
 		'--out-dir',
 		tmp,
 		'--no-pack'
