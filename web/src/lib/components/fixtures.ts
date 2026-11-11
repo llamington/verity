@@ -1,5 +1,5 @@
 // Sample data for Storybook stories.
-import type { Choices, Summary } from '#lib/verity.js';
+import type { Choices, Gift, Summary } from '#lib/verity.js';
 
 export const n = (id: number, name?: string) => ({ id, name });
 export const summary: Summary = {
@@ -61,3 +61,52 @@ export const choices: Choices = {
 	natures: ['Hardy', 'Lonely', 'Brave', 'Adamant', 'Naughty'],
 	wildBalls: [n(4, 'Poké Ball'), n(3, 'Great Ball'), n(2, 'Ultra Ball')]
 };
+
+const gift = (record: number, over: Partial<Gift>): Gift => ({
+	source: 0,
+	record,
+	title: 'Event',
+	gives: 'Gift',
+	kind: 'Gift',
+	species: 0,
+	item: 0,
+	ot: undefined,
+	tid: 0,
+	sid: 0,
+	region: undefined,
+	cardId: undefined,
+	ready: true,
+	status: 'Ready',
+	...over
+});
+
+export const gifts: Gift[] = [
+	gift(1, {
+		title: 'Shiny Pikachu',
+		gives: 'Pikachu',
+		kind: 'Pokémon',
+		species: 25,
+		ot: 'Nintendo',
+		tid: 7,
+		region: 'North America',
+		cardId: 101
+	}),
+	gift(2, {
+		title: 'Shiny Pikachu',
+		gives: 'Pikachu',
+		kind: 'Pokémon',
+		species: 25,
+		ot: 'Game',
+		tid: 41212,
+		region: 'Europe',
+		cardId: 102
+	}),
+	gift(3, { title: 'Member Card', gives: 'Member Card', kind: 'Member Card', cardId: 7 }),
+	gift(4, {
+		title: 'Manaphy Egg',
+		gives: 'Manaphy Egg',
+		kind: 'Pokémon Egg',
+		ready: false,
+		status: 'Already received'
+	})
+];

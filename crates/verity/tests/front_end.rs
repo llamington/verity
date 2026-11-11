@@ -11,6 +11,9 @@ use verity::edit::{self, Edit, Met, Nickname};
 use verity::generate::status::GenStatus;
 use verity::generate::wild4::Lead;
 use verity::generate::wizard::{self, EggRequest, WildRequest};
+use verity::gift::catalog::{self, Databases};
+use verity::gift::pcd::Gifts4;
+use verity::gift::pgf::{Events5, Gifts5};
 use verity::legality::analysis4::Context4;
 use verity::legality::analysis5::Context5;
 use verity::legality::verdict::{self, Blob, Unchecked};
@@ -433,6 +436,88 @@ fn wizard_adds_legal_gen4_eggs_unhatched_and_hatched() {
         assert_eq!(pk.is_egg(), !hatched);
         assert_eq!(judge(&save, &pk, c4, c5), Ok(true), "hatched: {hatched}");
     }
+}
+
+// ---- gift::catalog --------------------------------------------------------------------------
+
+fn gift_databases() -> Option<Databases<'static>> {
+    Some(Databases {
+        gifts4: Some(Gifts4::load(blob("gifts4")?).ok()?),
+        events4: Some(Gifts4::load(blob("events4")?).ok()?),
+        gen5: Some((
+            Gifts5::load(blob("gifts5")?).ok()?,
+            Events5::load(blob("events5")?).ok()?,
+        )),
+    })
+}
+
+/// Lists, delivers the first ready Pokémon card, and checks the list then says it's taken.
+fn deliver_first_ready(name: &str) -> Option<()> {
+    let db = gift_databases()?;
+    let mut bytes = save_bytes(name)?;
+    let mut save = Save::open(&mut bytes).unwrap();
+    let cards = catalog::list(&save, &db);
+    assert!(cards.len() > 5, "{name}: {} cards", cards.len());
+    assert!(cards.iter().all(|c| !c.title.is_empty()));
+    let card = cards
+        .iter()
+        .find(|c| c.status == 0 && c.species != 0 && !c.ranger)
+        .expect("a ready Pokémon card")
+        .clone();
+    assert!(!card.ot.is_empty(), "Pokémon cards carry their OT");
+    let days = catalog::days_of(2026, 11, 11).unwrap();
+    assert_eq!(
+        catalog::deliver(&mut save, &db, card.source, card.record, days),
+        0
+    );
+    let after = catalog::list(&save, &db);
+    let again = after
+        .iter()
+        .find(|c| c.source == card.source && c.record == card.record)
+        .unwrap();
+    assert_ne!(again.status, 0, "{name}: delivered twice");
+    save.finalize();
+    assert!(save.checksums_valid());
+    Some(())
+}
+
+#[test]
+fn gifts_list_and_deliver_gen4() {
+    deliver_first_ready("gen4_platinum.sav");
+    deliver_first_ready("gen4_heartgold.sav");
+}
+
+#[test]
+fn gifts_list_and_deliver_gen5() {
+    deliver_first_ready("gen5_white2.sav");
+}
+
+#[test]
+fn gifts_refuse_cards_from_elsewhere() {
+    let (Some(db), Some(mut bytes)) = (gift_databases(), save_bytes("gen4_platinum.sav")) else {
+        return;
+    };
+    let mut save = Save::open(&mut bytes).unwrap();
+    let listed = catalog::list(&save, &db);
+    let gifts4 = db.gifts4.as_ref().unwrap();
+    // A Gen 4 record this save isn't offered, and a Gen 5 card on a Gen 4 save.
+    let unlisted = (0..gifts4.iter().count() as u16)
+        .find(|&r| {
+            !listed
+                .iter()
+                .any(|c| c.source == catalog::Source::Gifts4 && c.record == r)
+        })
+        .expect("some card isn't offered to this save");
+    let unavailable = 5;
+    assert_eq!(
+        catalog::deliver(&mut save, &db, catalog::Source::Gifts4, unlisted, 0),
+        unavailable
+    );
+    assert_eq!(
+        catalog::deliver(&mut save, &db, catalog::Source::Gen5, 0, 0),
+        unavailable
+    );
+    assert_eq!(catalog::list(&save, &db).len(), listed.len());
 }
 
 // ---- texts -----------------------------------------------------------------------------------

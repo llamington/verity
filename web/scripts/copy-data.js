@@ -7,7 +7,7 @@ const src = new URL('../../data/blobs/', import.meta.url).pathname;
 const dst = new URL('../static/data/', import.meta.url).pathname;
 // Game, strings and legality blobs (see verity::legality::verdict::blobs_for).
 const wanted =
-	/^(dp|pt|hgss|bw|b2w2|strings_[a-z]+|moves[45]|names[45]|enc_[a-z0-9]+|gifts[45]|g3_origin)\.bin$/;
+	/^(dp|pt|hgss|bw|b2w2|strings_[a-z]+|moves[45]|names[45]|enc_[a-z0-9]+|gifts[45]|events[45]|g3_origin)\.bin$/;
 
 mkdirSync(dst, { recursive: true });
 if (!existsSync(src)) {

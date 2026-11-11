@@ -33,6 +33,8 @@ fn attach_all(game: &str) -> Option<()> {
         "names5",
         "gifts4",
         "gifts5",
+        "events4",
+        "events5",
         "g3_origin",
     ] {
         attach_blob(name, fs::read(dir.join(format!("{name}.bin"))).ok()?).unwrap();
@@ -372,7 +374,94 @@ fn eggs_are_gen4_only() {
     }
 }
 
+// ---- Mystery Gifts ----------------------------------------------------------------------------
+
+#[test]
+fn gifts_list_names_what_each_card_gives_and_delivers_once() {
+    let Some(mut ed) = open("gen4_platinum.sav", "pt") else {
+        return;
+    };
+    assert_eq!(ed.gift_blobs(), ["gifts4", "events4"]);
+    let gifts = ed.gifts().unwrap();
+    assert!(
+        gifts
+            .iter()
+            .all(|g| !g.title.is_empty() && !g.gives.is_empty())
+    );
+    assert!(gifts.iter().any(|g| g.kind == "Item" && g.item != 0));
+    let g = gifts
+        .iter()
+        .find(|g| g.ready && g.species != 0 && g.ot.is_some())
+        .expect("a ready Pokémon card");
+    let (source, record, gives) = (g.source, g.record, g.gives.clone());
+    assert_ne!(gives, "Pokémon", "the species is named, not just the kind");
+
+    assert_eq!(ed.deliver_gift(source, record, "2026-11-11"), Ok(None));
+    assert!(ed.dirty());
+    let again = ed.deliver_gift(source, record, "2026-11-11").unwrap();
+    assert!(matches!(
+        again.as_deref(),
+        Some("Already received" | "Waiting at the deliveryman")
+    ));
+    let after = ed.gifts().unwrap();
+    let same = after
+        .iter()
+        .find(|g| g.source == source && g.record == record)
+        .unwrap();
+    assert!(!same.ready);
+}
+
+#[test]
+fn gift_delivery_checks_its_inputs() {
+    let Some(mut ed) = open("gen5_white2.sav", "b2w2") else {
+        return;
+    };
+    assert_eq!(ed.gift_blobs(), ["gifts5", "events5"]);
+    let g = ed
+        .gifts()
+        .unwrap()
+        .into_iter()
+        .find(|g| g.ready)
+        .expect("a ready card");
+    assert_eq!(
+        ed.deliver_gift(9, g.record, "2026-11-11").err(),
+        Some(err("no such gift"))
+    );
+    assert_eq!(
+        ed.deliver_gift(g.source, g.record, "2026-02-30").err(),
+        Some(err("date: no such day"))
+    );
+    assert!(ed.deliver_gift(g.source, g.record, "someday").is_err());
+    assert!(!ed.dirty());
+    assert_eq!(ed.deliver_gift(g.source, g.record, "2026-11-11"), Ok(None));
+}
+
 // ---- saving --------------------------------------------------------------------------------------
+
+/// Opening a save fetches only `strings` and [`Editor::save_blobs`]; saving must work with
+/// nothing else attached (no Pokémon opened, so no legality data).
+#[test]
+fn saving_needs_only_the_blobs_fetched_on_open() {
+    let dir = root().join("data/blobs");
+    for (file, kind) in [("gen4_platinum.sav", 4), ("gen5_white2.sav", 5)] {
+        let Ok(bytes) = fs::read(root().join("corpus/real/pkhex-avalonia").join(file)) else {
+            continue;
+        };
+        // A fresh thread: an empty blob store.
+        let dir = dir.clone();
+        let ok = std::thread::spawn(move || {
+            let mut ed = Editor::new(bytes).unwrap();
+            for name in ed.save_blobs() {
+                attach_blob(&name, fs::read(dir.join(format!("{name}.bin"))).ok()?).unwrap();
+            }
+            assert_eq!(ed.save_blobs().len(), 2, "gen {kind}");
+            Some(ed.finalize().is_ok())
+        })
+        .join()
+        .unwrap();
+        assert_ne!(ok, Some(false), "{file}");
+    }
+}
 
 #[test]
 fn finalize_refuses_a_save_the_validator_rejects() {
