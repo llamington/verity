@@ -52,8 +52,13 @@ mise activated.
   ability/markings aren't editable on the DS either, so they're not in the web editor.
 - Pre-existing: `cargo build -p verity --no-default-features` fails (generate::egg4 needs alloc); the
   DS build (`cargo build-ds`) is fine.
-- Next: add Pokémon (wild wizards Gen 4/5, eggs, Pal Park/Transfer origins), Mystery Gifts, bag,
-  Memory Link/keys, misc tabs, sprites, landing pages, deploy.
+- **Add Pokémon done (2026-11-11):** empty box tiles and a party "+" tile open the wizard (wild
+  Gen 4 with Synchronize/Cute Charm/Poké Radar leads, wild Gen 5, Gen 4 eggs and hatched eggs),
+  backed by `verity::generate::wizard` (shared with the DS). `add.e2e.ts` mirrors `ui-add.json`,
+  `ui-add-hgss.json`, `ui-add-w2.json` and `ui-egg.json`, saves and re-opens; the party test uses
+  `sd/saves/Pokemon Platinum.sav` (3 in the party). Pal Park and Poké Transfer Pokémon are judged
+  (summary) but not created, as on the DS.
+- Next: Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
 
