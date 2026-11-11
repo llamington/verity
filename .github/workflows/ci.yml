@@ -47,7 +47,7 @@ jobs:
           else
             npx commitlint --from "$FROM" --to "$TO" --verbose
           fi
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
