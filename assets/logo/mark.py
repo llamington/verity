@@ -3,38 +3,47 @@
 Run `python3 -I assets/logo/mark.py` after changing GRID; it rewrites every generated file
 (listed in OUTPUTS) where it is used.
 
-N navy outline, R red shield, C cream check, G gold sparkle, . transparent.
+N navy outline, R red shield, L its lit top and left edges, D its shaded right and bottom edges
+and the check's drop shadow, C cream check, G gold sparkle, . transparent.
 """
 from pathlib import Path
 
 GRID = [
     ".NNNNNNNNNNNNNN.",
-    ".NRRRRRRRRRRRRN.",
-    ".NRRGRRRRRRRRRN.",
-    ".NRGGGRRRRRRRRN.",
-    ".NRRGRRRRRRCCRN.",
-    ".NRRRRRRRRCCRRN.",
-    ".NRRRRRRRCCRRRN.",
-    ".NRCCRRRCCRRRRN.",
-    ".NRRCCRCCRRRRRN.",
-    ".NRRRCCCRRRRRRN.",
-    ".NNRRRCRRRRRRNN.",
-    "..NRRRRRRRRRRN..",
-    "..NNRRRRRRRRNN..",
-    "...NNRRRRRRNN...",
-    "....NNNRRNNN....",
+    ".NLLLLLLLLLLLLN.",
+    ".NLRGRRRRRRRRDN.",
+    ".NLGGGRRRRRRRDN.",
+    ".NLRGRRRRRRCCDN.",
+    ".NLRRRRRRRCCDDN.",
+    ".NLRRRRRRCCDRDN.",
+    ".NLCCRRRCCDRRDN.",
+    ".NLDCCRCCDRRRDN.",
+    ".NLRDCCCDRRRRDN.",
+    ".NNDRDCDRRRRDNN.",
+    "..NDRRDRRRRRDN..",
+    "..NNDRRRRRRDNN..",
+    "...NNDDRRDDNN...",
+    "....NNNDDNNN....",
     "......NNNN......",
 ]
 # The outline is mirror-symmetric (only the sparkle and check aren't), and each step joins the
 # next along an edge, so the diagonals look as heavy as the straight sides.
 assert all(len(r) == 16 for r in GRID) and len(GRID) == 16
-assert all(r.replace("G", "R").replace("C", "R") == r.replace("G", "R").replace("C", "R")[::-1] for r in GRID)
-COLOURS = {"N": "#1F2537", "R": "#E3350D", "C": "#F8F4EA", "G": "#F5B83D"}
+_SILHOUETTE = ["".join(c if c in "N." else "R" for c in r) for r in GRID]
+assert all(r == r[::-1] for r in _SILHOUETTE)
+COLOURS = {
+    "N": "#1F2537",
+    "R": "#E3350D",
+    "L": "#F0613A",
+    "D": "#A82A0C",
+    "C": "#F8F4EA",
+    "G": "#F5B83D",
+}
 
 
 # Each layer covers the cells of its colour and of every colour drawn over it, so neighbouring
 # colours overlap instead of meeting edge to edge: no background seams at fractional scales.
-LAYERS = [("N", "NRCG"), ("R", "RCG"), ("C", "C"), ("G", "G")]
+LAYERS = [("N", "NRLDCG"), ("R", "RLDCG"), ("L", "L"), ("D", "D"), ("C", "C"), ("G", "G")]
 
 
 def rects(ox=0, oy=0):
