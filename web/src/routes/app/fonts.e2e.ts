@@ -25,7 +25,8 @@ test('an English save fetches no CJK fonts beyond the gender signs', async ({ pa
 	// Nunito has no ♂ or ♀ (Nidoran's names in box 1), so they come from one small Noto Sans JP
 	// subset; nothing else does.
 	expect(fetched.filter((u) => u.includes('noto-sans-kr'))).toEqual([]);
-	expect(fetched.length).toBeLessThanOrEqual(1);
+	// Distinct files: under load a browser can request the same subset twice.
+	expect(new Set(fetched).size).toBeLessThanOrEqual(1);
 });
 
 test('a Japanese save draws its names in Noto Sans JP', async ({ page }) => {
