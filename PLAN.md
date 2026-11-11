@@ -545,6 +545,34 @@ A browser build of the core, after the DS loads its font and graphics from the u
   and `generation-v/black-white`) through a CDN. If a sprite fails to load, show the species name and
   a generic icon.
 - **Risk:** sprites depend on that host staying up and on its copy of Nintendo's art.
+- **Goal (user, 2026-11-10): feature parity with the DS build.** Everything the DS app does, the
+  web app does, except what only exists because of DS hardware (ROM font and icon caches, the
+  NitroFS/SD file handling, the touch keyboard's charset limits where browser input covers it).
+  Parity checklist (DS screens and `verity-ffi` entry points):
+  - Open and probe a save, checksums, trainer overview, box and party browsing (done).
+  - Summary and legality report per Pokémon, issue text, whole-save check before saving
+    (`verity_legality`, `verity_issue_text`, `verity_save_check`).
+  - Editor with preview and apply: species, form, level, nickname, OT, IVs/EVs (closest legal IVs),
+    nature, ability, moves with descriptions and type/category, held item, ball, met data,
+    markings, ribbons with the ribbon check (`verity_edit_*`, `verity_closest_ivs`,
+    `verity_move_*`, `verity_items_*`, `verity_ribbons_check`, `verity_location_name`).
+  - Add Pokémon: wild generation (Gen 4 and Gen 5 wizards), eggs, Pal Park and Poké Transfer
+    origins (`verity_gen_insert`, `verity_wild_*`, `verity_egg_*`).
+  - Mystery Gift list and delivery, Gen 4 and Gen 5 (`verity_events_list`, `verity_event_inject`).
+  - Bag/items (Gen 4 and Gen 5), the misc tabs.
+  - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`).
+  - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
+    overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle).
+  - Save: finalize, verify read-back, write via the File System Access API in Chromium, download
+    elsewhere.
+- **Event data (user, 2026-11-10):** ship the Mystery Gift blobs (`gifts4/5.bin`,
+  `events4/5.bin`) as they are, full cards included, fetched only when the gift or legality
+  screens need them. The user judged the legal risk acceptable (most likely outcome is a DMCA
+  takedown, not a lawsuit); no stripping of card text.
+- **Stack (user, 2026-11-10):** SvelteKit 3 (static adapter), strict TypeScript, Tailwind v4,
+  shadcn-svelte, Storybook, Vitest, Playwright; `crates/verity-wasm` (wasm-bindgen + tsify) built
+  with wasm-pack; hosted on Cloudflare Pages, deployed from a GitHub Action. Node via mise,
+  pinned in `web/.node-version`.
 
 ---
 

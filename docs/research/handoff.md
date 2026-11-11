@@ -7,7 +7,11 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Next tasks (user, 2026-11-10), in order:**
 
-1. PLAN P12 (the web version), in progress. The stats hexagon is dropped (user, 2026-11-10).
+1. PLAN P12 (the web version), in progress: **make the web app feature complete with the DS
+   app** (user, 2026-11-10). The parity checklist is in PLAN P12. Work through it without
+   stopping between items; stop only for real blockers. The stats hexagon is dropped.
+2. Event data: ship the gift/event blobs unchanged, full cards included (user, 2026-11-10, after
+   weighing the legal risk as low). Don't strip card text.
 
 **P12 web version, started 2026-11-10.** Stack chosen by the user after comparing Leptos, Dioxus,
 Svelte, Solid and Astro: **SvelteKit 3** (static adapter, every page prerendered; the editor at
@@ -35,8 +39,15 @@ mise activated.
   `verity-ffi/src/ui.rs` `context()`), editing and saving (File System Access API in Chromium,
   download elsewhere), sprites (P12 hotlink plan), the per-game landing pages for SEO, and deploy.
   Cloudflare Pages' builders have no Rust, so deploy from a GitHub Action (needs a Cloudflare API
-  token from the user). Publishing the site ships PKHeX-derived data blobs: the legal-advice note
-  below applies.
+  token from the user; deploying is the one step that needs the user).
+- Suggested order: summary + legality report (needs the Gen 4/5 contexts in `verity-wasm`,
+  attaching every blob `verity-ffi/src/ui.rs` `context()`/`context5()` uses; fetch them lazily),
+  then editing with preview/apply, saving (finalize, verify, File System Access API or download),
+  add Pokémon (wild, eggs), Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing
+  pages, deploy. For each DS screen, mirror its `ui-*.json` harness script as a Playwright test,
+  and add Storybook stories for new components. Reuse the logic behind the `verity-ffi` C
+  functions rather than reimplementing it; move shared code into `verity` if both need it.
+- `copy-data.js` copies only the game and string blobs today; extend it as screens need more.
 
 **Done 2026-11-10 (all committed and pushed):**
 
