@@ -1,5 +1,6 @@
 <script module lang="ts">
 	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import { expect, fn } from 'storybook/test';
 	import MonTile from './MonTile.svelte';
 
 	const base = {
@@ -28,3 +29,19 @@
 <Story name="Bad checksum" args={{ mon: { ...base, checksumOk: false } }} />
 <Story name="No data yet" args={{ mon: { ...base, speciesName: undefined, level: undefined } }} />
 <Story name="Empty slot" args={{ mon: null }} />
+<Story
+	name="Empty slot that adds"
+	args={{ mon: null, onadd: fn() }}
+	play={async ({ canvas, userEvent, args }) => {
+		await userEvent.click(canvas.getByRole('button', { name: 'Add a Pokémon here' }));
+		await expect(args.onadd).toHaveBeenCalledOnce();
+	}}
+/>
+<Story
+	name="Selectable"
+	args={{ onselect: fn() }}
+	play={async ({ canvas, userEvent, args }) => {
+		await userEvent.click(canvas.getByRole('button', { name: /Pikachu/ }));
+		await expect(args.onselect).toHaveBeenCalledOnce();
+	}}
+/>
