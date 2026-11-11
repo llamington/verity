@@ -7,16 +7,16 @@ use alloc::vec::Vec;
 
 use super::analysis5::Context5;
 use super::breed4::EggMove;
-use super::enc4::{event_matches, wild_slots, Deferral, Enc4, MatchPkm, WildMatches};
+use super::enc4::{Deferral, Enc4, MatchPkm, WildMatches, event_matches, wild_slots};
 use super::evo::{Evo4, EvoCriteria, EvoPkm};
 use super::gift4;
 use super::moves4::{Learn4, MoveResult};
-use super::ranch4::{self, RanchGift, RANCH_GIFTS};
-use crate::data::encounters::{Encounter, EncounterData};
+use super::ranch4::{self, RANCH_GIFTS, RanchGift};
 use crate::data::GameData;
+use crate::data::encounters::{Encounter, EncounterData};
 use crate::gift::pcd::{Gift4, Gifts4};
 use crate::pkm::Pkm;
-use crate::rng::finder::{analyze, AnalyzeInput};
+use crate::rng::finder::{AnalyzeInput, analyze};
 use crate::rng::method_j::LeadSeed;
 
 /// PKHeX `CheckIdentifier` (subset used by Gen 4), named as PKHeX prints them.
@@ -280,20 +280,20 @@ fn evolution_valid(
 /// Analyses a PK4 whose origin is D/P/Pt or HG/SS (versions 7, 8, 10..=12) in the Gen 4
 /// format: wild slots, statics, trades, Pokéwalker, hatched eggs and Mystery Gifts.
 pub fn analyze4<'a>(ctx: &'a Context4<'a>, pk: &Pkm) -> Report<'a> {
-    if super::analysis3::is_gba_version(pk.version()) {
-        if let Some(g3) = &ctx.g3 {
-            return super::analysis3::analyze3(ctx, g3, pk);
-        }
+    if super::analysis3::is_gba_version(pk.version())
+        && let Some(g3) = &ctx.g3
+    {
+        return super::analysis3::analyze3(ctx, g3, pk);
     }
     analyze4_inner(ctx, None, pk)
 }
 
 /// Analyses a Pokémon that originated in Gen 4 and now sits in a Gen 5 save (Poké Transfer).
 pub fn analyze_transfer4<'a>(ctx: &'a Context4<'a>, c5: &'a Context5<'a>, pk: &Pkm) -> Report<'a> {
-    if super::analysis3::is_gba_version(pk.version()) {
-        if let Some(g3) = &ctx.g3 {
-            return super::analysis3::analyze3_transfer(ctx, g3, c5, pk);
-        }
+    if super::analysis3::is_gba_version(pk.version())
+        && let Some(g3) = &ctx.g3
+    {
+        return super::analysis3::analyze3_transfer(ctx, g3, c5, pk);
     }
     analyze4_inner(ctx, Some(c5), pk)
 }
@@ -985,18 +985,18 @@ fn analyze_bred_egg(
         chosen = Some((sp, false));
         break;
     }
-    if chosen.is_none() {
-        if let Some((sp, rank)) = deferred {
-            let (moves, ev) = egg_candidate(ctx, inp, sp);
-            report.moves = moves;
-            if !ev {
-                report.flag(CheckId::Evolution);
-            }
-            if rank == 5 {
-                report.flag(CheckId::PID);
-            }
-            chosen = Some((sp, true));
+    if chosen.is_none()
+        && let Some((sp, rank)) = deferred
+    {
+        let (moves, ev) = egg_candidate(ctx, inp, sp);
+        report.moves = moves;
+        if !ev {
+            report.flag(CheckId::Evolution);
         }
+        if rank == 5 {
+            report.flag(CheckId::PID);
+        }
+        chosen = Some((sp, true));
     }
     let Some((species, deferred_choice)) = chosen else {
         report.flag(CheckId::Encounter);
@@ -1287,12 +1287,11 @@ fn verify_common_inner(
         report.flag(CheckId::Fateful);
     }
     // VerifyGift3Shiny.
-    if let Some(e) = gift3.filter(|_| !gift3_egg) {
-        if e.kind() == Some(crate::data::encounters::EncounterKind::Gift3)
-            && !shiny_valid(e.shiny(), pk.is_shiny())
-        {
-            report.flag(CheckId::Fateful);
-        }
+    if let Some(e) = gift3.filter(|_| !gift3_egg)
+        && e.kind() == Some(crate::data::encounters::EncounterKind::Gift3)
+        && !shiny_valid(e.shiny(), pk.is_shiny())
+    {
+        report.flag(CheckId::Fateful);
     }
     if let Some((g, t)) = &gift {
         // PIDVerifier: Shiny rule, then the fixed PID.
@@ -1381,11 +1380,7 @@ fn verify_common_inner(
                     let it = pk.held_item();
                     let expect = if (298..=313).contains(&it) || it == 644 {
                         let f = PLATES.iter().position(|&p| p == it).map_or(0, |i| i + 1) as u8;
-                        if f < 9 {
-                            f
-                        } else {
-                            f + 1
-                        }
+                        if f < 9 { f } else { f + 1 }
                     } else {
                         0
                     };
@@ -1406,10 +1401,10 @@ fn verify_common_inner(
         report.flag(CheckId::Ball);
     }
     // BallVerifier: gifts have a fixed ball (Ranger Manaphy: Poké Ball).
-    if let Some((_, t)) = &gift {
-        if pk.ball() != t.ball() {
-            report.flag(CheckId::Ball);
-        }
+    if let Some((_, t)) = &gift
+        && pk.ball() != t.ball()
+    {
+        report.flag(CheckId::Ball);
     }
     if ranger && pk.ball() != 4 {
         report.flag(CheckId::Ball);
@@ -1600,12 +1595,14 @@ fn verify_common_inner(
     }
 
     // NicknameVerifier: a gift that came un-nicknamed cannot be nicknamed.
-    if let Some((g, t)) = &gift {
-        if !g.is_egg() && pk.is_nicknamed() && !t.is_nicknamed() {
-            report.flag(CheckId::Nickname);
-        }
-        // (TrashByteVerifier.VerifyTrashBytesPCD only runs for format 7+.)
+    if let Some((g, t)) = &gift
+        && !g.is_egg()
+        && pk.is_nicknamed()
+        && !t.is_nicknamed()
+    {
+        report.flag(CheckId::Nickname);
     }
+    // (TrashByteVerifier.VerifyTrashBytesPCD only runs for format 7+.)
 
     // RibbonVerifier (event ribbons only as the gift had them).
     let raw = pk.decrypted();

@@ -3,10 +3,10 @@
 //! `PCJPFifthAnniversary`, for a Pokémon in the Gen 4 format.
 
 use super::evo::EvoCriteria;
-use crate::data::encounters::{flag, Encounter, EncounterData, EncounterKind, Template};
+use crate::data::encounters::{Encounter, EncounterData, EncounterKind, Template, flag};
 use crate::pkm::Pkm;
 use crate::rng::finder::{PidIv, PidType};
-use crate::rng::lcrng::{next16, next_n, prev_seed};
+use crate::rng::lcrng::{next_n, next16, prev_seed};
 use crate::rng::xdrng;
 
 const UNSPECIFIED_ID: u16 = 0xFFFF;
@@ -82,14 +82,14 @@ fn gift3_exact(
         {
             return false;
         }
-        if let Some((_, name)) = ed.trade_names(e, 0) {
-            if !name.is_empty() {
-                let mut buf = [0u16; 8];
-                let n = ot_text(pk, &mut buf);
-                let same = name.len() == n && name.iter().zip(buf.iter()).all(|(a, b)| a == *b);
-                if !same {
-                    return false;
-                }
+        if let Some((_, name)) = ed.trade_names(e, 0)
+            && !name.is_empty()
+        {
+            let mut buf = [0u16; 8];
+            let n = ot_text(pk, &mut buf);
+            let same = name.len() == n && name.iter().zip(buf.iter()).all(|(a, b)| a == *b);
+            if !same {
+                return false;
             }
         }
     }

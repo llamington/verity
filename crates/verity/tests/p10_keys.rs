@@ -2,8 +2,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use verity::memlink::keys::{enable_all, read, receivable, receive, KeyState, KEY_CITY, KEY_COUNT};
 use verity::memlink::MemLinkError;
+use verity::memlink::keys::{KEY_CITY, KEY_COUNT, KeyState, enable_all, read, receivable, receive};
 use verity::save::Save;
 
 const KEY_INFO: usize = 0x25800 + 0x28;

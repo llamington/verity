@@ -3,7 +3,7 @@
 //! `Sources/LearnSource4HGSS.cs`, `LearnSource4Pt.cs`, `LearnSource4DP.cs`.
 
 use super::evo::EvoCriteria;
-use crate::data::{move_table as mt, GameData, MoveData};
+use crate::data::{GameData, MoveData, move_table as mt};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveResult {
@@ -116,20 +116,20 @@ impl<'a> Learn4<'a> {
             machine,
             tutors,
         } = src;
-        if level_up {
-            if let Some(level) = self.level_learn(g, evo.species, evo.form, mv) {
-                if level <= evo.level_max {
-                    return Some(MoveResult::LevelUp { level });
-                }
-            }
+        if level_up
+            && let Some(level) = self.level_learn(g, evo.species, evo.form, mv)
+            && level <= evo.level_max
+        {
+            return Some(MoveResult::LevelUp { level });
         }
         let pd = self.data(pi_game);
         let pi = pd.species_form(evo.species, evo.form);
         if machine {
-            if let Some(i) = self.list_index(mt::G4_TM, mv) {
-                if i < 92 && pi.tmhm(i) {
-                    return Some(MoveResult::Machine);
-                }
+            if let Some(i) = self.list_index(mt::G4_TM, mv)
+                && i < 92
+                && pi.tmhm(i)
+            {
+                return Some(MoveResult::Machine);
             }
             let hm = match g {
                 Game::Hgss => self
@@ -162,10 +162,10 @@ impl<'a> Learn4<'a> {
             if type_tutor {
                 return Some(MoveResult::Tutor);
             }
-            if let Some(i) = self.list_index(mt::G4_TUTOR, mv) {
-                if pd.type_tutor(pd.form_index(evo.species, evo.form), i) {
-                    return Some(MoveResult::Tutor);
-                }
+            if let Some(i) = self.list_index(mt::G4_TUTOR, mv)
+                && pd.type_tutor(pd.form_index(evo.species, evo.form), i)
+            {
+                return Some(MoveResult::Tutor);
             }
             if g != Game::Dp && evo.species == ROTOM {
                 let form = match mv {

@@ -11,7 +11,7 @@ exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Bailey Lissington <lissington4@gmail.com>"]
 license = "GPL-3.0-only"
 repository = "https://github.com/llamington/verity"
@@ -21,3 +21,8 @@ opt-level = 2
 lto = true
 codegen-units = 1
 panic = "abort"
+
+# Every crate forbids unsafe code except verity-ffi (the DS front end's C ABI), which sets its
+# own lints: each unsafe operation in its own block, with a SAFETY comment.
+[workspace.lints.rust]
+unsafe_code = "forbid"

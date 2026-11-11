@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use crate::icons::TILES;
 use crate::narc::Narc;
 use crate::nds::{FileRange, Game, Rom};
-use crate::{u16_at, Error, Result, Source};
+use crate::{Error, Result, Source, u16_at};
 
 const NCGR_DATA: usize = 0x30;
 const NONE: u16 = 0xFFFF;

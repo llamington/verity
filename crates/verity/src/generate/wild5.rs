@@ -3,11 +3,11 @@
 //! rules can be built directly; the two links left are gender (the low byte) and a parity check
 //! that ties the PID's top and bottom bits to the trainer IDs.
 
-use super::build4::{encounter_moves, safe_language, Trainer4};
+use super::build4::{Trainer4, encounter_moves, safe_language};
 use super::wild4::Rand;
 use crate::data::encounters::Encounter;
 use crate::legality::analysis4::Matched;
-use crate::legality::analysis5::{analyze5, Context5};
+use crate::legality::analysis5::{Context5, analyze5};
 use crate::pkm::derived::{exp_for_level, gender_from_pid};
 use crate::pkm::{Format, Pkm};
 

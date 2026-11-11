@@ -6,7 +6,7 @@ use super::wild4::Generated;
 use crate::data::encounters::Encounter;
 use crate::data::{GameData, MoveData, Strings};
 use crate::pkm::{Format, Pkm, SIZE_4STORED};
-use crate::text::{encode4, Clear};
+use crate::text::{Clear, encode4};
 
 /// The trainer receiving the Pokémon (the save's player).
 #[derive(Clone, Copy, Debug)]

@@ -143,7 +143,7 @@ impl<'a> Gifts5<'a> {
         Self { recs: &[] }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Pgf<'a>> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = Pgf<'a>> + 'a + use<'a> {
         self.recs
             .as_chunks::<PGF_SIZE>()
             .0

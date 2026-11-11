@@ -7,7 +7,7 @@
 //! `p11_place check <placed.sav> <after.sav> <box> <pid>` checks the save the game wrote.
 use std::fs;
 
-use verity::save::{Save, SaveKind, Slot, BOX_SLOTS};
+use verity::save::{BOX_SLOTS, Save, SaveKind, Slot};
 
 const GEN5_POSITION: usize = 0x19500;
 

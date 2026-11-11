@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use serde_json::Value;
-use verity::gift::inject4::{available, check, inject, Refusal};
+use verity::gift::inject4::{Refusal, available, check, inject};
 use verity::gift::pcd::{Gift4, Gifts4, RANGER_INDEX};
 use verity::save::{Save, SaveKind};
 

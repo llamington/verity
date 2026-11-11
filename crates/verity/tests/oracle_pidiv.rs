@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 use verity::data::GameData;
 use verity::pkm::{Format, Pkm};
-use verity::rng::finder::{analyze, AnalyzeInput};
+use verity::rng::finder::{AnalyzeInput, analyze};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

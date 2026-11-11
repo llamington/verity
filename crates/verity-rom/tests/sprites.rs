@@ -72,7 +72,7 @@ fn px(s: &[u8; SPRITE_BYTES], x: usize, y: usize) -> u8 {
 
 #[test]
 fn sprites_from_roms() {
-    for (name, gen, min) in [
+    for (name, generation, min) in [
         ("platinum.nds", 4u8, 560usize),
         ("heartgold.nds", 4, 560),
         ("white.nds", 5, 700),
@@ -95,7 +95,7 @@ fn sprites_from_roms() {
         let footer = &cache[cache.len() - FOOTER..];
         let start = CachedSprites::tail_start(footer, cache.len() as u32).unwrap();
         let c = CachedSprites::parse(&cache[start as usize..], start).unwrap();
-        assert_eq!(c.generation, gen);
+        assert_eq!(c.generation, generation);
         assert!(
             c.icon(0, 9).is_some() && c.icon(1, 2).is_some(),
             "{name} icons"
@@ -113,7 +113,7 @@ fn sprites_from_roms() {
             k(487, 1, false, false),
             k(0, 0, false, true),
             k(490, 0, false, true),
-            k(if gen == 5 { 555 } else { 172 }, 1, false, false),
+            k(if generation == 5 { 555 } else { 172 }, 1, false, false),
         ];
         let (w, h) = (96 * keys.len(), 96 * 2 + 40);
         let mut img = vec![200u8; w * h * 3];

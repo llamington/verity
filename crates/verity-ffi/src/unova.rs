@@ -3,9 +3,9 @@
 
 use core::slice;
 
-use verity::memlink::keys::{enable_all, missing, read, receivable, receive, KEY_COUNT};
-use verity::memlink::{apply, build, preview, MemLinkError, Seeds};
-use verity::save::{detect, SaveKind};
+use verity::memlink::keys::{KEY_COUNT, enable_all, missing, read, receivable, receive};
+use verity::memlink::{MemLinkError, Seeds, apply, build, preview};
+use verity::save::{SaveKind, detect};
 
 const RAW_SAVE_LEN: usize = 0x80000;
 
@@ -84,7 +84,7 @@ fn plan(save: &[u8], other: &[u8], replace: bool) -> VerityUnovaPreview {
 ///
 /// # Safety
 /// `buf` and `other` must be valid for their lengths, and `out` for one write.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_unova_preview(
     buf: *const u8,
     len: usize,
@@ -93,12 +93,15 @@ pub unsafe extern "C" fn verity_unova_preview(
     replace: bool,
     out: *mut VerityUnovaPreview,
 ) {
+    // SAFETY: `buf` and `other` are valid for `len` and `other_len` bytes, and `out` for one
+    // write (this function's contract).
     let (save, other) = unsafe {
         (
             slice::from_raw_parts(buf, len),
             slice::from_raw_parts(other, other_len),
         )
     };
+    // SAFETY: `out` is valid for one write (this function's contract).
     unsafe { *out = plan(save, other, replace) };
 }
 
@@ -106,8 +109,9 @@ pub unsafe extern "C" fn verity_unova_preview(
 /// for the game's frame counter. The save is not finalised.
 ///
 /// # Safety
-/// `buf` and `other` must be valid for their lengths.
-#[no_mangle]
+/// `buf` must be valid for `len` writable bytes and `other` for `other_len` bytes, and the two
+/// must not overlap.
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_unova_apply(
     buf: *mut u8,
     len: usize,
@@ -116,6 +120,8 @@ pub unsafe extern "C" fn verity_unova_apply(
     replace: bool,
     seed: u32,
 ) -> u8 {
+    // SAFETY: `buf` is valid for `len` writable bytes and `other` for `other_len` bytes, and they
+    // don't overlap (this function's contract).
     let (save, other) = unsafe {
         (
             slice::from_raw_parts_mut(buf, len),
@@ -143,12 +149,13 @@ pub unsafe extern "C" fn verity_unova_apply(
 ///
 /// # Safety
 /// `buf` must be valid for `len` bytes, and `out` for one write.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_unova_enable_preview(
     buf: *const u8,
     len: usize,
     out: *mut VerityUnovaPreview,
 ) {
+    // SAFETY: `buf` is valid for `len` bytes (this function's contract).
     let save = unsafe { slice::from_raw_parts(buf, len) };
     let mut plan = VerityUnovaPreview {
         mode: MODE_ENABLE_ALL,
@@ -164,6 +171,7 @@ pub unsafe extern "C" fn verity_unova_enable_preview(
         }
         Err(e) => plan.status = status_of(e),
     }
+    // SAFETY: `out` is valid for one write (this function's contract).
     unsafe { *out = plan };
 }
 
@@ -172,8 +180,9 @@ pub unsafe extern "C" fn verity_unova_enable_preview(
 ///
 /// # Safety
 /// `buf` must be valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_unova_enable_all(buf: *mut u8, len: usize) -> u8 {
+    // SAFETY: `buf` is valid for `len` writable bytes (this function's contract).
     let save = unsafe { slice::from_raw_parts_mut(buf, len) };
     match enable_all(save) {
         Ok(new) if !new.contains(&true) => STATUS_NO_NEW_KEYS,
@@ -183,7 +192,7 @@ pub unsafe extern "C" fn verity_unova_enable_all(buf: *mut u8, len: usize) -> u8
 }
 
 /// Text for a status from `verity_unova_preview` or `verity_unova_apply`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn verity_unova_status_text(status: u8) -> *const u8 {
     let text: &[u8] = match status {
         STATUS_OK => b"Ready\0",

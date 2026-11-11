@@ -2,7 +2,7 @@
 //! `Legality/RNG/ClassicEra/Gen4/SolaceonRuins4.cs` and `MethodFinder.GetLCRNGMethod1Match`.
 
 use super::lcrng::{advance_seed, next15};
-use super::reversal::{seeds, MAX_SEEDS_PID};
+use super::reversal::{MAX_SEEDS_PID, seeds};
 
 /// Met location of the Solaceon Ruins.
 pub const SOLACEON_RUINS: u16 = 53;

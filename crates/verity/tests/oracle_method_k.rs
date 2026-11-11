@@ -3,10 +3,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use serde_json::Value;
-use verity::data::encounters::EncounterData;
 use verity::data::GameData;
+use verity::data::encounters::EncounterData;
 use verity::pkm::{Format, Pkm};
-use verity::rng::finder::{analyze, AnalyzeInput};
+use verity::rng::finder::{AnalyzeInput, analyze};
 use verity::rng::method_j::Slot4;
 use verity::rng::method_k::lead_info4_hgss;
 

@@ -5,7 +5,7 @@
 //! each came from, and an order no sequence of those steps produces is illegal.
 
 use super::moves4::Learn4;
-use crate::data::{move_table as mt, GameData};
+use crate::data::{GameData, move_table as mt};
 
 // PKHeX `EggSource34`.
 const BASE: u8 = 1;

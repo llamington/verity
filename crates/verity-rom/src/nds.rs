@@ -3,7 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::{u16_at, u32_at, Error, Result, Source};
+use crate::{Error, Result, Source, u16_at, u32_at};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Game {

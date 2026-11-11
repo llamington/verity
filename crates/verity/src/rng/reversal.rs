@@ -1,7 +1,7 @@
 //! Seed recovery from LCRNG outputs. Ported from PKHeX
 //! `Legality/RNG/Algorithms/LCRNGReversal.cs` and `LCRNGReversalSkip.cs`.
 
-use super::lcrng::{next_n, next_seed, prev_seed, LCRNG_MULT};
+use super::lcrng::{LCRNG_MULT, next_n, next_seed, prev_seed};
 
 const MOD: u32 = 0x67D3;
 const PAT: u32 = 0xD3E;

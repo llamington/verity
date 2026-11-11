@@ -2,9 +2,9 @@
 //! picks the right analysis for a Pokémon, or says why it can't be judged. Shared by the DS
 //! (`verity-ffi`) and the browser (`verity-wasm`).
 
-use super::analysis3::{is_gba_version, Context3};
-use super::analysis4::{analyze4, analyze_transfer4, Context4, Matched, Report};
-use super::analysis5::{analyze5, is_gen5_version, Context5};
+use super::analysis3::{Context3, is_gba_version};
+use super::analysis4::{Context4, Matched, Report, analyze_transfer4, analyze4};
+use super::analysis5::{Context5, analyze5, is_gen5_version};
 use super::{evo::Evo4, moves4::Learn4};
 use crate::data::encounters::EncounterData;
 use crate::data::{GameData, MoveData, Strings};

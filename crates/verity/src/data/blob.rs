@@ -150,7 +150,7 @@ impl<'a> U16s<'a> {
         Some(u16::from_le_bytes([b[0], b[1]]))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = u16> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = u16> + 'a + use<'a> {
         let d = self.0;
         d.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c))
     }

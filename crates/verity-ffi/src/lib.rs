@@ -28,12 +28,14 @@ pub(crate) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// # Safety
 ///
 /// If `data` is non-null, it must point to a readable memory region of at least `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_crc16_ccitt(data: *const u8, len: usize) -> u16 {
     if data.is_null() {
         return if len == 0 { 0xFFFF } else { 0 };
     }
-    let slice = slice::from_raw_parts(data, len);
+    // SAFETY: `data` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
+    let slice = unsafe { slice::from_raw_parts(data, len) };
     verity::crc16_ccitt(slice)
 }
 
@@ -74,7 +76,7 @@ pub struct VeritySaveInfo {
 /// # Safety
 ///
 /// `buf` must point to `len` writable bytes and `out` to a writable `VeritySaveInfo`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_save_probe(
     buf: *mut u8,
     len: usize,
@@ -83,10 +85,14 @@ pub unsafe extern "C" fn verity_save_probe(
     if buf.is_null() || out.is_null() {
         return VerityErr::NullPointer;
     }
-    let data = slice::from_raw_parts_mut(buf, len);
+    // SAFETY: `buf` is non-null (checked above) and valid for `len` writable elements (this
+    // function's contract).
+    let data = unsafe { slice::from_raw_parts_mut(buf, len) };
     match probe(data) {
         Some(info) => {
-            *out = info;
+            // SAFETY: `out` is non-null (checked above) and points to a writable value (this
+            // function's contract).
+            unsafe { *out = info };
             VerityErr::Ok
         }
         None => VerityErr::Unrecognized,
@@ -130,7 +136,7 @@ fn probe(data: &mut [u8]) -> Option<VeritySaveInfo> {
 mod allocator {
     use core::alloc::{GlobalAlloc, Layout};
 
-    extern "C" {
+    unsafe extern "C" {
         fn malloc(size: usize) -> *mut u8;
         fn memalign(align: usize, size: usize) -> *mut u8;
         fn free(ptr: *mut u8);
@@ -138,17 +144,25 @@ mod allocator {
 
     struct PicolibcAllocator;
 
+    // SAFETY: picolibc's allocator returns blocks of at least the requested size with 8-byte
+    // alignment from `malloc` (and the requested alignment from `memalign`), or null on failure;
+    // `free` takes exactly the pointers they returned. That is the `GlobalAlloc` contract.
     unsafe impl GlobalAlloc for PicolibcAllocator {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             if layout.align() <= 8 {
-                malloc(layout.size())
+                // SAFETY: plain C call; any size is accepted (null on failure).
+                unsafe { malloc(layout.size()) }
             } else {
-                memalign(layout.align(), layout.size())
+                // SAFETY: `layout.align()` is a power of two (a `Layout` invariant), as
+                // `memalign` requires.
+                unsafe { memalign(layout.align(), layout.size()) }
             }
         }
 
         unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-            free(ptr)
+            // SAFETY: `GlobalAlloc::dealloc`'s contract: `ptr` came from `alloc` above, so from
+            // picolibc's `malloc` or `memalign`, and is freed once.
+            unsafe { free(ptr) }
         }
     }
 
@@ -160,15 +174,17 @@ mod allocator {
 #[cfg(all(not(feature = "std"), not(test)))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    extern "C" {
-        fn verity_on_panic() -> !;
+    unsafe extern "C" {
+        /// The DS front end's handler: shows the panic screen and halts. Takes no arguments
+        /// and has no preconditions.
+        safe fn verity_on_panic() -> !;
     }
-    unsafe {
-        verity_on_panic();
-    }
+    verity_on_panic()
 }
 
 #[cfg(test)]
+// Tests call the C ABI with buffers they own and keep alive for the call.
+#[allow(clippy::undocumented_unsafe_blocks)]
 mod tests {
     use super::*;
 

@@ -19,3 +19,6 @@ tsify = { version = "0.5", default-features = false, features = ["js"] }
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-Oz"]
+
+[lints]
+workspace = true

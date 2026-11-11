@@ -15,7 +15,7 @@
 
 use alloc::vec::Vec;
 
-use crate::{u16_at, u32_at, Error, Result};
+use crate::{Error, Result, u16_at, u32_at};
 
 /// Line break, control code start and end of a line, per generation.
 pub struct Codes {

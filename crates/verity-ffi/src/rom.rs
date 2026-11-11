@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 use core::slice;
 
-use verity::text::{value_to_char_g4, TERMINATOR};
+use verity::text::{TERMINATOR, value_to_char_g4};
 use verity_rom::font::{self, CachedFont, Keys};
 use verity_rom::icons::{self, CachedIcons, IconKey};
 use verity_rom::items::{self, CachedItems};
@@ -74,11 +74,13 @@ pub fn build_font_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error>
 /// # Safety
 ///
 /// `code` is null or points to 4 readable bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_font_rank(code: *const u8) -> u8 {
     if code.is_null() {
         return 0;
     }
+    // SAFETY: `code` is non-null (checked above) and valid for `4` elements (this function's
+    // contract).
     let c = unsafe { slice::from_raw_parts(code, 4) };
     font_rank([c[0], c[1], c[2], c[3]])
 }
@@ -89,7 +91,7 @@ pub unsafe extern "C" fn verity_rom_font_rank(code: *const u8) -> u8 {
 /// # Safety
 ///
 /// `read` must be safe to call with `ctx` for the whole call; `out_len` must be writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_font_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -104,6 +106,8 @@ pub unsafe extern "C" fn verity_rom_build_font_cache(
     match build_font_cache(Callback { read, ctx }) {
         Ok(v) => {
             let b = v.into_boxed_slice();
+            // SAFETY: `out_len` is non-null (checked above) and points to a writable value (this
+            // function's contract).
             unsafe { *out_len = b.len() };
             alloc::boxed::Box::into_raw(b) as *mut u8
         }
@@ -116,9 +120,11 @@ pub unsafe extern "C" fn verity_rom_build_font_cache(
 /// # Safety
 ///
 /// `p` and `len` come from one `verity_rom_build_font_cache` call and are freed once.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_free(p: *mut u8, len: usize) {
     if !p.is_null() {
+        // SAFETY: `p` and `len` describe a boxed slice from one cache build, freed only here and
+        // only once (this function's contract).
         drop(unsafe { alloc::boxed::Box::from_raw(core::ptr::slice_from_raw_parts_mut(p, len)) });
     }
 }
@@ -137,7 +143,7 @@ pub fn build_icon_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error>
 /// # Safety
 ///
 /// As for `verity_rom_build_font_cache`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_icon_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -152,6 +158,8 @@ pub unsafe extern "C" fn verity_rom_build_icon_cache(
     match build_icon_cache(Callback { read, ctx }) {
         Ok(v) => {
             let b = v.into_boxed_slice();
+            // SAFETY: `out_len` is non-null (checked above) and points to a writable value (this
+            // function's contract).
             unsafe { *out_len = b.len() };
             alloc::boxed::Box::into_raw(b) as *mut u8
         }
@@ -165,19 +173,24 @@ pub unsafe extern "C" fn verity_rom_build_icon_cache(
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_icons_head_len(p: *const u8, len: usize) -> usize {
     if p.is_null() {
         return 0;
     }
+    // SAFETY: `p` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     CachedIcons::head_len(unsafe { slice::from_raw_parts(p, len) }).unwrap_or(0)
 }
 
-fn cached_icons(p: *const u8, len: usize) -> Option<CachedIcons<'static>> {
+/// # Safety
+///
+/// `p` must be null or valid for `len` bytes, unchanged while the parsed icons are in use.
+unsafe fn cached_icons(p: *const u8, len: usize) -> Option<CachedIcons<'static>> {
     if p.is_null() {
         return None;
     }
-    // SAFETY: callers vouch that `p` is valid for `len` bytes while the icons are in use.
+    // SAFETY: `p` is non-null and valid for `len` bytes (this function's contract).
     CachedIcons::parse(unsafe { slice::from_raw_parts(p, len) }).ok()
 }
 
@@ -186,19 +199,22 @@ fn cached_icons(p: *const u8, len: usize) -> Option<CachedIcons<'static>> {
 /// # Safety
 ///
 /// `head` is null or valid for `len` bytes; `out` is null or has room for 16 `u16`s.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_icons_palette(
     head: *const u8,
     len: usize,
     index: u8,
     out: *mut u16,
 ) -> bool {
-    let Some(pal) = cached_icons(head, len).and_then(|c| c.palette(index)) else {
+    // SAFETY: `head` is null or valid for `len` bytes (this function's contract).
+    let Some(pal) = unsafe { cached_icons(head, len) }.and_then(|c| c.palette(index)) else {
         return false;
     };
     if out.is_null() {
         return false;
     }
+    // SAFETY: `out` is non-null (checked above) and has room for 16 `u16`s (this function's
+    // contract); `pal` is a separate `[u16; 16]`.
     unsafe { core::ptr::copy_nonoverlapping(pal.as_ptr(), out, 16) };
     true
 }
@@ -208,9 +224,10 @@ pub unsafe extern "C" fn verity_icons_palette(
 /// # Safety
 ///
 /// `head` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_icons_palette_count(head: *const u8, len: usize) -> u8 {
-    cached_icons(head, len).map_or(0, |c| c.palette_count)
+    // SAFETY: `head` is null or valid for `len` bytes (this function's contract).
+    (unsafe { cached_icons(head, len) }).map_or(0, |c| c.palette_count)
 }
 
 /// C ABI: the icon of a Pokémon (`female` and `egg` 0/1). Writes its palette and the file offset of
@@ -219,7 +236,7 @@ pub unsafe extern "C" fn verity_icons_palette_count(head: *const u8, len: usize)
 /// # Safety
 ///
 /// `head` is null or valid for `len` bytes; `palette` and `tiles_at` are null or writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_icons_find(
     head: *const u8,
     len: usize,
@@ -239,9 +256,12 @@ pub unsafe extern "C" fn verity_icons_find(
         female: female != 0,
         egg: egg != 0,
     };
-    let Some(r) = cached_icons(head, len).and_then(|c| c.find(key)) else {
+    // SAFETY: `head` is null or valid for `len` bytes (this function's contract).
+    let Some(r) = unsafe { cached_icons(head, len) }.and_then(|c| c.find(key)) else {
         return false;
     };
+    // SAFETY: `palette` and `tiles_at` are non-null (checked above) and writable (this
+    // function's contract).
     unsafe {
         *palette = r.palette;
         *tiles_at = r.tiles_at;
@@ -261,7 +281,7 @@ pub fn build_ribbon_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Erro
 /// # Safety
 ///
 /// As for `verity_rom_build_font_cache`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_ribbon_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -276,6 +296,8 @@ pub unsafe extern "C" fn verity_rom_build_ribbon_cache(
     match build_ribbon_cache(Callback { read, ctx }) {
         Ok(v) => {
             let b = v.into_boxed_slice();
+            // SAFETY: `out_len` is non-null (checked above) and points to a writable value (this
+            // function's contract).
             unsafe { *out_len = b.len() };
             alloc::boxed::Box::into_raw(b) as *mut u8
         }
@@ -288,8 +310,10 @@ pub unsafe extern "C" fn verity_rom_build_ribbon_cache(
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_ribbons_check(p: *const u8, len: usize) -> bool {
+    // SAFETY: `p` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     !p.is_null() && CachedRibbons::parse(unsafe { slice::from_raw_parts(p, len) }).is_ok()
 }
 
@@ -299,8 +323,9 @@ pub unsafe extern "C" fn verity_ribbons_check(p: *const u8, len: usize) -> bool 
 ///
 /// # Safety
 ///
-/// `cache` is null or valid for `len` bytes; `tiles` and `colors` are null or have room.
-#[no_mangle]
+/// `cache` is null or valid for `len` bytes; `tiles` is null or writable for 512 bytes and
+/// `colors` for 16 `u16`s.
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_ribbon_icon(
     cache: *const u8,
     len: usize,
@@ -311,10 +336,15 @@ pub unsafe extern "C" fn verity_ribbon_icon(
     if cache.is_null() || tiles.is_null() || colors.is_null() {
         return false;
     }
+    // SAFETY: `cache` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     let c = CachedRibbons::parse(unsafe { slice::from_raw_parts(cache, len) }).ok();
     let Some((t, pal)) = c.and_then(|c| c.icon(usize::from(index))) else {
         return false;
     };
+    // SAFETY: `tiles` and `colors` are non-null (checked above) with room for 512 bytes and 16
+    // `u16`s (this function's contract); `t` is one 512-byte tile block of the cache and `pal` a
+    // local array, so neither overlaps the output.
     unsafe {
         core::ptr::copy_nonoverlapping(t.as_ptr(), tiles, t.len());
         core::ptr::copy_nonoverlapping(pal.as_ptr(), colors, 16);
@@ -332,7 +362,7 @@ pub type WriteFn = unsafe extern "C" fn(ctx: *mut c_void, buf: *const u8, len: u
 /// # Safety
 ///
 /// As for `verity_rom_build_font_cache`; `write` is called with `wctx`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_sprite_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -364,7 +394,7 @@ pub unsafe extern "C" fn verity_rom_build_sprite_cache(
 /// # Safety
 ///
 /// `footer` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_sprites_tail_start(
     footer: *const u8,
     len: usize,
@@ -373,15 +403,24 @@ pub unsafe extern "C" fn verity_sprites_tail_start(
     if footer.is_null() {
         return u32::MAX;
     }
+    // SAFETY: `footer` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     let f = unsafe { slice::from_raw_parts(footer, len) };
     CachedSprites::tail_start(f, file_len).unwrap_or(u32::MAX)
 }
 
-fn cached_sprites(tail: *const u8, len: usize, start: u32) -> Option<CachedSprites<'static>> {
+/// # Safety
+///
+/// `tail` must be null or valid for `len` bytes, unchanged while the parsed sprites are in use.
+unsafe fn cached_sprites(
+    tail: *const u8,
+    len: usize,
+    start: u32,
+) -> Option<CachedSprites<'static>> {
     if tail.is_null() {
         return None;
     }
-    // SAFETY: callers vouch that `tail` is valid for `len` bytes while the sprites are in use.
+    // SAFETY: `tail` is non-null and valid for `len` bytes (this function's contract).
     CachedSprites::parse(unsafe { slice::from_raw_parts(tail, len) }, start).ok()
 }
 
@@ -390,9 +429,10 @@ fn cached_sprites(tail: *const u8, len: usize, start: u32) -> Option<CachedSprit
 /// # Safety
 ///
 /// `tail` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_sprites_generation(tail: *const u8, len: usize, start: u32) -> u8 {
-    cached_sprites(tail, len, start).map_or(0, |c| c.generation)
+    // SAFETY: `tail` is null or valid for `len` bytes (this function's contract).
+    (unsafe { cached_sprites(tail, len, start) }).map_or(0, |c| c.generation)
 }
 
 /// C ABI: where a Pokémon's sprite is in the cache file: 64 palette bytes at `palette_at` (normal
@@ -402,7 +442,7 @@ pub unsafe extern "C" fn verity_sprites_generation(tail: *const u8, len: usize, 
 /// # Safety
 ///
 /// `tail` as for `verity_sprites_generation`; the outputs are null or writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn verity_sprites_find(
     tail: *const u8,
@@ -416,7 +456,8 @@ pub unsafe extern "C" fn verity_sprites_find(
     tiles_at: *mut u32,
     tiles_len: *mut u32,
 ) -> bool {
-    let Some(c) = cached_sprites(tail, len, start) else {
+    // SAFETY: `tail` is null or valid for `len` bytes (this function's contract).
+    let Some(c) = (unsafe { cached_sprites(tail, len, start) }) else {
         return false;
     };
     let Some(r) = c.find(IconKey {
@@ -430,6 +471,8 @@ pub unsafe extern "C" fn verity_sprites_find(
     if palette_at.is_null() || tiles_at.is_null() || tiles_len.is_null() {
         return false;
     }
+    // SAFETY: the three outputs are non-null (checked above) and writable (this function's
+    // contract).
     unsafe {
         *palette_at = r.palette;
         *tiles_at = r.tiles;
@@ -444,13 +487,17 @@ pub unsafe extern "C" fn verity_sprites_find(
 /// # Safety
 ///
 /// `blob` is null or valid for `len` bytes; `out` is null or writable for 4608 bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_sprite_decode(blob: *const u8, len: usize, out: *mut u8) -> bool {
     if blob.is_null() || out.is_null() {
         return false;
     }
+    // SAFETY: `blob` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     match sprites::decode(unsafe { slice::from_raw_parts(blob, len) }) {
         Ok(tiles) => {
+            // SAFETY: `out` is non-null (checked above) and writable for 4608 bytes (this
+            // function's contract); `tiles` is a local `[u8; SPRITE_BYTES]` (4608).
             unsafe { core::ptr::copy_nonoverlapping(tiles.as_ptr(), out, tiles.len()) };
             true
         }
@@ -466,7 +513,7 @@ pub unsafe extern "C" fn verity_sprite_decode(blob: *const u8, len: usize, out: 
 ///
 /// `tail` as for `verity_sprites_generation`; `tiles` is null or writable for 256 bytes and
 /// `colors` for 16 values.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_sprites_icon(
     tail: *const u8,
     len: usize,
@@ -476,13 +523,18 @@ pub unsafe extern "C" fn verity_sprites_icon(
     tiles: *mut u8,
     colors: *mut u16,
 ) -> bool {
-    let Some((t, c)) = cached_sprites(tail, len, start).and_then(|s| s.icon(kind, index.into()))
+    // SAFETY: `tail` is null or valid for `len` bytes (this function's contract).
+    let Some((t, c)) =
+        unsafe { cached_sprites(tail, len, start) }.and_then(|s| s.icon(kind, index.into()))
     else {
         return false;
     };
     if tiles.is_null() || colors.is_null() {
         return false;
     }
+    // SAFETY: `tiles` and `colors` are non-null (checked above) with room for 256 bytes and 16
+    // `u16`s (this function's contract); `t` is a local `[u8; ICON_BYTES]` (256) and `c` a local
+    // `[u16; 16]`.
     unsafe {
         core::ptr::copy_nonoverlapping(t.as_ptr(), tiles, t.len());
         core::ptr::copy_nonoverlapping(c.as_ptr(), colors, c.len());
@@ -502,7 +554,7 @@ pub fn build_items_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error
 /// # Safety
 ///
 /// As for `verity_rom_build_font_cache`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_items_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -517,6 +569,8 @@ pub unsafe extern "C" fn verity_rom_build_items_cache(
     match build_items_cache(Callback { read, ctx }) {
         Ok(v) => {
             let b = v.into_boxed_slice();
+            // SAFETY: `out_len` is non-null (checked above) and points to a writable value (this
+            // function's contract).
             unsafe { *out_len = b.len() };
             alloc::boxed::Box::into_raw(b) as *mut u8
         }
@@ -524,11 +578,14 @@ pub unsafe extern "C" fn verity_rom_build_items_cache(
     }
 }
 
-fn cached_items(p: *const u8, len: usize) -> Option<CachedItems<'static>> {
+/// # Safety
+///
+/// `p` must be null or valid for `len` bytes, unchanged while the parsed items are in use.
+unsafe fn cached_items(p: *const u8, len: usize) -> Option<CachedItems<'static>> {
     if p.is_null() {
         return None;
     }
-    // SAFETY: callers vouch that `p` is valid for `len` bytes while the items are in use.
+    // SAFETY: `p` is non-null and valid for `len` bytes (this function's contract).
     CachedItems::parse(unsafe { slice::from_raw_parts(p, len) }).ok()
 }
 
@@ -538,11 +595,13 @@ fn cached_items(p: *const u8, len: usize) -> Option<CachedItems<'static>> {
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_items_head_len(p: *const u8, len: usize) -> usize {
     if p.is_null() {
         return 0;
     }
+    // SAFETY: `p` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     CachedItems::head_len(unsafe { slice::from_raw_parts(p, len) }).unwrap_or(0)
 }
 
@@ -551,9 +610,10 @@ pub unsafe extern "C" fn verity_items_head_len(p: *const u8, len: usize) -> usiz
 /// # Safety
 ///
 /// `head` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_items_generation(head: *const u8, len: usize) -> u8 {
-    cached_items(head, len).map_or(0, |c| c.generation)
+    // SAFETY: `head` is null or valid for `len` bytes (this function's contract).
+    (unsafe { cached_items(head, len) }).map_or(0, |c| c.generation)
 }
 
 /// C ABI: the icon of held item `item`: file offsets of its 16 colours and 512 tile bytes. False
@@ -562,7 +622,7 @@ pub unsafe extern "C" fn verity_items_generation(head: *const u8, len: usize) ->
 /// # Safety
 ///
 /// `head` is null or valid for `len` bytes; `palette_at` and `tiles_at` are null or writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_items_find(
     head: *const u8,
     len: usize,
@@ -573,9 +633,12 @@ pub unsafe extern "C" fn verity_items_find(
     if palette_at.is_null() || tiles_at.is_null() {
         return false;
     }
-    let Some(r) = cached_items(head, len).and_then(|c| c.find(item)) else {
+    // SAFETY: `head` is null or valid for `len` bytes (this function's contract).
+    let Some(r) = unsafe { cached_items(head, len) }.and_then(|c| c.find(item)) else {
         return false;
     };
+    // SAFETY: `palette_at` and `tiles_at` are non-null (checked above) and writable (this
+    // function's contract).
     unsafe {
         *palette_at = r.palette_at;
         *tiles_at = r.tiles_at;
@@ -610,7 +673,7 @@ pub fn build_moves_cache<S: Source>(src: S) -> Result<alloc::vec::Vec<u8>, Error
 /// # Safety
 ///
 /// `rom_moves` is null or valid for `len` bytes; `out` is null or writable for `cap` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_move_description(
     generation: u8,
     mv: u16,
@@ -622,6 +685,8 @@ pub unsafe extern "C" fn verity_move_description(
     if rom_moves.is_null() || out.is_null() || cap == 0 {
         return false;
     }
+    // SAFETY: `rom_moves` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     let cache = CachedMoves::parse(unsafe { slice::from_raw_parts(rom_moves, len) }).ok();
     let Some(text) = cache
         .filter(|c| c.generation == generation)
@@ -634,6 +699,9 @@ pub unsafe extern "C" fn verity_move_description(
     while !text.is_char_boundary(n) {
         n -= 1;
     }
+    // SAFETY: `out` is non-null and `cap` > 0 (checked above), writable for `cap` bytes (this
+    // function's contract); `n` < `cap`, so the text and its terminator fit, and `text` lives in
+    // the move cache, not in `out`.
     unsafe {
         core::ptr::copy_nonoverlapping(text.as_ptr(), out, n);
         *out.add(n) = 0;
@@ -647,7 +715,7 @@ pub unsafe extern "C" fn verity_move_description(
 /// # Safety
 ///
 /// As for `verity_rom_build_font_cache`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_rom_build_moves_cache(
     read: Option<ReadFn>,
     ctx: *mut c_void,
@@ -662,6 +730,8 @@ pub unsafe extern "C" fn verity_rom_build_moves_cache(
     match build_moves_cache(Callback { read, ctx }) {
         Ok(v) => {
             let b = v.into_boxed_slice();
+            // SAFETY: `out_len` is non-null (checked above) and points to a writable value (this
+            // function's contract).
             unsafe { *out_len = b.len() };
             alloc::boxed::Box::into_raw(b) as *mut u8
         }
@@ -674,11 +744,13 @@ pub unsafe extern "C" fn verity_rom_build_moves_cache(
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_moves_generation(p: *const u8, len: usize) -> u8 {
     if p.is_null() {
         return 0;
     }
+    // SAFETY: `p` is non-null (checked above) and valid for `len` elements (this function's
+    // contract).
     CachedMoves::parse(unsafe { slice::from_raw_parts(p, len) }).map_or(0, |c| c.generation)
 }
 
@@ -701,7 +773,7 @@ pub struct VerityMoveInfo {
 /// # Safety
 ///
 /// `rom_moves` is null or valid for `len` bytes; `out` is writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_move_info(
     generation: u8,
     mv: u16,
@@ -730,6 +802,8 @@ pub unsafe extern "C" fn verity_move_info(
         accuracy: 0,
     };
     if !rom_moves.is_null() {
+        // SAFETY: `rom_moves` is non-null (checked above) and valid for `len` elements (this
+        // function's contract).
         let cache = CachedMoves::parse(unsafe { slice::from_raw_parts(rom_moves, len) }).ok();
         if let Some(m) = cache
             .filter(|c| c.generation == generation)
@@ -741,6 +815,8 @@ pub unsafe extern "C" fn verity_move_info(
             info.accuracy = m.accuracy;
         }
     }
+    // SAFETY: `out` is non-null (checked above) and points to a writable value (this function's
+    // contract).
     unsafe { *out = info };
     true
 }
@@ -756,11 +832,14 @@ pub struct VerityGlyph {
     pub rows: [u16; 16],
 }
 
-fn cached(p: *const u8, len: usize) -> Option<CachedFont<'static>> {
+/// # Safety
+///
+/// `p` must be null or valid for `len` bytes, unchanged while the parsed font are in use.
+unsafe fn cached(p: *const u8, len: usize) -> Option<CachedFont<'static>> {
     if p.is_null() {
         return None;
     }
-    // SAFETY: callers vouch that `p` is valid for `len` bytes while the font is in use.
+    // SAFETY: `p` is non-null and valid for `len` bytes (this function's contract).
     let b = unsafe { slice::from_raw_parts(p, len) };
     CachedFont::parse(b)
         .ok()
@@ -772,9 +851,10 @@ fn cached(p: *const u8, len: usize) -> Option<CachedFont<'static>> {
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_font_check(p: *const u8, len: usize) -> bool {
-    cached(p, len).is_some_and(|f| f.validate().is_ok())
+    // SAFETY: `p` is null or valid for `len` bytes (this function's contract).
+    (unsafe { cached(p, len) }).is_some_and(|f| f.validate().is_ok())
 }
 
 /// C ABI: looks up the glyph for UTF-16 code unit `c`; false if the font has none.
@@ -782,14 +862,15 @@ pub unsafe extern "C" fn verity_font_check(p: *const u8, len: usize) -> bool {
 /// # Safety
 ///
 /// `p` is null or valid for `len` bytes; `out` is null or writable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn verity_font_glyph(
     p: *const u8,
     len: usize,
     c: u16,
     out: *mut VerityGlyph,
 ) -> bool {
-    let (Some(f), false) = (cached(p, len), out.is_null()) else {
+    // SAFETY: `p` is null or valid for `len` bytes (this function's contract).
+    let (Some(f), false) = (unsafe { cached(p, len) }, out.is_null()) else {
         return false;
     };
     let Some(g) = f.glyph(c) else { return false };
@@ -802,6 +883,7 @@ pub unsafe extern "C" fn verity_font_glyph(
         }
     }
     let m = g.metrics;
+    // SAFETY: `out` is non-null (checked above) and writable (this function's contract).
     unsafe {
         *out = VerityGlyph {
             left: m.left,
@@ -815,6 +897,8 @@ pub unsafe extern "C" fn verity_font_glyph(
 }
 
 #[cfg(test)]
+// Tests call the C ABI with buffers they own and keep alive for the call.
+#[allow(clippy::undocumented_unsafe_blocks)]
 mod tests {
     use super::*;
 
@@ -979,7 +1063,7 @@ mod tests {
 
     #[test]
     fn sprite_cache_through_the_c_abi() {
-        for (name, gen) in [("platinum.nds", 4u8), ("black2.nds", 5)] {
+        for (name, generation) in [("platinum.nds", 4u8), ("black2.nds", 5)] {
             let Some(mut rom) = rom(name) else {
                 continue;
             };
@@ -998,7 +1082,7 @@ mod tests {
             let tail = &cache[start as usize..];
             assert_eq!(
                 unsafe { verity_sprites_generation(tail.as_ptr(), tail.len(), start) },
-                gen
+                generation
             );
             let (mut pal, mut at, mut len) = (0, 0, 0);
             // Pikachu, female: falls back to the male's sprite where there's no own one.

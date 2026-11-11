@@ -127,11 +127,7 @@ impl Zukan4 {
         };
         let forms = &mut forms[..n];
         let id = if species == 172 && self.hgss {
-            if form == 1 {
-                2
-            } else {
-                gender
-            }
+            if form == 1 { 2 } else { gender }
         } else {
             form
         };

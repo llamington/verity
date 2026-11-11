@@ -5,7 +5,7 @@
 //! `memlink_flashback <bw.sav|-> <b2w2.sav> <out.sav> <zone> <x> <z>`
 use std::fs;
 
-use verity::memlink::{apply, build, Seeds};
+use verity::memlink::{Seeds, apply, build};
 use verity::save::Save;
 
 const POSITION: usize = 0x19500;

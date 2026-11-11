@@ -5,7 +5,7 @@ use std::os::unix::fs::FileExt;
 use std::path::PathBuf;
 
 use verity_rom::nds::Rom;
-use verity_rom::ribbons::{self, CachedRibbons, COUNT};
+use verity_rom::ribbons::{self, COUNT, CachedRibbons};
 use verity_rom::{Error, Source};
 
 struct F(File);

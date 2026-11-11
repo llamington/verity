@@ -13,9 +13,9 @@ use std::process::Command;
 use serde_json::Value;
 use verity::data::encounters::EncounterData;
 use verity::data::{GameData, MoveData, Strings};
-use verity::gen::api4::{self, EncounterChoice, Error, GenRequest, IvRequest};
-use verity::gen::build4::Trainer4;
-use verity::gen::wild4::{GenError, Lead, Rand};
+use verity::generate::api4::{self, EncounterChoice, Error, GenRequest, IvRequest};
+use verity::generate::build4::Trainer4;
+use verity::generate::wild4::{GenError, Lead, Rand};
 use verity::legality::analysis4::Context4;
 use verity::legality::{evo::Evo4, moves4::Learn4};
 use verity::save::{Save, SaveKind, Slot};
@@ -140,7 +140,7 @@ fn random_request<'a>(ctx: &Context4<'a>, r: &mut Rand) -> GenRequest<'a> {
             1 => IvRequest::Nearest(core::array::from_fn(|_| (r.next_u32() % 32) as u8)),
             _ => IvRequest::Random,
         },
-        ball: (verity::gen::build4::required_ball(&e) == 0 && pick(r, 2)).then(|| {
+        ball: (verity::generate::build4::required_ball(&e) == 0 && pick(r, 2)).then(|| {
             if matches!(version, 7 | 8) && pick(r, 3) {
                 KURT[r.next_u32() as usize % KURT.len()]
             } else {
@@ -206,15 +206,29 @@ fn random_requests(n: usize, seed: u64) -> (usize, usize, Vec<(Error, u32)>) {
                 assert_eq!(pk.is_shiny(), req.shiny);
                 for kind in [SaveKind::DP, SaveKind::Pt, SaveKind::HGSS] {
                     let rules = api4::rules4(ctx, kind).unwrap();
-                    assert_eq!(verity::safety::check_pkm(&rules, pk, false), Ok(()), "{kind:?}");
+                    assert_eq!(
+                        verity::safety::check_pkm(&rules, pk, false),
+                        Ok(()),
+                        "{kind:?}"
+                    );
                 }
                 fs::write(tmp.join(format!("{i:06}.pk4")), &pk.decrypted()[..136]).unwrap();
                 made += 1;
             }
             Err(e @ Error::Illegal(_)) => panic!(
                 "generator produced an illegal mon: {e:?} v{} sp{} f{} lv{:?} nat{:?} g{:?} ab{:?} shiny{} {:?} hp{:?} {:?} ball{:?} any{}",
-                req.version, req.species, req.form, req.level, req.nature, req.gender, req.ability,
-                req.shiny, req.lead, req.hidden_power_type, req.ivs, req.ball,
+                req.version,
+                req.species,
+                req.form,
+                req.level,
+                req.nature,
+                req.gender,
+                req.ability,
+                req.shiny,
+                req.lead,
+                req.hidden_power_type,
+                req.ivs,
+                req.ball,
                 matches!(req.encounter, EncounterChoice::Any)
             ),
             Err(e) => match errors.iter_mut().find(|(k, _)| *k == e) {

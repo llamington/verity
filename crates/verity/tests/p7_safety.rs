@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use verity::data::{GameData, MoveData};
 use verity::pkm::{Format, Pkm};
 use verity::safety::{
-    check_pkm, check_save, checked_set_pkm, PkmIssue, Rules, SaveIssue, WriteError,
+    PkmIssue, Rules, SaveIssue, WriteError, check_pkm, check_save, checked_set_pkm,
 };
 use verity::save::{Save, SaveKind, Slot};
 
@@ -153,10 +153,10 @@ fn real_saves_pass() {
                 ));
             }
         }
-        if let Err(e) = check_save(&r, &save) {
-            if !matches!(e, SaveIssue::Pkm(..)) {
-                bad.push(format!("{}: {e:?}", p.display()));
-            }
+        if let Err(e) = check_save(&r, &save)
+            && !matches!(e, SaveIssue::Pkm(..))
+        {
+            bad.push(format!("{}: {e:?}", p.display()));
         }
     }
     eprintln!("checked {checked} Pokémon");

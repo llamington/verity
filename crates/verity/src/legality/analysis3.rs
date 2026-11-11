@@ -7,20 +7,20 @@
 use alloc::vec::Vec;
 
 use super::analysis4::{
-    inputs_for, invalid_moves3, transfer_evolution_valid, transfer_moves, verify_common_origin3,
-    CheckId, Context4, Inputs, Matched, Origin3, Report,
+    CheckId, Context4, Inputs, Matched, Origin3, Report, inputs_for, invalid_moves3,
+    transfer_evolution_valid, transfer_moves, verify_common_origin3,
 };
 use super::analysis5::Context5;
 use super::enc4::{Deferral, Enc4, MatchPkm, Rating};
 use super::evo::{Evo4, EvoCriteria};
 use super::moves4::MoveResult;
 use super::moves4::{Learn3, Start3};
+use crate::data::GameData;
 use crate::data::blob::BlobError;
 use crate::data::encounters::{Encounter, EncounterData, EncounterKind};
 use crate::data::game_table as gt;
-use crate::data::GameData;
 use crate::pkm::Pkm;
-use crate::rng::finder::{analyze, PidIv, PidType};
+use crate::rng::finder::{PidIv, PidType, analyze};
 use crate::rng::method_h::{self, Bounds, Slot3};
 use crate::rng::method_j::LeadSeed;
 
@@ -197,8 +197,8 @@ enum TypeCheck {
 fn type_check(e: &Enc4, pk: &Pkm, pv: PidIv, mutated: &mut Option<PidType>) -> TypeCheck {
     use PidType::*;
     let kind = pv.kind;
-    if let Enc4::Data(d) = e {
-        if matches!(
+    if let Enc4::Data(d) = e
+        && matches!(
             d.kind(),
             Some(
                 EncounterKind::Gift3
@@ -206,13 +206,13 @@ fn type_check(e: &Enc4, pk: &Pkm, pv: PidIv, mutated: &mut Option<PidType>) -> T
                     | EncounterKind::Gift3JPN
                     | EncounterKind::Gift3Colo
             )
-        ) {
-            return if super::gift3::compatible(d, pk, pv, mutated) {
-                TypeCheck::Match
-            } else {
-                TypeCheck::Mismatch
-            };
-        }
+        )
+    {
+        return if super::gift3::compatible(d, pk, pv, mutated) {
+            TypeCheck::Match
+        } else {
+            TypeCheck::Mismatch
+        };
     }
     let yes = |b: bool| {
         if b {
@@ -642,11 +642,7 @@ fn egg_transfer_ok(pk: &Pkm, f5: bool) -> bool {
 
 /// Where a Gen 3 origin was "met": Pal Park (Gen 4 format) or Poké Transfer (Gen 5 format).
 fn transfer_location(f5: bool) -> u16 {
-    if f5 {
-        30001
-    } else {
-        PAL_PARK
-    }
+    if f5 { 30001 } else { PAL_PARK }
 }
 
 /// `EncounterVerifier.VerifyEncounter` for a Gen 3 origin after leaving Gen 3.

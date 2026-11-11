@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use serde_json::Value;
-use verity::data::{move_table as mt, GameData, MoveData, Strings};
+use verity::data::{GameData, MoveData, Strings, move_table as mt};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -13,8 +13,8 @@ fn exports() -> Option<PathBuf> {
 }
 
 fn evo_for(ex: &std::path::Path, g: &str) -> Value {
-    let gen = if matches!(g, "bw" | "b2w2") { 5 } else { 4 };
-    datagen::load(&ex.join(format!("evolutions{gen}.json")))
+    let generation = if matches!(g, "bw" | "b2w2") { 5 } else { 4 };
+    datagen::load(&ex.join(format!("evolutions{generation}.json")))
 }
 
 fn ints(v: &Value) -> Vec<i64> {
@@ -130,8 +130,8 @@ fn game_blobs_roundtrip() {
 fn move_and_string_blobs_roundtrip() {
     let Some(ex) = exports() else { return };
     let tables = datagen::load(&ex.join("move_tables.json"));
-    for gen in [4, 5] {
-        let j = datagen::load(&ex.join(format!("moves{gen}.json")));
+    for generation in [4, 5] {
+        let j = datagen::load(&ex.join(format!("moves{generation}.json")));
         let bytes = datagen::build_moves(&j, &tables);
         let md = MoveData::load(&bytes).unwrap();
         let moves = j["moves"].as_array().unwrap();
@@ -144,7 +144,7 @@ fn move_and_string_blobs_roundtrip() {
             let got: Vec<i64> = md.list(id).iter().map(i64::from).collect();
             assert_eq!(got, ints(&tables[name]), "{name}");
         };
-        if gen == 4 {
+        if generation == 4 {
             check(mt::G4_TM, "g4_tm");
             check(mt::G4_TUTOR, "g4_tutor_moves");
             check(mt::G4_HM_HGSS, "g4_hm_hgss");

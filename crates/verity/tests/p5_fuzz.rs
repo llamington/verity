@@ -8,9 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use verity::data::encounters::{Encounter, EncounterData};
 use verity::data::GameData;
-use verity::gen::wild4::{generate, Lead, Rand, Request};
+use verity::data::encounters::{Encounter, EncounterData};
+use verity::generate::wild4::{Lead, Rand, Request, generate};
 use verity::pkm::{Format, Pkm};
 use verity::rng::method_j::Slot4;
 
@@ -612,13 +612,13 @@ fn closest_ivs(build: fn(usize, &Path, u64), n: usize, seed: u64) -> (usize, usi
         let same = pk.ivs().map(|v| v as u8);
         // Frames needing an exotic lead (a failed Cute Charm, say) aren't searched, so the
         // Pokémon's own spread isn't always offered back. When it is, nothing should change.
-        if let Ok(kept) = verity::gen::api4::closest_ivs_for(ctx, &pk, same, 30_000) {
-            if kept.distance == 0 {
-                assert_eq!(kept.ivs, same);
-            }
+        if let Ok(kept) = verity::generate::api4::closest_ivs_for(ctx, &pk, same, 30_000)
+            && kept.distance == 0
+        {
+            assert_eq!(kept.ivs, same);
         }
         let target: [u8; 6] = core::array::from_fn(|_| (r.next_u32() % 32) as u8);
-        let Ok(f) = verity::gen::api4::closest_ivs_for(ctx, &pk, target, 30_000) else {
+        let Ok(f) = verity::generate::api4::closest_ivs_for(ctx, &pk, target, 30_000) else {
             refused += 1;
             continue;
         };
@@ -974,8 +974,8 @@ fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
 
 /// Random Gen 5 wild requests: every Pokémon built must be PKHeX-legal.
 fn gen5_wild_legal(n: usize, seed: u64) -> usize {
-    use verity::gen::build4::Trainer4;
-    use verity::gen::wild5::{generate, Request5};
+    use verity::generate::build4::Trainer4;
+    use verity::generate::wild5::{Request5, generate};
     let ctx = Box::leak(Box::new(context5()));
     let tmp = std::env::temp_dir().join(format!("verity-g5w-{}-{seed}", std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
@@ -1559,7 +1559,7 @@ fn p5_parity_corpus() {
 
 /// P6: Pokémon built entirely by verity (generator + builder) are legal per verity and PKHeX.
 fn built_legal(n: usize, seed: u64) -> (usize, usize) {
-    use verity::gen::build4::{build_wild4, BuildData, Trainer4};
+    use verity::generate::build4::{BuildData, Trainer4, build_wild4};
     let ctx = Box::leak(Box::new(context()));
     let ed = ctx.enc_dppt;
     let pt = GameData::load(load("pt.bin")).unwrap();
@@ -1620,8 +1620,8 @@ fn built_legal(n: usize, seed: u64) -> (usize, usize) {
         let g = match generate(&req, &mut r, 50_000, ratio) {
             Ok(g) => g,
             Err(
-                verity::gen::wild4::GenError::MunchlaxTreeUnavailable
-                | verity::gen::wild4::GenError::CuteCharmNeedsGenderedSpecies,
+                verity::generate::wild4::GenError::MunchlaxTreeUnavailable
+                | verity::generate::wild4::GenError::CuteCharmNeedsGenderedSpecies,
             ) => continue,
             Err(err) => panic!("{err:?} for {req:?}"),
         };

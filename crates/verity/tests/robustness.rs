@@ -1,4 +1,4 @@
-use verity::save::{detect, Save, Slot};
+use verity::save::{Save, Slot, detect};
 
 struct Rng(u64);
 impl Rng {
