@@ -1,0 +1,46 @@
+# Weekly dependency update PRs. Minor and patch bumps are grouped into one PR per ecosystem;
+# major bumps get their own PR each. Commit messages follow commitlint: "build(deps): ...".
+# Not covered: tools/pkhex-oracle's PKHeX.Core (NuGet), which is pinned to match ~/src/PKHeX,
+# and rust-toolchain.toml.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      cargo:
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /fuzz # outside the workspace, with its own Cargo.lock
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      fuzz:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: / # the root lockfile covers the web/ workspace
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      npm:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      actions:
+        update-types: [minor, patch]

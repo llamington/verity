@@ -2,6 +2,9 @@
 /** @type {import('@commitlint/types').UserConfig} */
 export default {
 	extends: ['@commitlint/config-conventional'],
+	// Dependabot's headers use our format (.github/dependabot.yml), but its bodies carry release
+	// notes with lines over the length limit.
+	ignores: [(message) => message.includes('Signed-off-by: dependabot[bot]')],
 	rules: {
 		// The repo's parts. A scope is optional; when given it must be one of these.
 		'scope-enum': [
