@@ -1,5 +1,5 @@
 # Weekly dependency update PRs. Minor and patch bumps are grouped into one PR per ecosystem;
-# major bumps get their own PR each. Commit messages follow commitlint: "build(deps): ...".
+# major bumps get their own PR each, except within the npm families below. Commit messages follow commitlint: "build(deps): ...".
 # Not covered: tools/pkhex-oracle's PKHeX.Core (NuGet), which is pinned to match ~/src/PKHeX,
 # and rust-toolchain.toml.
 version: 2
@@ -31,7 +31,23 @@ updates:
       interval: weekly
     commit-message:
       prefix: build(deps)
+    # Packages that release in lockstep share a PR for every update type, majors included, since a
+    # lone bump fails CI. A dependency joins the first group it matches, so these come before "npm".
     groups:
+      storybook:
+        patterns: [storybook, "@storybook/*"]
+      vitest:
+        patterns: [vitest, "@vitest/*"]
+      svelte-vite:
+        patterns: [vite, svelte, "@sveltejs/*"]
+      eslint:
+        patterns: [eslint, "@eslint/*", typescript-eslint]
+      playwright:
+        patterns: [playwright, "@playwright/*"]
+      tailwind:
+        patterns: [tailwindcss, "@tailwindcss/*"]
+      commitlint:
+        patterns: ["@commitlint/*"]
       npm:
         update-types: [minor, patch]
 
