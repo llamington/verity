@@ -1,5 +1,10 @@
 # verity
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
+  <img alt="verity" src="assets/logo/lockup.svg" height="64">
+</picture>
+
 A legality-aware Pokémon generation and save management engine for Gen 4 and Gen 5, featuring a portable `#![no_std]` Rust core (`pkcore`), mathematical RNG inversion, and PKHeX legality checker parity.
 
 Designed to target Nintendo DS homebrew (`.nds`), WebAssembly, and portable embedded targets without I/O or floating point dependencies.
