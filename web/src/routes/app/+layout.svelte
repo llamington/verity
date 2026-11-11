@@ -130,24 +130,34 @@
 					{/if}
 				</div>
 				<dl
-					class="grid grid-cols-2 gap-2 rounded-xl bg-black/20 p-3 text-sm backdrop-blur-sm sm:grid-cols-4"
+					class="grid grid-cols-2 gap-2 rounded-xl bg-black/20 p-3 text-sm backdrop-blur-sm sm:grid-cols-3"
 				>
-					{#each [['ID No.', String(ov.trainer.tid).padStart(5, '0')], ['Money', `$${ov.trainer.money.toLocaleString()}`], ['Badges', String(ov.trainer.badges)], ['Time', ov.trainer.played]] as [k, v] (k)}
+					{#each [['ID No.', String(ov.trainer.tid).padStart(5, '0')], ['Money', `$${ov.trainer.money.toLocaleString()}`], ['Time', ov.trainer.played]] as [k, v] (k)}
 						<div class="flex flex-col">
 							<dt class="text-xs tracking-wide uppercase opacity-75">{k}</dt>
 							<dd class="text-lg font-extrabold tabular-nums">{v}</dd>
 						</div>
 					{/each}
 				</dl>
-				<ul class="flex flex-wrap gap-1.5" aria-label="{ov.trainer.badges} badges">
-					{#each { length: slots }, i (i)}
-						<li
-							class="size-4 rotate-45 rounded-[3px] border-2 {i < ov.trainer.badges
-								? 'border-white bg-gradient-to-br from-amber-200 to-amber-500 shadow-[0_0_6px_rgb(253_230_138/0.8)]'
-								: 'border-white/40 bg-black/20'}"
-						></li>
-					{/each}
-				</ul>
+				<!-- The save stores which badges are earned, but here only how many: the first ones fill. -->
+				<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+					<p class="text-sm">
+						<span class="text-xs tracking-wide uppercase opacity-75">Badges</span>
+						<span class="ml-1 text-lg font-extrabold tabular-nums">{ov.trainer.badges}</span>
+						<span class="opacity-75">/ {slots}</span>
+					</p>
+					<ul class="grid grid-cols-8 gap-1.5 sm:flex" aria-hidden="true">
+						{#each { length: slots }, i (i)}
+							{@const earned = i < ov.trainer.badges}
+							<li
+								title={earned ? 'Badge earned' : 'Badge not earned'}
+								class="size-4 rotate-45 rounded-[3px] border-2 {earned
+									? 'border-white bg-gradient-to-br from-amber-200 to-amber-500 shadow-[0_0_6px_rgb(253_230_138/0.8)]'
+									: 'border-white/40 bg-black/20'}"
+							></li>
+						{/each}
+					</ul>
+				</div>
 			</div>
 		</section>
 
