@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"core": "npm run core:wasm && npm run core:data",
-		"core:wasm": "wasm-pack build ../crates/verity-wasm --target web --release --out-dir ../../web/src/lib/wasm --no-pack",
+		"core:wasm": "node scripts/build-wasm.js",
 		"core:data": "node scripts/copy-data.js",
 		"predev": "npm run core",
 		"prebuild": "npm run core",
