@@ -180,16 +180,16 @@ fn rewrite(
     Ok(())
 }
 
-/// Index among the pouch's items (as listed by [`entries`]) to a packed position, checking the
-/// item isn't locked.
-fn unlocked(save: &Save, pouch: usize, index: usize) -> Result<Entry, Refusal> {
+/// Checks the `index`th item (as listed by [`entries`]) exists and isn't locked. Indexes, not
+/// item ids, pick the item: real saves can hold one item in two slots.
+fn unlocked(save: &Save, pouch: usize, index: usize) -> Result<(), Refusal> {
     let e = entries(save, pouch)?
         .nth(index)
         .ok_or(Refusal::NoSuchSlot)?;
     if e.locked {
         return Err(Refusal::EventItem);
     }
-    Ok(e)
+    Ok(())
 }
 
 /// Adds `count` of `item` to the pouch.
@@ -230,29 +230,25 @@ pub fn set_count(
     count: u16,
 ) -> Result<(), Refusal> {
     let max = max_count(save, pouch)?;
-    let e = unlocked(save, pouch, index)?;
+    unlocked(save, pouch, index)?;
     if count == 0 || count > max {
         return Err(Refusal::Count);
     }
+    // `rewrite` reads the items packed in slot order, so `index` is their position there.
     rewrite(save, game, pouch, |items, n| {
-        let slot = items[..*n]
-            .iter_mut()
-            .find(|s| s.0 == e.item)
-            .ok_or(Refusal::NoSuchSlot)?;
-        slot.1 = count;
+        items[..*n].get_mut(index).ok_or(Refusal::NoSuchSlot)?.1 = count;
         Ok(())
     })
 }
 
 /// Removes the `index`th item in the pouch (as listed by [`entries`]).
 pub fn remove(save: &mut Save, game: &GameData, pouch: usize, index: usize) -> Result<(), Refusal> {
-    let e = unlocked(save, pouch, index)?;
+    unlocked(save, pouch, index)?;
     rewrite(save, game, pouch, |items, n| {
-        let at = items[..*n]
-            .iter()
-            .position(|s| s.0 == e.item)
-            .ok_or(Refusal::NoSuchSlot)?;
-        items.copy_within(at + 1..*n, at);
+        if index >= *n {
+            return Err(Refusal::NoSuchSlot);
+        }
+        items.copy_within(index + 1..*n, index);
         *n -= 1;
         items[*n] = (0, 0);
         Ok(())

@@ -304,3 +304,19 @@ fn event_items_are_locked() {
         }
     });
 }
+
+/// Real saves can hold one item in two slots (the Black corpus save does); edits go by position.
+#[test]
+fn duplicates_are_edited_by_position() {
+    each(|name, save, game| {
+        let p = pouch_of(save, PouchKind::Items);
+        let item = bag::addable(save, game, p).unwrap().next().unwrap();
+        let n = items(save, p).len();
+        save.set_bag_item(p, n, item, 3).unwrap();
+        save.set_bag_item(p, n + 1, item, 4).unwrap();
+        bag::set_count(save, game, p, n + 1, 9).unwrap();
+        assert_eq!(items(save, p)[n..], [(item, 3), (item, 9)], "{name}");
+        bag::remove(save, game, p, n).unwrap();
+        assert_eq!(items(save, p)[n..], [(item, 9)], "{name}");
+    });
+}
