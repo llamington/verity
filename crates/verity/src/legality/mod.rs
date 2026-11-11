@@ -17,3 +17,5 @@ pub mod hatch4;
 pub mod moves4;
 pub mod ranch4;
 pub mod ribbons4;
+#[cfg(feature = "alloc")]
+pub mod verdict;
