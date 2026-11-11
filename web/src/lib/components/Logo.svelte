@@ -18,11 +18,5 @@
 		<img src={mark} alt="" width={size} height={size} />
 	</span>
 {:else}
-	<img
-		src={mark}
-		alt=""
-		width={size}
-		height={size}
-		class="shrink-0 {cls}"
-	/>
+	<img src={mark} alt="" width={size} height={size} class="shrink-0 {cls}" />
 {/if}
