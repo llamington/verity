@@ -28,12 +28,34 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # commitlint reads every commit in the push
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install commitlint (root tooling only)
+        run: npm ci --workspaces=false
+      - name: Conventional commit messages
+        env:
+          FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TO: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # A new branch has no "before": check just its last commit.
+          if [ "$FROM" = 0000000000000000000000000000000000000000 ]; then
+            npx commitlint --last --verbose
+          else
+            npx commitlint --from "$FROM" --to "$TO" --verbose
+          fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
             shared: &shared
               - 'Cargo.toml'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.node-version'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
               - '.cargo/**'
@@ -94,10 +116,10 @@ jobs:
           tool: wasm-pack
       - uses: actions/setup-node@v4
         with:
-          node-version-file: web/.node-version
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: web/package-lock.json
       - run: npm ci
+        working-directory: .
       - run: npm run core
         env:
           VERITY_WASM_DEV: 1

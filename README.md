@@ -13,6 +13,13 @@ Designed to target Nintendo DS homebrew (`.nds`), WebAssembly, and portable embe
 - **`tools/pkhex-oracle/`**: Reference oracle test runner powered by `PKHeX.Core`
 - **`tools/emu-harness/`**: Headless melonDS emulator runner for automated verification
 
+## Development
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org) (`feat(web): …`,
+`fix(core): …`, `docs(handoff): …`; the allowed scopes are in `commitlint.config.js`). Run
+`npm install` once at the repo root: it installs the web app (the `web/` workspace) and turns on
+the commit-msg hook (husky). CI checks every pushed commit too. Node is pinned in `.node-version`.
+
 ## Documentation
 
 See [PLAN.md](PLAN.md) for the implementation plan, architecture specifications, and acceptance milestones.
