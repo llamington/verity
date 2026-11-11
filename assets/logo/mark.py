@@ -32,26 +32,37 @@ assert all(r.replace("G", "R").replace("C", "R") == r.replace("G", "R").replace(
 COLOURS = {"N": "#1F2537", "R": "#E3350D", "C": "#F8F4EA", "G": "#F5B83D"}
 
 
+# Each layer covers the cells of its colour and of every colour drawn over it, so neighbouring
+# colours overlap instead of meeting edge to edge: no background seams at fractional scales.
+LAYERS = [("N", "NRCG"), ("R", "RCG"), ("C", "C"), ("G", "G")]
+
+
 def rects(ox=0, oy=0):
-    """One rect per horizontal run of a colour."""
+    """The mark as one path per colour, painted bottom layer first."""
     out = []
-    for y, row in enumerate(GRID):
-        x = 0
-        while x < 16:
-            c = row[x]
-            end = x
-            while end < 16 and row[end] == c:
-                end += 1
-            if c != ".":
-                out.append(f'<rect x="{x + ox}" y="{y + oy}" width="{end - x}" height="1" fill="{COLOURS[c]}"/>')
-            x = end
+    for colour, cells in LAYERS:
+        d = []
+        for y, row in enumerate(GRID):
+            x = 0
+            while x < 16:
+                end = x
+                while end < 16 and row[end] in cells:
+                    end += 1
+                if end > x:
+                    d.append(f"M{x + ox} {y + oy}h{end - x}v1h{x - end}z")
+                    x = end
+                else:
+                    x += 1
+        out.append(f'<path fill="{COLOURS[colour]}" d="{"".join(d)}"/>')
     return "\n  ".join(out)
 
 
 def svg(w, h, body, title="verity"):
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
-        f'shape-rendering="crispEdges"><title>{title}</title>\n  {body}\n</svg>\n'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}"'
+        # No crispEdges: snapping a 16-pixel grid to a fractional display scale (125%, say)
+        # rounds some columns down and others up, so one side of the outline looks thinner.
+        f'><title>{title}</title>\n  {body}\n</svg>\n'
     )
 
 def wordmark_path(text="verity", weight=700):

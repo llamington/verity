@@ -15,7 +15,7 @@
 		style:width="{Math.round(size * 1.25)}px"
 		style:height="{Math.round(size * 1.25)}px"
 	>
-		<img src={mark} alt="" width={size} height={size} class="[image-rendering:pixelated]" />
+		<img src={mark} alt="" width={size} height={size} />
 	</span>
 {:else}
 	<img
@@ -23,6 +23,6 @@
 		alt=""
 		width={size}
 		height={size}
-		class="shrink-0 [image-rendering:pixelated] {cls}"
+		class="shrink-0 {cls}"
 	/>
 {/if}
