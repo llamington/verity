@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPRITES_BASE, formSuffix, spriteUrls } from './sprites.js';
+import { SPRITES_BASE, formSuffix, itemIconUrl, spriteUrls } from './sprites.js';
 
 const mon = { species: 25, form: 0, female: false, shiny: false, egg: false };
 const pt = `${SPRITES_BASE}/generation-iv/platinum/`;
@@ -41,5 +41,24 @@ describe('formSuffix', () => {
 		expect(formSuffix(479, 2, 4)).toBe('wash');
 		expect(formSuffix(585, 3, 5)).toBe('winter');
 		expect(formSuffix(25, 3, 4)).toBe('');
+	});
+});
+
+describe('itemIconUrl', () => {
+	const file = (n: string) => itemIconUrl(n)?.split('/').pop();
+	it('turns English item names into file names', () => {
+		expect(file('Max Repel')).toBe('max-repel.png');
+		expect(file("King's Rock")).toBe('kings-rock.png');
+		expect(file('Poké Ball')).toBe('poke-ball.png');
+		expect(file('NeverMeltIce')).toBe('never-melt-ice.png');
+		expect(file('BlackGlasses')).toBe('black-glasses.png');
+		expect(file('HP Up')).toBe('hp-up.png');
+		expect(file('X Sp. Def')).toBe('x-sp-def.png');
+	});
+	it('gives TMs and HMs a disc, and nothing for no name', () => {
+		expect(file('TM01')).toBe('tm-normal.png');
+		expect(file('HM 05')).toBe('hm-normal.png');
+		expect(itemIconUrl(undefined)).toBeUndefined();
+		expect(itemIconUrl('???')).toBeUndefined();
 	});
 });

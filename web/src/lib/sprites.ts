@@ -98,3 +98,24 @@ export function spriteUrls(game: string, mon: SpriteMon): string[] {
 	];
 	return [...new Set(urls)];
 }
+
+const ITEMS_BASE = `https://cdn.jsdelivr.net/gh/PokeAPI/sprites@${SPRITES_COMMIT}/sprites/items`;
+
+/**
+ * An item's icon, by its English name ("King's Rock" → kings-rock, Gen 4's "NeverMeltIce" →
+ * never-melt-ice). TMs and HMs share one disc. Other languages' names miss and fall back.
+ */
+export function itemIconUrl(name: string | undefined): string | undefined {
+	if (!name) return undefined;
+	const disc = /^(TM|HM)\s?\d+/i.exec(name);
+	if (disc) return `${ITEMS_BASE}/${(disc[1] ?? 'tm').toLowerCase()}-normal.png`;
+	const slug = name
+		.replace(/([a-z])([A-Z])/g, '$1 $2')
+		.normalize('NFD')
+		.replace(/[̀-ͯ]/g, '')
+		.toLowerCase()
+		.replace(/['’.]/g, '')
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-|-$/g, '');
+	return slug ? `${ITEMS_BASE}/${slug}.png` : undefined;
+}

@@ -67,9 +67,12 @@
 </script>
 
 {#snippet details(p: UnovaPlan)}
-	<div class="flex flex-col gap-2 rounded-lg border p-3" data-testid="unova-plan">
+	<div
+		class="flex flex-col gap-2 rounded-xl border-2 border-l-8 border-l-secondary-foreground/40 bg-card p-4 shadow-sm"
+		data-testid="unova-plan"
+	>
 		<div class="flex flex-wrap items-center gap-2">
-			<span class="font-medium">{TITLES[p.mode] ?? p.mode}</span>
+			<span class="font-pixel text-base font-bold">{TITLES[p.mode] ?? p.mode}</span>
 			{#if p.ready}
 				<Badge variant="outline">Ready</Badge>
 			{:else}
@@ -109,10 +112,16 @@
 		enable every key without a partner.
 	</p>
 
-	<div class="flex flex-col gap-1">
-		<Label for="unova-file">Partner save</Label>
+	<div class="flex flex-col gap-2 rounded-2xl border-2 border-dashed bg-card p-4">
+		<Label for="unova-file" class="font-pixel text-base">Partner save</Label>
 		{#key inputKey}
-			<Input id="unova-file" type="file" accept=".sav,.dsv" onchange={onFile} />
+			<Input
+				id="unova-file"
+				type="file"
+				accept=".sav,.dsv"
+				class="h-auto py-1.5 file:mr-3 file:rounded-full file:bg-secondary file:px-3 file:py-0.5 file:text-secondary-foreground"
+				onchange={onFile}
+			/>
 		{/key}
 	</div>
 	{#if other}

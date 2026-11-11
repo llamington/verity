@@ -44,5 +44,5 @@
 {:else if !gifts}
 	<p class="text-muted-foreground">Loading the gift data…</p>
 {:else}
-	<GiftList {gifts} {deliver} />
+	<GiftList {gifts} game={doc.overview?.game} {deliver} />
 {/if}

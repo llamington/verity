@@ -106,7 +106,7 @@
 {#if doc.overview && box}
 	{@const ov = doc.overview}
 	<section class="flex flex-col gap-2">
-		<h2 class="font-medium">Party</h2>
+		<h2 class="font-pixel text-lg font-bold">Party</h2>
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6" data-testid="party">
 			{#each ov.party as mon, i (i)}
 				<MonTile {mon} game={ov.game} onselect={() => select(-1, i)} />
@@ -117,27 +117,38 @@
 		</div>
 	</section>
 
-	<section class="flex flex-col gap-2">
-		<div class="flex items-center justify-between gap-2">
+	<section
+		class="flex flex-col overflow-hidden rounded-2xl border-4 border-secondary shadow-md"
+		aria-label="PC box"
+	>
+		<div class="flex items-center justify-between gap-2 bg-secondary px-2 py-2">
 			<Button
-				variant="outline"
+				variant="ghost"
 				size="sm"
+				class="font-pixel text-lg text-secondary-foreground"
 				aria-label="Previous box"
-				onclick={() => (boxIndex = (boxIndex + ov.boxCount - 1) % ov.boxCount)}>‹</Button
+				onclick={() => (boxIndex = (boxIndex + ov.boxCount - 1) % ov.boxCount)}>◀</Button
 			>
-			<h2 class="font-medium" data-testid="box-name">{box.name}</h2>
+			<h2
+				class="min-w-40 rounded-full bg-card px-4 py-1 text-center font-pixel text-lg font-bold shadow-inner"
+				data-testid="box-name"
+			>
+				{box.name}
+			</h2>
 			<Button
-				variant="outline"
+				variant="ghost"
 				size="sm"
+				class="font-pixel text-lg text-secondary-foreground"
 				aria-label="Next box"
-				onclick={() => (boxIndex = (boxIndex + 1) % ov.boxCount)}>›</Button
+				onclick={() => (boxIndex = (boxIndex + 1) % ov.boxCount)}>▶</Button
 			>
 		</div>
-		<div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+		<div class="wallpaper grid grid-cols-3 gap-2 p-3 sm:grid-cols-6">
 			{#each box.slots as mon, i (i)}
 				<MonTile
 					{mon}
 					game={ov.game}
+					variant="box"
 					onselect={() => select(boxIndex, i)}
 					onadd={() => startAdd(boxIndex, i)}
 				/>
@@ -156,7 +167,7 @@
 				{@const s = doc.session}
 				{@const at = adding}
 				<Sheet.Header>
-					<Sheet.Title>Add a Pokémon</Sheet.Title>
+					<Sheet.Title class="font-pixel text-xl">Add a Pokémon</Sheet.Title>
 					<Sheet.Description>
 						{at.box < 0 ? `Party slot ${at.slot + 1}` : `${box.name}, slot ${at.slot + 1}`}
 					</Sheet.Description>
@@ -181,7 +192,7 @@
 				</div>
 			{:else if summary}
 				<Sheet.Header>
-					<Sheet.Title>
+					<Sheet.Title class="font-pixel text-xl">
 						{summary.mon.egg ? 'Egg' : (summary.mon.speciesName ?? `#${summary.mon.species}`)}
 					</Sheet.Title>
 					<Sheet.Description>

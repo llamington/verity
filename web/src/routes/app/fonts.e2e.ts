@@ -22,7 +22,7 @@ test('an English save fetches no CJK fonts beyond the gender signs', async ({ pa
 	await page.getByTestId('file').setInputFiles(english);
 	await expect(page.getByTestId('party').getByTestId('mon').first()).toBeVisible();
 	await page.waitForLoadState('networkidle');
-	// Geist has no ♂ or ♀ (Nidoran's names in box 1), so they come from one small Noto Sans JP
+	// Nunito has no ♂ or ♀ (Nidoran's names in box 1), so they come from one small Noto Sans JP
 	// subset; nothing else does.
 	expect(fetched.filter((u) => u.includes('noto-sans-kr'))).toEqual([]);
 	expect(fetched.length).toBeLessThanOrEqual(1);
