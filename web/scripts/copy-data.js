@@ -1,6 +1,6 @@
 // Copies the data blobs the web build fetches at runtime into static/data.
 // The WASM module holds code only (PLAN P12); each game's blob is fetched on demand.
-import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const src = new URL('../../data/blobs/', import.meta.url).pathname;
@@ -10,6 +10,12 @@ const wanted =
 	/^(dp|pt|hgss|bw|b2w2|strings_[a-z]+|moves[45]|names[45]|enc_[a-z0-9]+|gifts[45]|g3_origin)\.bin$/;
 
 mkdirSync(dst, { recursive: true });
+if (!existsSync(src)) {
+	// CI has no blobs (they're built from PKHeX exports); the type checks and component tests
+	// don't need them.
+	console.log('data/blobs not found: no data copied');
+	process.exit(0);
+}
 let n = 0;
 for (const f of readdirSync(src)) {
 	if (wanted.test(f)) {

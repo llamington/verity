@@ -1,12 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
 
-// Saving, as the DS does it: finalize, whole-save check, write, read back. Mirrors ui-leave.json
-// for the unsaved-changes warning. Real saves are gitignored; these tests skip without them.
+// Saving end to end: download and reopen, write back in place, the unsaved-changes prompt. What
+// finalize() refuses is tested in crates/verity-wasm/tests/editor.rs. Real saves are gitignored; these tests skip without them.
 const corpus = new URL('../../../../corpus/real/pkhex-avalonia/', import.meta.url).pathname;
 const PT = corpus + 'gen4_platinum.sav';
 const W2 = corpus + 'gen5_white2.sav';
-const REFUSED = new URL('../../../../sd/saves/Test-Save-White-2.sav', import.meta.url).pathname;
 
 async function rename(page: Page, name: string) {
 	await page.getByTestId('party').getByTestId('mon').first().click();
@@ -126,17 +125,4 @@ test('asks before discarding unsaved edits', async ({ page }) => {
 	await page.getByTestId('file').setInputFiles(W2);
 	await page.getByRole('alertdialog').getByRole('button', { name: 'Discard and open' }).click();
 	await expect(page.getByText('Black 2 / White 2 · gen5_white2.sav')).toBeVisible();
-});
-
-test('refuses to save when the whole-save check fails', async ({ page }) => {
-	test.skip(!existsSync(REFUSED), 'test save not present');
-	await page.goto('/app');
-	await page.getByTestId('file').setInputFiles(REFUSED);
-	await rename(page, 'Nope');
-	let downloaded = false;
-	page.on('download', () => (downloaded = true));
-	await page.getByRole('button', { name: 'Save (download)' }).click();
-	await expect(page.getByTestId('save-bar')).toContainText('not saved: met location');
-	expect(downloaded).toBe(false);
-	await expect(page.getByTestId('save-bar')).toContainText(/box \d+, slot \d+/);
 });

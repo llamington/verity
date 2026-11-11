@@ -60,8 +60,11 @@ mise activated.
   (summary) but not created, as on the DS.
 - **Testing rule (user, 2026-11-11):** test logic at the lowest layer it lives in (Rust core,
   the WASM binding's Rust, Svelte components via Vitest/Storybook); Playwright only for
-  end-to-end journeys. The current 21 Playwright tests mostly check Rust logic and are due to be
-  moved down (proposed, not started).
+  end-to-end journeys. Done 2026-11-11: `crates/verity/tests/front_end.rs` (verdict, edit,
+  wizard glue), `crates/verity-wasm/tests/editor.rs` (the web `Editor`, natively: requests,
+  nickname/date rules, preview/apply, add, finalize), Storybook play functions (PokemonEditor,
+  AddPokemon, MonTile; run by `npx vitest --run`, also on CI), and 14 Playwright journeys.
+  `verity-wasm` is split: `Editor` (plain Rust, `Invalid` errors) and `Session` (JS wrapper).
 - Next: Mystery Gifts, bag, Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**

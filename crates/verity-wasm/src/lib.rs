@@ -43,8 +43,7 @@ fn blob(name: &str) -> Option<&'static [u8]> {
 
 /// Attaches a fetched blob by its file name without `.bin` (`strings`, `pt`, `enc_hgss`, ...).
 /// `strings` is the strings blob of the page's language. Attaching a name twice keeps the first.
-#[wasm_bindgen]
-pub fn attach(name: &str, bytes: Vec<u8>) -> Result<(), JsError> {
+pub fn attach_blob(name: &str, bytes: Vec<u8>) -> Result<(), Invalid> {
     if blob(name).is_some() {
         return Ok(());
     }
@@ -56,6 +55,12 @@ pub fn attach(name: &str, bytes: Vec<u8>) -> Result<(), JsError> {
     let leaked: &'static [u8] = Box::leak(bytes.into_boxed_slice());
     BLOBS.with(|b| b.borrow_mut().insert(name.into(), leaked));
     Ok(())
+}
+
+/// [`attach_blob`] for the page.
+#[wasm_bindgen]
+pub fn attach(name: &str, bytes: Vec<u8>) -> Result<(), JsError> {
+    Ok(attach_blob(name, bytes)?)
 }
 
 /// Whether `name` is attached already (so the page skips the fetch).
@@ -311,19 +316,19 @@ pub struct EditRequest {
     pub reset_nickname: Option<bool>,
 }
 
-fn array<T: Copy + Default, const N: usize>(v: &[T], what: &str) -> Result<[T; N], JsError> {
+fn array<T: Copy + Default, const N: usize>(v: &[T], what: &str) -> Result<[T; N], Invalid> {
     v.try_into()
-        .map_err(|_| JsError::new(&format!("{what}: {N} values expected")))
+        .map_err(|_| Invalid::new(&format!("{what}: {N} values expected")))
 }
 
 impl EditRequest {
-    fn to_edit(&self, pk: &Pkm) -> Result<Edit, JsError> {
+    fn to_edit(&self, pk: &Pkm) -> Result<Edit, Invalid> {
         let met = match &self.met {
             None => None,
             Some(m) => Some(Met {
                 location: m.location,
                 level: m.level,
-                date: parse_date(&m.date)?,
+                date: parse_date(&m.date, "met date")?,
             }),
         };
         let ribbons = match &self.ribbons {
@@ -373,22 +378,22 @@ impl EditRequest {
 }
 
 /// Checks a typed nickname against what the game can store.
-fn nickname(n: &str, pk: &Pkm) -> Result<Nickname, JsError> {
+fn nickname(n: &str, pk: &Pkm) -> Result<Nickname, Invalid> {
     let units: Vec<u16> = n.encode_utf16().collect();
     let cjk = matches!(pk.language(), 1 | 8);
     let max = if cjk { 5 } else { edit::NICKNAME_MAX };
     if units.is_empty() {
-        return Err(JsError::new("nickname: empty"));
+        return Err(Invalid::new("nickname: empty"));
     }
     if units.len() > max {
-        return Err(JsError::new(&format!("nickname: at most {max} characters")));
+        return Err(Invalid::new(&format!("nickname: at most {max} characters")));
     }
     if matches!(pk.format(), Format::Pk4)
         && let Some(c) = n
             .chars()
             .find(|c| !text::is_encodable_g4(&c.encode_utf16(&mut [0; 2])[..]))
     {
-        return Err(JsError::new(&format!("nickname: Gen 4 can't store “{c}”")));
+        return Err(Invalid::new(&format!("nickname: Gen 4 can't store “{c}”")));
     }
     Ok(Nickname::new(&units))
 }
@@ -462,17 +467,17 @@ pub struct EggAdd {
     pub seed: u32,
 }
 
-fn list<T: Tsify + Serialize>(items: impl Iterator<Item = T>) -> Result<Vec<Ts<T>>, JsError> {
-    items.map(|t| Ok(t.into_ts()?)).collect()
+fn list<T: Tsify + Serialize>(items: Vec<T>) -> Result<Vec<Ts<T>>, JsError> {
+    items.into_iter().map(|t| Ok(t.into_ts()?)).collect()
 }
 
-fn wizard_data(version: u8) -> Result<&'static EncounterData<'static>, JsError> {
+fn wizard_data(version: u8) -> Result<&'static EncounterData<'static>, Invalid> {
     let (c4, c5) = if version >= 20 {
         (None, context5())
     } else {
         (context4(), None)
     };
-    wizard::wild_data(c4, c5, version).ok_or_else(|| JsError::new("legality data missing"))
+    wizard::wild_data(c4, c5, version).ok_or_else(|| Invalid::new("legality data missing"))
 }
 
 fn slot_kind(generation: u8, t: u8) -> &'static str {
@@ -506,8 +511,8 @@ fn slot_kind(generation: u8, t: u8) -> &'static str {
 }
 
 /// `YYYY-MM-DD` (2000-2099) as years since 2000, month, day.
-fn parse_date(s: &str) -> Result<[u8; 3], JsError> {
-    let bad = || JsError::new("date: YYYY-MM-DD between 2000 and 2099 expected");
+fn parse_date(s: &str, what: &str) -> Result<[u8; 3], Invalid> {
+    let bad = || Invalid(format!("{what}: YYYY-MM-DD between 2000 and 2099 expected"));
     let parts: Vec<u16> = s
         .split('-')
         .map(|p| p.parse().map_err(|_| bad()))
@@ -550,44 +555,58 @@ fn game_id(kind: SaveKind) -> &'static str {
     }
 }
 
-fn err(e: impl core::fmt::Debug) -> JsError {
-    JsError::new(&format!("{e:?}"))
+fn err(e: impl core::fmt::Debug) -> Invalid {
+    Invalid(format!("{e:?}"))
 }
+
+/// What the page is told when a request can't be carried out. Converts to a `JsError` at the
+/// `#[wasm_bindgen]` boundary, so the logic runs (and is tested) natively.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Invalid(pub String);
+
+impl Invalid {
+    fn new(why: &str) -> Self {
+        Invalid(why.into())
+    }
+}
+
+impl core::fmt::Display for Invalid {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Invalid {}
 
 // ---- session -------------------------------------------------------------------------------
 
-/// An open save.
-#[wasm_bindgen]
-pub struct Session {
+/// An open save and the edits applied to it: the logic behind [`Session`], in plain Rust.
+pub struct Editor {
     save: Vec<u8>,
     dirty: bool,
 }
 
-#[wasm_bindgen]
-impl Session {
+impl Editor {
     /// Opens a raw 512 KB save or a DeSmuME `.dsv`.
-    #[wasm_bindgen(constructor)]
-    pub fn new(bytes: Vec<u8>) -> Result<Session, JsError> {
+    pub fn new(bytes: Vec<u8>) -> Result<Editor, Invalid> {
         let mut save = bytes;
         Save::open(&mut save).map_err(err)?;
-        Ok(Session { save, dirty: false })
+        Ok(Editor { save, dirty: false })
     }
 
     /// The data blob this save's game needs (fetch `data/<name>.bin`).
-    #[wasm_bindgen(js_name = gameBlob)]
     pub fn game_blob(&mut self) -> String {
         game_id(self.open().kind()).into()
     }
 
     /// The blobs [`Session::legality`] reads for this save (fetch them all, then attach).
-    #[wasm_bindgen(js_name = legalityBlobs)]
     pub fn legality_blobs(&mut self) -> Vec<String> {
         verdict::blobs_for(self.open().generation())
             .map(|b| b.file().into())
             .collect()
     }
 
-    pub fn overview(&mut self) -> Result<Ts<Overview>, JsError> {
+    pub fn overview(&mut self) -> Result<Overview, Invalid> {
         let save = self.open();
         let t = save.trainer();
         let generation = save.generation();
@@ -612,12 +631,10 @@ impl Session {
             },
             box_count: save.box_count(),
             party,
-        }
-        .into_ts()?)
+        })
     }
 
-    #[wasm_bindgen(js_name = boxView)]
-    pub fn box_view(&mut self, index: u8) -> Result<Ts<BoxView>, JsError> {
+    pub fn box_view(&mut self, index: u8) -> Result<BoxView, Invalid> {
         let save = self.open();
         let generation = save.generation();
         let name = decode(&save.box_name_raw(index as usize).map_err(err)?, generation);
@@ -626,34 +643,33 @@ impl Session {
             let pk = save.pkm(Slot::Box(index, s)).map_err(err)?;
             slots.push((pk.species() != 0).then(|| mon(save.kind(), &pk)));
         }
-        Ok(BoxView { name, slots }.into_ts()?)
+        Ok(BoxView { name, slots })
     }
 
     /// The Pokémon at `box_index` (-1 for the party) and `slot`.
-    pub fn summary(&mut self, box_index: i32, slot: u8) -> Result<Ts<Summary>, JsError> {
+    pub fn summary(&mut self, box_index: i32, slot: u8) -> Result<Summary, Invalid> {
         let (kind, pk) = self.pkm(box_index, slot)?;
-        Ok(summary(kind, &pk).into_ts()?)
+        Ok(summary(kind, &pk))
     }
 
     /// Legality of the Pokémon at `box_index` (-1 for the party) and `slot`. Attach the
     /// [`Session::legality_blobs`] first, or the verdict is "legality data missing".
-    pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Ts<Legality>, JsError> {
+    pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Legality, Invalid> {
         let (_, pk) = self.pkm(box_index, slot)?;
         let generation = self.open().generation();
-        Ok(judge(generation, &pk).into_ts()?)
+        Ok(judge(generation, &pk))
     }
 
     /// The game-safe validator over the whole save (needs the game blob and `moves4`/`moves5`).
-    #[wasm_bindgen(js_name = saveCheck)]
-    pub fn save_check(&mut self) -> Result<Ts<SaveCheck>, JsError> {
-        Ok(self.check_save().into_ts()?)
+    pub fn save_check(&mut self) -> Result<SaveCheck, Invalid> {
+        Ok(self.check_save())
     }
 
     /// What the editor's pickers offer for this save's game.
-    pub fn choices(&mut self) -> Result<Ts<Choices>, JsError> {
+    pub fn choices(&mut self) -> Result<Choices, Invalid> {
         let kind = self.open().kind();
         let generation = self.open().generation();
-        let rules = rules(kind).ok_or_else(|| JsError::new("game data missing"))?;
+        let rules = rules(kind).ok_or_else(|| Invalid::new("game data missing"))?;
         let items = if generation == 4 {
             st::ITEMS4
         } else {
@@ -690,8 +706,7 @@ impl Session {
                     name: named(items, ball_item(b)).name,
                 })
                 .collect(),
-        }
-        .into_ts()?)
+        })
     }
 
     /// Applies `edit` to a copy of the Pokémon and reports the game-safe check, legality and
@@ -700,9 +715,9 @@ impl Session {
         &mut self,
         box_index: i32,
         slot: u8,
-        edit: Ts<EditRequest>,
-    ) -> Result<Ts<Preview>, JsError> {
-        let (pk, rules) = self.edited(box_index, slot, &edit.to_rust()?)?;
+        edit: &EditRequest,
+    ) -> Result<Preview, Invalid> {
+        let (pk, rules) = self.edited(box_index, slot, edit)?;
         let issue = safety::check_pkm(&rules, &pk, pk.is_party_format())
             .err()
             .map(|i| i.text().into());
@@ -711,8 +726,7 @@ impl Session {
             issue,
             legality: judge(generation, &pk),
             summary: summary(rules.kind, &pk),
-        }
-        .into_ts()?)
+        })
     }
 
     /// Writes `edit` through the game-safe validator. In legal mode a result legality judges
@@ -721,10 +735,10 @@ impl Session {
         &mut self,
         box_index: i32,
         slot: u8,
-        edit: Ts<EditRequest>,
+        edit: &EditRequest,
         legal_mode: bool,
-    ) -> Result<Option<String>, JsError> {
-        let (pk, rules) = self.edited(box_index, slot, &edit.to_rust()?)?;
+    ) -> Result<Option<String>, Invalid> {
+        let (pk, rules) = self.edited(box_index, slot, edit)?;
         let generation = self.open().generation();
         if legal_mode && judge(generation, &pk).status == "illegal" {
             return Ok(Some("illegal (legal mode)".into()));
@@ -742,34 +756,31 @@ impl Session {
     }
 
     /// Whether edits were applied since the save was opened.
-    #[wasm_bindgen(getter)]
     pub fn dirty(&self) -> bool {
         self.dirty
     }
 
     /// The legal IV spread closest to `target` (HP, Atk, Def, Spe, SpA, SpD) for a Gen 4 wild
     /// catch, with the PID that goes with it. Nothing is written. Needs the legality blobs.
-    #[wasm_bindgen(js_name = closestIvs)]
     pub fn closest_ivs(
         &mut self,
         box_index: i32,
         slot: u8,
         target: Vec<u8>,
-    ) -> Result<Ts<IvFix>, JsError> {
+    ) -> Result<IvFix, Invalid> {
         use verity::generate::status::GenStatus;
         let goal: [u8; 6] = target
             .try_into()
-            .map_err(|_| JsError::new("six IVs expected"))?;
+            .map_err(|_| Invalid::new("six IVs expected"))?;
         let (_, pk) = self.pkm(box_index, slot)?;
-        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
+        let ctx = context4().ok_or_else(|| Invalid::new("legality data missing"))?;
         match verity::generate::api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
             Ok(f) => Ok(IvFix {
                 ivs: f.ivs.to_vec(),
                 pid: f.pid,
                 distance: f.distance,
-            }
-            .into_ts()?),
-            Err(e) => Err(JsError::new(GenStatus::from(e).text())),
+            }),
+            Err(e) => Err(Invalid::new(GenStatus::from(e).text())),
         }
     }
 
@@ -777,7 +788,7 @@ impl Session {
     /// whole-save game-safe check. Returns the bytes to write, or an error saying what the
     /// validator refused. The page writes them, reads the file back and calls
     /// [`Session::mark_saved`] when they match.
-    pub fn finalize(&mut self) -> Result<Vec<u8>, JsError> {
+    pub fn finalize(&mut self) -> Result<Vec<u8>, Invalid> {
         self.open().finalize();
         let c = self.check_save();
         if !c.ok {
@@ -786,27 +797,25 @@ impl Session {
                 (None, Some(s)) => format!(" (party slot {})", s + 1),
                 _ => String::new(),
             };
-            return Err(JsError::new(&format!(
+            return Err(Invalid::new(&format!(
                 "not saved: {}{at}",
                 c.issue.unwrap_or_default()
             )));
         }
         if !self.open().checksums_valid() {
-            return Err(JsError::new("not saved: checksums didn't update"));
+            return Err(Invalid::new("not saved: checksums didn't update"));
         }
         Ok(self.save.clone())
     }
 
     /// Records that the save was written and read back intact.
-    #[wasm_bindgen(js_name = markSaved)]
     pub fn mark_saved(&mut self) {
         self.dirty = false;
     }
 
     /// The games whose wild slots and eggs the wizard offers, the save's own first (D/P, HG/SS,
     /// B/W and B2/W2 saves don't record which of the pair they are).
-    #[wasm_bindgen(js_name = wizardVersions)]
-    pub fn wizard_versions(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+    pub fn wizard_versions(&mut self) -> Result<Vec<Named>, Invalid> {
         let save = self.open();
         let v: &[u8] = match save.kind() {
             SaveKind::DP => &[10, 11],
@@ -817,17 +826,16 @@ impl Session {
             SaveKind::B2W2 if save.game_version() == 23 => &[23, 22],
             SaveKind::B2W2 => &[22, 23],
         };
-        list(v.iter().map(|&v| Named {
+        collect(v.iter().map(|&v| Named {
             id: v as u16,
             name: Some(origin_name(v).into()),
         }))
     }
 
     /// Species with wild slots in `version` (needs the legality blobs).
-    #[wasm_bindgen(js_name = wildSpecies)]
-    pub fn wild_species(&mut self, version: u8) -> Result<Vec<Ts<Named>>, JsError> {
+    pub fn wild_species(&mut self, version: u8) -> Result<Vec<Named>, Invalid> {
         let data = wizard_data(version)?;
-        list(
+        collect(
             wizard::wild_species(data, version)
                 .into_iter()
                 .map(|s| named(st::SPECIES, s)),
@@ -835,15 +843,10 @@ impl Session {
     }
 
     /// The wild slots of `species` in `version`.
-    #[wasm_bindgen(js_name = wildEncounters)]
-    pub fn wild_encounters(
-        &mut self,
-        version: u8,
-        species: u16,
-    ) -> Result<Vec<Ts<WildSlot>>, JsError> {
+    pub fn wild_encounters(&mut self, version: u8, species: u16) -> Result<Vec<WildSlot>, Invalid> {
         let data = wizard_data(version)?;
         let generation = if version >= 20 { 5 } else { 4 };
-        list(
+        collect(
             wizard::wild_encounters(data, version, species)
                 .into_iter()
                 .map(|(index, e)| WildSlot {
@@ -860,13 +863,12 @@ impl Session {
     }
 
     /// Species a Gen 4 egg can be of (empty for Gen 5 saves, which the DS doesn't breed yet).
-    #[wasm_bindgen(js_name = eggSpecies)]
-    pub fn egg_species(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+    pub fn egg_species(&mut self) -> Result<Vec<Named>, Invalid> {
         if self.open().generation() != 4 {
             return Ok(vec![]);
         }
-        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
-        list(
+        let ctx = context4().ok_or_else(|| Invalid::new("legality data missing"))?;
+        collect(
             wizard::egg_species(ctx)
                 .into_iter()
                 .map(|s| named(st::SPECIES, s)),
@@ -875,14 +877,12 @@ impl Session {
 
     /// Generates a legal wild Pokémon and writes it to the empty slot at `box_index` (-1 for the
     /// end of the party) and `slot`. Returns why it failed, or nothing when written.
-    #[wasm_bindgen(js_name = addWild)]
     pub fn add_wild(
         &mut self,
         box_index: i32,
         slot: u8,
-        req: Ts<WildAdd>,
-    ) -> Result<Option<String>, JsError> {
-        let r = req.to_rust()?;
+        r: &WildAdd,
+    ) -> Result<Option<String>, Invalid> {
         let lead = match r.lead.as_str() {
             "synchronize" => match r.nature {
                 Some(n) => Lead::Synchronize(n),
@@ -906,7 +906,7 @@ impl Session {
             shiny: r.shiny,
             lead,
             ball: r.ball,
-            met_date: parse_date(&r.met_date)?,
+            met_date: parse_date(&r.met_date, "met date")?,
             seed: r.seed,
         };
         let at = self.empty_slot(box_index, slot)?;
@@ -922,14 +922,12 @@ impl Session {
     }
 
     /// Builds a legal bred Gen 4 egg (or the Pokémon hatched from it) into the empty slot.
-    #[wasm_bindgen(js_name = addEgg)]
     pub fn add_egg(
         &mut self,
         box_index: i32,
         slot: u8,
-        req: Ts<EggAdd>,
-    ) -> Result<Option<String>, JsError> {
-        let r = req.to_rust()?;
+        r: &EggAdd,
+    ) -> Result<Option<String>, Invalid> {
         let e = wizard::EggRequest {
             version: r.version,
             species: r.species,
@@ -937,11 +935,11 @@ impl Session {
             gender: r.gender,
             shiny: r.shiny,
             hatched: r.hatched,
-            date: parse_date(&r.date)?,
+            date: parse_date(&r.date, "egg date")?,
             seed: r.seed,
         };
         let at = self.empty_slot(box_index, slot)?;
-        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
+        let ctx = context4().ok_or_else(|| Invalid::new("legality data missing"))?;
         let mut save = self.open();
         let out = wizard::insert_egg(&mut save, ctx, &e, at);
         Ok(self.added(out))
@@ -953,40 +951,40 @@ impl Session {
     }
 }
 
-impl Session {
+impl Editor {
     fn open(&mut self) -> Save<'_> {
         Save::open(&mut self.save).expect("opened in new()")
     }
 
-    fn pkm(&mut self, box_index: i32, slot: u8) -> Result<(SaveKind, Pkm), JsError> {
+    fn pkm(&mut self, box_index: i32, slot: u8) -> Result<(SaveKind, Pkm), Invalid> {
         let save = self.open();
         let at = slot_at(box_index, slot);
         if let Slot::Party(i) = at
             && i as usize >= save.party_count()
         {
-            return Err(JsError::new("no Pokémon there"));
+            return Err(Invalid::new("no Pokémon there"));
         }
         let pk = save.pkm(at).map_err(err)?;
         if pk.species() == 0 {
-            return Err(JsError::new("no Pokémon there"));
+            return Err(Invalid::new("no Pokémon there"));
         }
         Ok((save.kind(), pk))
     }
 
     /// The empty slot to add to: a box slot, or the party's next slot.
-    fn empty_slot(&mut self, box_index: i32, slot: u8) -> Result<Slot, JsError> {
+    fn empty_slot(&mut self, box_index: i32, slot: u8) -> Result<Slot, Invalid> {
         let save = self.open();
         let at = if box_index < 0 {
             let n = save.party_count();
             if n >= 6 {
-                return Err(JsError::new("the party is full"));
+                return Err(Invalid::new("the party is full"));
             }
             Slot::Party(n as u8)
         } else {
             Slot::Box(box_index as u8, slot)
         };
         if save.pkm(at).map_err(err)?.species() != 0 {
-            return Err(JsError::new("that slot isn't empty"));
+            return Err(Invalid::new("that slot isn't empty"));
         }
         let _ = slot;
         Ok(at)
@@ -1038,22 +1036,185 @@ impl Session {
         box_index: i32,
         slot: u8,
         req: &EditRequest,
-    ) -> Result<(Pkm, Rules<'static>), JsError> {
+    ) -> Result<(Pkm, Rules<'static>), Invalid> {
         let (kind, pk) = self.pkm(box_index, slot)?;
-        let rules = rules(kind).ok_or_else(|| JsError::new("game data missing"))?;
+        let rules = rules(kind).ok_or_else(|| Invalid::new("game data missing"))?;
         let e = req.to_edit(&pk)?;
         let names = match e.nickname {
             Some(Nickname::Reset) => Some(
                 &context4()
-                    .ok_or_else(|| JsError::new("legality data missing"))?
+                    .ok_or_else(|| Invalid::new("legality data missing"))?
                     .names4,
             ),
             _ => None,
         };
         let save = self.open();
         let pk = edit::edited(&save, &rules, slot_at(box_index, slot), &e, names)
-            .ok_or_else(|| JsError::new("no Pokémon there"))?;
+            .ok_or_else(|| Invalid::new("no Pokémon there"))?;
         Ok((pk, rules))
+    }
+}
+
+fn collect<T>(items: impl Iterator<Item = T>) -> Result<Vec<T>, Invalid> {
+    Ok(items.collect())
+}
+
+// ---- JS wrapper --------------------------------------------------------------------------------
+
+/// An open save, for the page: [`Editor`]'s methods with JS types.
+#[wasm_bindgen]
+pub struct Session {
+    editor: Editor,
+}
+
+#[wasm_bindgen]
+impl Session {
+    /// Opens a raw 512 KB save or a DeSmuME `.dsv`.
+    #[wasm_bindgen(constructor)]
+    pub fn new(bytes: Vec<u8>) -> Result<Session, JsError> {
+        Ok(Session {
+            editor: Editor::new(bytes)?,
+        })
+    }
+
+    /// The data blob this save's game needs (fetch `data/<name>.bin`).
+    #[wasm_bindgen(js_name = gameBlob)]
+    pub fn game_blob(&mut self) -> String {
+        self.editor.game_blob()
+    }
+
+    /// The blobs [`Session::legality`] reads for this save (fetch them all, then attach).
+    #[wasm_bindgen(js_name = legalityBlobs)]
+    pub fn legality_blobs(&mut self) -> Vec<String> {
+        self.editor.legality_blobs()
+    }
+
+    pub fn overview(&mut self) -> Result<Ts<Overview>, JsError> {
+        Ok(self.editor.overview()?.into_ts()?)
+    }
+
+    #[wasm_bindgen(js_name = boxView)]
+    pub fn box_view(&mut self, index: u8) -> Result<Ts<BoxView>, JsError> {
+        Ok(self.editor.box_view(index)?.into_ts()?)
+    }
+
+    /// The Pokémon at `box_index` (-1 for the party) and `slot`.
+    pub fn summary(&mut self, box_index: i32, slot: u8) -> Result<Ts<Summary>, JsError> {
+        Ok(self.editor.summary(box_index, slot)?.into_ts()?)
+    }
+
+    /// Legality of the Pokémon at `box_index` (-1 for the party) and `slot`.
+    pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Ts<Legality>, JsError> {
+        Ok(self.editor.legality(box_index, slot)?.into_ts()?)
+    }
+
+    #[wasm_bindgen(js_name = saveCheck)]
+    pub fn save_check(&mut self) -> Result<Ts<SaveCheck>, JsError> {
+        Ok(self.editor.save_check()?.into_ts()?)
+    }
+
+    pub fn choices(&mut self) -> Result<Ts<Choices>, JsError> {
+        Ok(self.editor.choices()?.into_ts()?)
+    }
+
+    pub fn preview(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        edit: Ts<EditRequest>,
+    ) -> Result<Ts<Preview>, JsError> {
+        Ok(self
+            .editor
+            .preview(box_index, slot, &edit.to_rust()?)?
+            .into_ts()?)
+    }
+
+    pub fn apply(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        edit: Ts<EditRequest>,
+        legal_mode: bool,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self
+            .editor
+            .apply(box_index, slot, &edit.to_rust()?, legal_mode)?)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn dirty(&self) -> bool {
+        self.editor.dirty()
+    }
+
+    #[wasm_bindgen(js_name = closestIvs)]
+    pub fn closest_ivs(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        target: Vec<u8>,
+    ) -> Result<Ts<IvFix>, JsError> {
+        Ok(self
+            .editor
+            .closest_ivs(box_index, slot, target)?
+            .into_ts()?)
+    }
+
+    pub fn finalize(&mut self) -> Result<Vec<u8>, JsError> {
+        Ok(self.editor.finalize()?)
+    }
+
+    #[wasm_bindgen(js_name = markSaved)]
+    pub fn mark_saved(&mut self) {
+        self.editor.mark_saved();
+    }
+
+    #[wasm_bindgen(js_name = wizardVersions)]
+    pub fn wizard_versions(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+        list(self.editor.wizard_versions()?)
+    }
+
+    #[wasm_bindgen(js_name = wildSpecies)]
+    pub fn wild_species(&mut self, version: u8) -> Result<Vec<Ts<Named>>, JsError> {
+        list(self.editor.wild_species(version)?)
+    }
+
+    #[wasm_bindgen(js_name = wildEncounters)]
+    pub fn wild_encounters(
+        &mut self,
+        version: u8,
+        species: u16,
+    ) -> Result<Vec<Ts<WildSlot>>, JsError> {
+        list(self.editor.wild_encounters(version, species)?)
+    }
+
+    #[wasm_bindgen(js_name = eggSpecies)]
+    pub fn egg_species(&mut self) -> Result<Vec<Ts<Named>>, JsError> {
+        list(self.editor.egg_species()?)
+    }
+
+    #[wasm_bindgen(js_name = addWild)]
+    pub fn add_wild(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        req: Ts<WildAdd>,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self.editor.add_wild(box_index, slot, &req.to_rust()?)?)
+    }
+
+    #[wasm_bindgen(js_name = addEgg)]
+    pub fn add_egg(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        req: Ts<EggAdd>,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self.editor.add_egg(box_index, slot, &req.to_rust()?)?)
+    }
+
+    /// The save file as it stands, for downloading.
+    pub fn bytes(&self) -> Vec<u8> {
+        self.editor.bytes()
     }
 }
 

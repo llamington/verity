@@ -31,3 +31,31 @@ jobs:
       - run: cargo build-ds
       - name: Size
         run: ls -l target/armv5te-none-eabi/release/libverity_ffi.a
+
+  web:
+    name: Web (types, lint, components)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run core
+      - run: npm run check
+      - run: npm run lint
+      - run: npx playwright install --with-deps chromium
+      # Component interaction tests (Storybook play functions) in headless Chromium. The
+      # end-to-end Playwright journeys need real saves, which CI doesn't have.
+      - run: npx vitest --run

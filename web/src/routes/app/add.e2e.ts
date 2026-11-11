@@ -2,8 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Mirrors the DS harness scripts ui-add.json (Platinum), ui-add-hgss.json, ui-add-w2.json (shiny
-// Gen 5) and ui-egg.json. Real saves are gitignored (corpus/); these tests skip without them.
+// The add journey end to end: empty slot → wizard → Add → summary → save → reopen. The wizard's
+// rules are tested lower down (crates/verity/tests/front_end.rs, crates/verity-wasm/tests/
+// editor.rs, the AddPokemon stories). Real saves are gitignored; these skip without them.
 const corpus = new URL('../../../../corpus/real/pkhex-avalonia/', import.meta.url).pathname;
 
 /** Opens `file` and the wizard on the first empty box slot. */
@@ -62,46 +63,6 @@ test('adds a legal Platinum wild Pokémon and saves', async ({ page }) => {
 	await wizard.getByLabel('Encounter').selectOption({ index: 1 });
 	await addAndCheck(page, 'Bidoof');
 	await saveAndReopen(page, box, 'Bidoof');
-});
-
-test('Synchronize keeps the chosen nature (HeartGold)', async ({ page }) => {
-	const { wizard, box } = await openWizard(page, 'gen4_heartgold.sav');
-	await wizard.getByLabel('Species').selectOption({ label: 'Sentret' });
-	await wizard.getByLabel('Lead Pokémon').selectOption('synchronize');
-	await wizard.getByRole('button', { name: 'Add', exact: true }).click();
-	await expect(wizard.getByTestId('add-status')).toHaveText('Synchronize: choose a nature');
-
-	await wizard.getByLabel('Nature').selectOption({ label: 'Timid' });
-	await addAndCheck(page, 'Sentret');
-	await expect(page.getByTestId('summary')).toContainText(/Nature\s*Timid/);
-	await saveAndReopen(page, box, 'Sentret');
-});
-
-test('adds a legal shiny Gen 5 wild Pokémon (White 2)', async ({ page }) => {
-	const { wizard, box } = await openWizard(page, 'gen5_white2.sav');
-	await expect(wizard.getByRole('button', { name: 'Egg' })).toHaveCount(0);
-	await expect(wizard.getByLabel('Lead Pokémon')).toHaveCount(0);
-	await wizard.getByLabel('Species').selectOption({ label: 'Patrat' });
-	await wizard.getByLabel('Shiny').check();
-	await addAndCheck(page, 'Patrat');
-	await expect(page.getByTestId('summary')).toContainText('Shiny');
-	await saveAndReopen(page, box, 'Patrat');
-});
-
-test('adds a legal Gen 4 egg, and a hatched one', async ({ page }) => {
-	const { wizard } = await openWizard(page, 'gen4_platinum.sav');
-	await wizard.getByRole('button', { name: 'Egg' }).click();
-	await expect(wizard).toContainText('species can be bred here');
-	await wizard.getByLabel('Species').selectOption({ label: 'Piplup' });
-	await addAndCheck(page, 'Egg');
-
-	await page.keyboard.press('Escape');
-	const again = await openWizard(page, 'gen4_platinum.sav');
-	await again.wizard.getByRole('button', { name: 'Egg' }).click();
-	await again.wizard.getByLabel('Species').selectOption({ label: 'Piplup' });
-	await again.wizard.getByLabel('Hatched').check();
-	await addAndCheck(page, 'Piplup');
-	await saveAndReopen(page, again.box, 'Piplup');
 });
 
 test('adds to the end of a party with room', async ({ page }) => {
