@@ -10,6 +10,7 @@ export const summary: Summary = {
 		nicknamed: true,
 		level: 100,
 		form: 0,
+		female: false,
 		egg: false,
 		shiny: false,
 		checksumOk: true

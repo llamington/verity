@@ -109,7 +109,7 @@
 		<h2 class="font-medium">Party</h2>
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6" data-testid="party">
 			{#each ov.party as mon, i (i)}
-				<MonTile {mon} onselect={() => select(-1, i)} />
+				<MonTile {mon} game={ov.game} onselect={() => select(-1, i)} />
 			{/each}
 			{#if ov.party.length < 6}
 				<MonTile mon={null} onadd={() => startAdd(-1, ov.party.length)} />
@@ -135,7 +135,12 @@
 		</div>
 		<div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
 			{#each box.slots as mon, i (i)}
-				<MonTile {mon} onselect={() => select(boxIndex, i)} onadd={() => startAdd(boxIndex, i)} />
+				<MonTile
+					{mon}
+					game={ov.game}
+					onselect={() => select(boxIndex, i)}
+					onadd={() => startAdd(boxIndex, i)}
+				/>
 			{/each}
 		</div>
 	</section>
@@ -215,7 +220,7 @@
 						{/key}
 					{:else}
 						<LegalityReport {legality} error={legalityError} />
-						<PokemonSummary {summary} {legality} />
+						<PokemonSummary {summary} {legality} game={doc.overview.game} />
 					{/if}
 				</div>
 			{/if}

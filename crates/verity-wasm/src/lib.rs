@@ -119,6 +119,8 @@ pub struct Mon {
     /// `None` until the game's data blob is attached.
     pub level: Option<u8>,
     pub form: u8,
+    /// Female (for the sprites with gender differences).
+    pub female: bool,
     pub egg: bool,
     pub shiny: bool,
     pub checksum_ok: bool,
@@ -1748,6 +1750,7 @@ fn mon(kind: SaveKind, pk: &Pkm) -> Mon {
         nicknamed: pk.is_nicknamed(),
         level,
         form: pk.form(),
+        female: pk.gender() == 1,
         egg: pk.is_egg(),
         shiny: pk.is_shiny(),
         checksum_ok: pk.checksum_valid(),
