@@ -20,12 +20,13 @@ function load(name: string, file = name): Promise<void> {
 	return p;
 }
 
-/** Opens a save file and attaches the English strings and the game's data blob. */
+/** Opens a save file and attaches what viewing and saving it need. */
 export async function openSave(bytes: Uint8Array): Promise<Session> {
 	ready ??= init();
 	await ready;
 	const session = new Session(bytes);
-	await Promise.all([load('strings', 'strings_en'), load(session.gameBlob())]);
+	// The game's data and move data: what viewing and saving need (see Editor::save_blobs).
+	await Promise.all([load('strings', 'strings_en'), ...session.saveBlobs().map((b) => load(b))]);
 	return session;
 }
 
@@ -46,6 +47,11 @@ export function checksOut(bytes: Uint8Array): boolean {
 	}
 }
 
+/** Fetches the Mystery Gift databases for this save's generation (about 0.5 MB for Gen 4). */
+export async function loadGiftData(session: Session): Promise<void> {
+	await Promise.all(session.giftBlobs().map((b) => load(b)));
+}
+
 export type { Session };
 export type {
 	Mon,
@@ -63,5 +69,6 @@ export type {
 	IvFix,
 	WildAdd,
 	EggAdd,
-	WildSlot
+	WildSlot,
+	Gift
 } from '#lib/wasm/verity_wasm.js';

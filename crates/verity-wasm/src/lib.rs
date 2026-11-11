@@ -18,6 +18,7 @@ use verity::edit::{self, Edit, Met, Nickname};
 use verity::generate::status::GenStatus;
 use verity::generate::wild4::Lead;
 use verity::generate::wizard;
+use verity::gift::catalog;
 use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
 use verity::legality::moves4::MoveResult;
@@ -471,6 +472,80 @@ fn list<T: Tsify + Serialize>(items: Vec<T>) -> Result<Vec<Ts<T>>, JsError> {
     items.into_iter().map(|t| Ok(t.into_ts()?)).collect()
 }
 
+/// One Mystery Gift for the list.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Gift {
+    /// With `record`, what [`Editor::deliver_gift`] takes.
+    pub source: u8,
+    pub record: u16,
+    pub title: String,
+    /// What the card gives: the Pokémon, the item, or the kind of gift.
+    pub gives: String,
+    /// Pokémon, Item, Pokémon Egg, Decoration, ...
+    pub kind: String,
+    pub species: u16,
+    pub item: u16,
+    /// Pokémon cards: the original trainer and ID, which tell releases of one event apart.
+    pub ot: Option<String>,
+    pub tid: u16,
+    pub sid: u16,
+    /// Gen 4 regional releases.
+    pub region: Option<String>,
+    pub card_id: Option<u16>,
+    pub ready: bool,
+    /// Ready, Already received, Waiting at the deliveryman, ...
+    pub status: String,
+}
+
+fn gift_databases() -> catalog::Databases<'static> {
+    use verity::gift::pcd::Gifts4;
+    use verity::gift::pgf::{Events5, Gifts5};
+    let g4 = |n| blob(n).and_then(|b| Gifts4::load(b).ok());
+    catalog::Databases {
+        gifts4: g4("gifts4"),
+        events4: g4("events4"),
+        gen5: blob("gifts5")
+            .and_then(|b| Gifts5::load(b).ok())
+            .zip(blob("events5").and_then(|b| Events5::load(b).ok())),
+    }
+}
+
+fn gift(c: &catalog::Card, items: u16) -> Gift {
+    let kind = catalog::kind_name(c.gift_type);
+    let gives = if c.ranger {
+        "Manaphy Egg".into()
+    } else if c.species != 0 {
+        named(st::SPECIES, c.species)
+            .name
+            .unwrap_or_else(|| kind.into())
+    } else if c.item != 0 {
+        named(items, c.item).name.unwrap_or_else(|| kind.into())
+    } else {
+        kind.into()
+    };
+    Gift {
+        source: c.source as u8,
+        record: c.record,
+        title: if c.ranger {
+            "Ranger Manaphy Egg".into()
+        } else {
+            String::from_utf16_lossy(&c.title)
+        },
+        gives,
+        kind: kind.into(),
+        species: c.species,
+        item: c.item,
+        ot: (!c.ot.is_empty()).then(|| String::from_utf16_lossy(&c.ot)),
+        tid: c.tid,
+        sid: c.sid,
+        region: catalog::region_name(c.region).map(Into::into),
+        card_id: (c.card_id != 0).then_some(c.card_id),
+        ready: c.status == 0,
+        status: catalog::status_text(c.status).into(),
+    }
+}
+
 fn wizard_data(version: u8) -> Result<&'static EncounterData<'static>, Invalid> {
     let (c4, c5) = if version >= 20 {
         (None, context5())
@@ -597,6 +672,18 @@ impl Editor {
     /// The data blob this save's game needs (fetch `data/<name>.bin`).
     pub fn game_blob(&mut self) -> String {
         game_id(self.open().kind()).into()
+    }
+
+    /// The blobs viewing and saving need: the game's data and its move data (the whole-save
+    /// check reads both). Fetch them when the save opens.
+    pub fn save_blobs(&mut self) -> Vec<String> {
+        let kind = self.open().kind();
+        let moves = if matches!(kind, SaveKind::BW | SaveKind::B2W2) {
+            "moves5"
+        } else {
+            "moves4"
+        };
+        vec![game_id(kind).into(), moves.into()]
     }
 
     /// The blobs [`Session::legality`] reads for this save (fetch them all, then attach).
@@ -945,6 +1032,54 @@ impl Editor {
         Ok(self.added(out))
     }
 
+    /// The blobs the Mystery Gift list reads for this save (fetch and attach them first).
+    pub fn gift_blobs(&mut self) -> Vec<String> {
+        let names: &[&str] = if self.open().generation() == 5 {
+            &["gifts5", "events5"]
+        } else {
+            &["gifts4", "events4"]
+        };
+        names.iter().map(|n| (*n).into()).collect()
+    }
+
+    /// The Mystery Gifts offered to this save's game and language.
+    pub fn gifts(&mut self) -> Result<Vec<Gift>, Invalid> {
+        let generation = self.open().generation();
+        let items = if generation == 4 {
+            st::ITEMS4
+        } else {
+            st::ITEMS5
+        };
+        let save = self.open();
+        Ok(catalog::list(&save, &gift_databases())
+            .iter()
+            .map(|c| gift(c, items))
+            .collect())
+    }
+
+    /// Delivers a listed gift, dated `date` (`YYYY-MM-DD`). Returns why it was refused, or
+    /// nothing when delivered.
+    pub fn deliver_gift(
+        &mut self,
+        source: u8,
+        record: u16,
+        date: &str,
+    ) -> Result<Option<String>, Invalid> {
+        let [y, m, d] = parse_date(date, "date")?;
+        let days = catalog::days_of(2000 + u16::from(y), m, d)
+            .ok_or_else(|| Invalid::new("date: no such day"))?;
+        let source =
+            catalog::Source::from_u8(source).ok_or_else(|| Invalid::new("no such gift"))?;
+        let mut save = self.open();
+        match catalog::deliver(&mut save, &gift_databases(), source, record, days) {
+            0 => {
+                self.dirty = true;
+                Ok(None)
+            }
+            code => Ok(Some(catalog::status_text(code).into())),
+        }
+    }
+
     /// The save file as it stands, for downloading.
     pub fn bytes(&self) -> Vec<u8> {
         self.save.clone()
@@ -1083,6 +1218,11 @@ impl Session {
         self.editor.game_blob()
     }
 
+    #[wasm_bindgen(js_name = saveBlobs)]
+    pub fn save_blobs(&mut self) -> Vec<String> {
+        self.editor.save_blobs()
+    }
+
     /// The blobs [`Session::legality`] reads for this save (fetch them all, then attach).
     #[wasm_bindgen(js_name = legalityBlobs)]
     pub fn legality_blobs(&mut self) -> Vec<String> {
@@ -1210,6 +1350,25 @@ impl Session {
         req: Ts<EggAdd>,
     ) -> Result<Option<String>, JsError> {
         Ok(self.editor.add_egg(box_index, slot, &req.to_rust()?)?)
+    }
+
+    #[wasm_bindgen(js_name = giftBlobs)]
+    pub fn gift_blobs(&mut self) -> Vec<String> {
+        self.editor.gift_blobs()
+    }
+
+    pub fn gifts(&mut self) -> Result<Vec<Ts<Gift>>, JsError> {
+        list(self.editor.gifts()?)
+    }
+
+    #[wasm_bindgen(js_name = deliverGift)]
+    pub fn deliver_gift(
+        &mut self,
+        source: u8,
+        record: u16,
+        date: &str,
+    ) -> Result<Option<String>, JsError> {
+        Ok(self.editor.deliver_gift(source, record, date)?)
     }
 
     /// The save file as it stands, for downloading.

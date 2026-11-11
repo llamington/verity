@@ -1,5 +1,7 @@
 //! Mystery Gift parsing and save injection (PGT, PCD, PGF).
 
+#[cfg(feature = "alloc")]
+pub mod catalog;
 pub mod inject4;
 pub mod inject5;
 pub mod pcd;
