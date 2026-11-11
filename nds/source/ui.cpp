@@ -766,7 +766,78 @@ void slot(Surface* c, int col, int row, int style)
 
 int text_width(const char* s) { return draw_text(nullptr, 0, 0, s); }
 
-int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text, bool muted)
+void text(Surface* c, int x, int y, const char* fmt, ...)
+{
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    draw_text(c, x, y, buf);
+}
+
+void fit(char* text, int width)
+{
+    if (draw_text(nullptr, 0, 0, text) <= width)
+        return;
+    int room = width - draw_text(nullptr, 0, 0, "...");
+    int n = (int)strlen(text);
+    while (n > 0)
+    {
+        do
+            n--;
+        while (n > 0 && ((unsigned char)text[n] & 0xC0) == 0x80);
+        char saved = text[n];
+        text[n] = 0;
+        bool ok = draw_text(nullptr, 0, 0, text) <= room;
+        text[n] = saved;
+        if (ok)
+            break;
+    }
+    strcpy(text + n, "...");
+}
+
+void text_right(Surface* c, int x_end, int y, const char* fmt, ...)
+{
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    draw_text(c, x_end - draw_text(nullptr, 0, 0, buf), y, buf);
+}
+
+int Lines::line()
+{
+    if (pending_gap)
+        y += kBlockGap - kPitch;
+    pending_gap = false;
+    int at = y;
+    y += kPitch;
+    return at;
+}
+
+int Lines::grid_row()
+{
+    if (pending_gap)
+        y += kBlockGap - kPitch;
+    pending_gap = false;
+    int row = (y + 7) / 8;
+    y = row * 8 + kGridPitch;
+    return row;
+}
+
+void clear_px(Surface* c, int y0, int y1)
+{
+    for (int y = y0 < 0 ? 0 : y0; y < y1 && y < 192; y++)
+        for (int col = 0; col < 32; col++)
+        {
+            uint16_t* row = c->tiles + ((y / 8) * 32 + col) * 16 + (y % 8) * 2;
+            row[0] = row[1] = 0;
+        }
+}
+
+int wrap_px(Surface* c, int x, int y, int pitch, int width, int max_rows, const char* text, bool muted)
 {
     char line[96];
     int rows = 0;
@@ -813,11 +884,18 @@ int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text
             }
             strcat(line, "...");
         }
-        at(c, col, row + rows, muted ? UI_MUTED "%s" : "%s", line);
+        ui::text(c, x, y + rows * pitch, muted ? UI_MUTED "%s" : "%s", line);
         rows++;
         p += n;
     }
     return rows;
+}
+
+int wrap(Surface* c, int col, int row, int width, int max_rows, const char* text, bool muted)
+{
+    for (int r = 0; r < max_rows; r++)
+        at(c, col, row + r, "%s", "");
+    return wrap_px(c, col * 8, row * 8, 8, width, max_rows, text, muted);
 }
 
 int text_len(const char* s)
@@ -862,8 +940,8 @@ uint16_t* g_icon[kTypes];  // 8bpp 32x32, one per type
 uint16_t* g_egg;
 uint16_t* g_star;
 uint16_t* g_cursor;
-uint16_t* g_bar;
-uint16_t* g_bar_panel;
+// Row highlights, 8, 12 and 16 px tall: [height index][on a panel].
+uint16_t* g_bars[3][2];
 
 // Type colours (original palette): {body, shade}.
 const uint16_t kTypeColor[kTypes][2] = {
@@ -1048,18 +1126,18 @@ void sprites_init()
         }
     copy16(g_cursor, buf, 32 * 32);
 
-    g_bar = oamAllocateGfx(&oamSub, SpriteSize_64x32, SpriteColorFormat_256Color);
-    memset(buf, 0, 64 * 32);
-    for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 64; x++)
-            put8(buf, 64, x, y, 7);
-    copy16(g_bar, buf, 64 * 32);
-    g_bar_panel = oamAllocateGfx(&oamSub, SpriteSize_64x32, SpriteColorFormat_256Color);
-    memset(buf, 0, 64 * 32);
-    for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 64; x++)
-            put8(buf, 64, x, y, (y == 0 || y == 7) ? 9 : 8);
-    copy16(g_bar_panel, buf, 64 * 32);
+    // Navy blue off panels; peach with an orange edge on them.
+    for (int k = 0; k < 3; k++)
+        for (int on = 0; on < 2; on++)
+        {
+            int h = 8 + 4 * k;
+            g_bars[k][on] = oamAllocateGfx(&oamSub, SpriteSize_64x32, SpriteColorFormat_256Color);
+            memset(buf, 0, 64 * 32);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < 64; x++)
+                    put8(buf, 64, x, y, !on ? 7 : (y == 0 || y == h - 1) ? 9 : 8);
+            copy16(g_bars[k][on], buf, 64 * 32);
+        }
 }
 
 void sprites_hide_all()
@@ -1148,14 +1226,16 @@ void cursor(int id, int x, int y)
            false, false, false, false, false);
 }
 
-void bar(int first, int y, bool visible)
+void bar(int first, int y, bool visible, int height)
 {
     // Over a panel the highlight is peach with an orange edge (dark text); elsewhere navy blue.
-    int row = y / 8;
+    int row = (y + height / 2) / 8;
     bool on_panel = row >= 0 && row < 24 && g_kind[1][row * 32 + 4] == K_PANEL;
+    int k = height >= 16 ? 2 : height >= 12 ? 1 : 0;
+    uint16_t* gfx = g_bars[k][on_panel ? 1 : 0];
     for (int i = 0; i < 4; i++)
         oamSet(&oamSub, first + i, i * 64, y, 1, 0, SpriteSize_64x32, SpriteColorFormat_256Color,
-               on_panel ? g_bar_panel : g_bar, -1, false, !visible, false, false, false);
+               gfx, -1, false, !visible, false, false, false);
 }
 
 }  // namespace ui

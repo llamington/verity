@@ -3,6 +3,7 @@
 #include "scenes.h"
 
 #include <dirent.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -26,6 +27,10 @@ struct ListView
 {
     int first_row = 2;  // console row of the first item
     int rows = 20;
+    // Line pitch in px (8: one console row per item). On a wider pitch item i's text is at
+    // text_y(i) and the highlight is `pitch` tall from text_y - 2.
+    int pitch = 8;
+    int pad = 0;  // px from the top of first_row to the first item's text
     int selected = 0;
     int scroll = 0;
     int count = 0;
@@ -72,7 +77,7 @@ struct ListView
             drag_scroll = scroll;
         if (in.touching && in.dragging)
         {
-            scroll = drag_scroll - in.drag_dy / 8;
+            scroll = drag_scroll - in.drag_dy / pitch;
             int max_scroll = count > rows ? count - rows : 0;
             if (scroll < 0)
                 scroll = 0;
@@ -87,7 +92,8 @@ struct ListView
             clamp();
         if (in.tapped)
         {
-            int row = in.tap_y / 8 - first_row;
+            int off = in.tap_y - first_row * 8 - pad + (pitch - 8) / 2;
+            int row = pitch == 8 ? in.tap_y / 8 - first_row : off < 0 ? -1 : off / pitch;
             int i = scroll + row;
             if (row >= 0 && row < rows && i < count)
             {
@@ -100,8 +106,28 @@ struct ListView
         return activated;
     }
 
-    int bar_y() const { return (first_row + selected - scroll) * 8; }
+    int bar_y() const
+    {
+        // Centred on the 8 px text.
+        return pitch == 8 ? (first_row + selected - scroll) * 8 : text_y(selected) - (pitch - 8) / 2;
+    }
+    int text_y(int i) const { return first_row * 8 + pad + (i - scroll) * pitch; }
 };
+
+// A list on a wider pitch in a bottom panel whose content spans `cells` rows from first_row (the
+// whole screen between the title and hint bars by default). Short menus use kGridPitch.
+ListView spaced_list(int pitch = ui::kPitch, int first_row = 2, int cells = 20)
+{
+    ListView v;
+    v.pitch = pitch;
+    v.pad = 4;
+    v.first_row = first_row;
+    v.rows = (cells * 8 - 2 * v.pad - 8) / pitch + 1;
+    return v;
+}
+
+// Text x on a full-width bottom panel.
+constexpr int kListX = ui::kInsetBottom;
 
 // ---- file picker ---------------------------------------------------------------------------
 
@@ -171,7 +197,7 @@ public:
         int open = list_.update(in, &changed);
         if (changed)
             draw_list();
-        ui::bar(0, list_.bar_y(), count_ > 0);
+        ui::bar(0, list_.bar_y(), count_ > 0, list_.pitch);
         if (open >= 0)
         {
             const char* err = nullptr;
@@ -192,7 +218,7 @@ private:
     int count_ = 0;
     bool scanned_ = false;
     bool framed_ = false;
-    ListView list_;
+    ListView list_ = spaced_list();
 
     void draw_top(const char* message)
     {
@@ -200,24 +226,28 @@ private:
         ui::frame_clear(top());
         ui::title(top(), "verity");
         ui::title_right(top(), "Gen 4/5 save editor");
-        ui::panel(top(), 1, 2, 30, message[0] ? 6 : 4);
-        at(top(), 1, 3, "%d save file%s found", count_, count_ == 1 ? "" : "s");
+        ui::panel(top(), 1, 2, 30, message[0] ? 6 : 3);
+        ui::Lines l(2);
+        ui::text(top(), ui::kInsetTop, l.line(), "%d save file%s found", count_, count_ == 1 ? "" : "s");
         if (core::doc().loaded())
-            at(top(), 1, 4, UI_MUTED "Open" UI_MUTED "  %.26s", strrchr(core::doc().path, '/') + 1);
+            ui::text(top(), ui::kInsetTop, l.line(), UI_MUTED "Open " UI_MUTED " %.26s", strrchr(core::doc().path, '/') + 1);
         if (message[0])
-            at(top(), 1, 6, "! %s", message);
-        ui::panel(top(), 1, 17, 30, 4);
+        {
+            l.block();
+            ui::text(top(), ui::kInsetTop, l.line(), "! %s", message);
+        }
+        ui::panel(top(), 1, 18, 30, 3);
+        ui::Lines r(18);
         if (ui::has_rom_font())
         {
-            at(top(), 1, 18, "Names and icons come from");
-            at(top(), 1, 19, "your ROM " UI_MUTED "(%s)", core::font_game());
+            ui::text(top(), ui::kInsetTop, r.line(), "Names and icons come from");
+            ui::text(top(), ui::kInsetTop, r.line(), "your ROM " UI_MUTED "(%s)", core::font_game());
         }
         else
         {
-            at(top(), 1, 18, "Put a Gen 4/5 ROM (.nds) on the SD");
-            at(top(), 1, 19, "card for JP/KR names and icons.");
+            ui::text(top(), ui::kInsetTop, r.line(), "Put a Gen 4/5 ROM (.nds) on the SD");
+            ui::text(top(), ui::kInsetTop, r.line(), "card for JP/KR names and icons.");
         }
-        at(top(), 1, 22, UI_MUTED "Drag or L/R to scroll the list");
     }
 
     void draw_list()
@@ -226,13 +256,14 @@ private:
         {
             framed_ = true;
             ui::frame_clear(bottom());
-            ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
+            ui::panel(bottom(), 0, list_.first_row, 32, 20);
             ui::hints(bottom(), "A:Open|L/R:Page|Drag:Scroll");
         }
         ui::title(bottom(), "Choose a save");
         char n[16];
         snprintf(n, sizeof(n), "%d", count_);
         ui::title_right(bottom(), n);
+        ui::clear_px(bottom(), 16, 176);
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r;
@@ -249,10 +280,13 @@ private:
                         d--;
                     snprintf(dir, sizeof(dir), "%.*s", (int)(slash - d - 1), d + 1);
                 }
-                at(bottom(), 0, list_.first_row + r, " %-23.23s  " UI_MUTED "%.7s", name, dir);
+                int y = list_.text_y(i);
+                char shown[kPathLen + 4];
+                snprintf(shown, kPathLen, "%s", name);
+                ui::fit(shown, 244 - ui::text_width(dir) - 10 - kListX);
+                ui::text(bottom(), kListX, y, "%s", shown);
+                ui::text_right(bottom(), 244, y, UI_MUTED "%s", dir);
             }
-            else
-                at(bottom(), 0, list_.first_row + r, "%s", "");
         }
     }
 };
@@ -271,32 +305,41 @@ public:
         ui::clear(top());
         ui::frame_clear(top());
         ui::title(top(), "%.30s", strrchr(d.path, '/') + 1);
-        ui::panel(top(), 1, 2, 30, 8);
-        at(top(), 1, 2, "%s", ot);
-        at(top(), 1, 3, UI_MUTED "%s", core::game_name(i.kind));
-        at(top(), 1, 5, UI_MUTED "ID" UI_MUTED "  %05u / %05u", i.tid, i.sid);
-        at(top(), 1, 6, UI_MUTED "Played" UI_MUTED "  %u:%02u:%02u", i.played_hours, i.played_minutes,
-           i.played_seconds);
-        at(top(), 1, 7, UI_MUTED "Party" UI_MUTED "  %u   " UI_MUTED "Boxes" UI_MUTED "  %lu", i.party_count,
-           (unsigned long)d.boxes);
+        // Trainer, then the save's numbers, then its checksum state.
+        ui::panel(top(), 1, 2, 30, 12);
+        const int x = ui::kInsetTop;
+        ui::Lines l(2);
+        ui::text(top(), x, l.line(), "%s", ot);
+        ui::text(top(), x, l.line(), UI_MUTED "%s", core::game_name(i.kind));
+        l.block();
+        ui::text(top(), x, l.line(), UI_MUTED "ID" UI_MUTED "  %05u / %05u", i.tid, i.sid);
+        ui::text(top(), x, l.line(), UI_MUTED "Played" UI_MUTED "  %u:%02u:%02u", i.played_hours,
+                 i.played_minutes, i.played_seconds);
+        ui::text(top(), x, l.line(), UI_MUTED "Party" UI_MUTED "  %u     " UI_MUTED "Boxes" UI_MUTED "  %lu",
+                 i.party_count, (unsigned long)d.boxes);
+        l.block();
         // Unsaved edits leave the checksums in memory stale; saving recomputes them, so show the
         // file's state and say they'll be updated.
-        at(top(), 1, 9, UI_MUTED "Checksums");
+        int row = l.grid_row();
+        ui::text(top(), x, row * 8, UI_MUTED "Checksums");
+        int bc = (x + ui::text_width("Checksums") + 9) / 8;
         if (d.dirty && d.file_checksums_ok)
-            ui::badge(top(), 12, 9, ui::Badge::Safe, "updated on save");
+            ui::badge(top(), bc, row, ui::Badge::Safe, "updated on save");
         else if (d.dirty)
-            ui::badge(top(), 12, 9, ui::Badge::Invalid, "BAD in file, fixed on save");
+            ui::badge(top(), bc, row, ui::Badge::Invalid, "BAD in file, fixed on save");
         else
-            ui::badge(top(), 12, 9, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
+            ui::badge(top(), bc, row, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
                       i.checksums_valid ? "OK" : "BAD");
-        if (!core::data_available())
-            at(top(), 1, 12, "(data missing: showing IDs)");
         if (!message_[0] && d.dirty)
             snprintf(message_, sizeof(message_), "Unsaved changes");
-        if (message_[0])
+        if (message_[0] || !core::data_available())
         {
-            ui::panel(top(), 1, 14, 30, 2);
-            at(top(), 1, 14, "%s %s", d.dirty ? "*" : "-", message_);
+            ui::panel(top(), 1, 17, 30, message_[0] && !core::data_available() ? 4 : 2);
+            ui::Lines m(17);
+            if (message_[0])
+                ui::text(top(), x, m.line() + 2, "%s %s", d.dirty ? "*" : "-", message_);
+            if (!core::data_available())
+                ui::text(top(), x, m.line() + 2, UI_MUTED "Game data missing: showing IDs");
         }
         ui::clear(bottom());
         ui::frame_clear(bottom());
@@ -310,19 +353,22 @@ public:
             items_[count_++] = kUnova;
         items_[count_++] = kSave;
         items_[count_++] = kClose;
-        ui::panel(bottom(), 0, list_.first_row, 32, count_);
-        for (int r = 0; r < count_; r++)
-            at(bottom(), 0, list_.first_row + r, " %s", kItems[items_[r]]);
-        ui::hints(bottom(), confirm_leave_ ? "A:Open|B:Discard edits" : "A:Open|B:Files");
+        int selected = list_.selected;
+        list_ = spaced_list(ui::kGridPitch, 2, (count_ * ui::kGridPitch + 8) / 8);
         list_.count = count_;
-        list_.rows = count_;
+        list_.selected = selected;
+        list_.clamp();
+        ui::panel(bottom(), 0, list_.first_row, 32, (count_ * ui::kGridPitch + 8) / 8);
+        for (int r = 0; r < count_; r++)
+            ui::text(bottom(), kListX, list_.text_y(r), "%s", kItems[items_[r]]);
+        ui::hints(bottom(), confirm_leave_ ? "A:Open|B:Discard edits" : "A:Open|B:Files");
     }
 
     bool update(const ui::Input& in) override
     {
         bool changed;
         int a = list_.update(in, &changed);
-        ui::bar(0, list_.bar_y(), true);
+        ui::bar(0, list_.bar_y(), true, list_.pitch);
         int item = a >= 0 ? items_[a] : -1;
         // Leaving drops unsaved edits (the file is read again when opened), so the first B or
         // Close only warns; anything else cancels the warning.
@@ -392,12 +438,13 @@ public:
         {
             ui::clear(top());
             ui::title(top(), "Mystery gifts");
-            ui::panel(top(), 1, 2, 30, 2);
-            at(top(), 1, 2, "Gift data is missing.");
-            at(top(), 1, 3, UI_MUTED "B goes back.");
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), ui::kInsetTop, l.line(), "Gift data is missing.");
+            ui::text(top(), ui::kInsetTop, l.line(), UI_MUTED "B goes back.");
             return;
         }
-        ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
+        ui::panel(bottom(), 0, list_.first_row, 32, 20);
         refresh();
         draw_list();
         draw_top();
@@ -415,7 +462,7 @@ public:
             draw_list();
             draw_top();
         }
-        ui::bar(0, list_.bar_y(), count_ > 0);
+        ui::bar(0, list_.bar_y(), count_ > 0, list_.pitch);
         if (a >= 0)
             deliver(a);
         return true;
@@ -425,7 +472,7 @@ private:
     static constexpr int kMaxEvents = 500;
     verity_event_view events_[kMaxEvents];
     int count_ = 0;
-    ListView list_;
+    ListView list_ = spaced_list();
     char message_[40] = "";
 
     void refresh()
@@ -487,27 +534,28 @@ private:
     // muted.
     void draw_list()
     {
+        ui::clear_px(bottom(), 16, 176);
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r;
-            int row = list_.first_row + r;
             if (i >= count_)
-            {
-                at(bottom(), 0, row, "%s", "");
-                continue;
-            }
+                break;
             const auto& e = events_[i];
+            int y = list_.text_y(i);
             const char* m = e.status ? UI_MUTED : "";
-            at(bottom(), 0, row, " %s%.16s", m, gives(e));
+            char what[40];
+            snprintf(what, sizeof(what), "%s", gives(e));
+            ui::fit(what, 96 - kListX - 4);
+            ui::text(bottom(), kListX, y, "%s%s", m, what);
             char ot[24];
             ui::utf16_to_text(e.ot, ot, sizeof(ot));
             if (ot[0])
             {
-                at(bottom(), 12, row, UI_MUTED "%s", ot);  // at most 7 characters
-                at(bottom(), 22, row, UI_MUTED "%05u", e.tid);
+                ui::text(bottom(), 96, y, UI_MUTED "%s", ot);  // at most 7 characters
+                ui::text(bottom(), 168, y, UI_MUTED "%05u", e.tid);
             }
             if (region_tag(e.region)[0])
-                at(bottom(), 28, row, UI_MUTED "%s", region_tag(e.region));
+                ui::text_right(bottom(), 244, y, UI_MUTED "%s", region_tag(e.region));
         }
     }
 
@@ -538,41 +586,53 @@ private:
         ui::title_right(top(), n);
         if (count_ == 0)
         {
-            ui::panel(top(), 1, 2, 30, 2);
-            at(top(), 1, 2, "None for this language.");
-            at(top(), 1, 3, UI_MUTED "B goes back.");
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), ui::kInsetTop, l.line(), "None for this language.");
+            ui::text(top(), ui::kInsetTop, l.line(), UI_MUTED "B goes back.");
             return;
         }
         const auto& e = events_[list_.selected];
         char t[37];
         title_of(e, t, sizeof(t));
-        ui::panel(top(), 1, 2, 30, 8);
-        at(top(), 1, 2, "%.32s", t);
-        at(top(), 1, 4, UI_MUTED "Type" UI_MUTED "       %s", kind_name(e.gift_type));
+        const int x = ui::kInsetTop, v = 88;  // labels, values
+        // The title and whether it can be delivered, then the card's details.
+        ui::panel(top(), 1, 2, 30, 12);
+        ui::Lines l(2);
+        ui::text(top(), x, l.line(), "%.32s", t);
+        int row = l.grid_row();
+        ui::text(top(), x, row * 8, UI_MUTED "Status");
+        ui::badge(top(), v / 8, row, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
+                  verity_event_status_text(e.status));
+        l.block();
+        auto field = [&](const char* label, const char* fmt, auto... args) {
+            int y = l.line();
+            ui::text(top(), x, y, UI_MUTED "%s", label);
+            ui::text(top(), v, y, fmt, args...);
+        };
+        field("Type", "%s", kind_name(e.gift_type));
         if (e.species || e.item)
-            at(top(), 1, 5, UI_MUTED "%s" UI_MUTED "   %s", e.species ? "Pokemon" : "Item   ", gives(e));
+            field(e.species ? "Pokemon" : "Item", "%s", gives(e));
         char ot[24];
         ui::utf16_to_text(e.ot, ot, sizeof(ot));
         if (ot[0])
-            at(top(), 1, 6, UI_MUTED "OT" UI_MUTED "          %s   " UI_MUTED "ID" UI_MUTED " %05u", ot, e.tid);
+            field("OT", "%s   " UI_MUTED "ID" UI_MUTED " %05u", ot, e.tid);
         static const char* regions[] = {"", "North America", "United Kingdom", "Australia",
                                         "Europe"};
         if (e.region >= 1 && e.region <= 4)
-            at(top(), 1, 7, UI_MUTED "Region" UI_MUTED "     %s", regions[e.region]);
+            field("Region", "%s", regions[e.region]);
         if (e.card_id)
-            at(top(), 1, 8, UI_MUTED "Card" UI_MUTED "        %u", e.card_id);
-        at(top(), 1, 9, UI_MUTED "Status");
-        ui::badge(top(), 7, 9, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
-                  verity_event_status_text(e.status));
+            field("Card", "%u", e.card_id);
         if (message_[0])
         {
-            ui::panel(top(), 1, 12, 30, 2);
-            at(top(), 1, 12, "%s", message_);
+            ui::panel(top(), 1, 16, 30, 2);
+            ui::text(top(), x, 16 * 8 + 4, "%s", message_);
         }
-        ui::panel(top(), 1, 19, 30, 2);
-        at(top(), 1, 19, UI_MUTED "Collect it in-game from the");
-        at(top(), 1, 20, UI_MUTED "%s", core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
-                                                                         : "deliveryman in any Poke Mart.");
+        ui::panel(top(), 1, 20, 30, 3);
+        ui::Lines c(20);
+        ui::text(top(), x, c.line(), UI_MUTED "Collect it in-game from the");
+        ui::text(top(), x, c.line(), UI_MUTED "%s", core::doc().info.generation == 5 ? "deliveryman in any Poke Center."
+                                                                                  : "deliveryman in any Poke Mart.");
     }
 };
 
@@ -615,7 +675,7 @@ public:
         int pick = list_.update(in, &changed);
         if (changed)
             draw_list();
-        ui::bar(0, list_.bar_y(), true);
+        ui::bar(0, list_.bar_y(), true, list_.pitch);
         if (in.down & KEY_B)
             return false;
         if (pick == 0)
@@ -629,7 +689,7 @@ private:
     char files_[kMaxFiles][kPathLen];
     int count_ = 0;
     bool scanned_ = false;
-    ListView list_;
+    ListView list_ = spaced_list();
     uint8_t* other_ = nullptr;
     size_t other_len_ = 0;
     const char* other_path_ = "";
@@ -706,15 +766,18 @@ private:
             draw_preview();
         else
         {
-            ui::panel(top(), 1, 2, 30, 4);
-            at(top(), 1, 2, "Pick a Black or White save for");
-            at(top(), 1, 3, "Memory Link, or a Black 2 or");
-            at(top(), 1, 4, "White 2 save to receive its keys.");
-            at(top(), 1, 5, UI_MUTED "Or enable every key, no partner.");
+            ui::panel(top(), 1, 2, 30, 8);
+            ui::Lines l(2);
+            const int x = ui::kInsetTop;
+            ui::text(top(), x, l.line(), "Pick a Black or White save for");
+            ui::text(top(), x, l.line(), "Memory Link, or a Black 2 or");
+            ui::text(top(), x, l.line(), "White 2 save to receive its keys.");
+            l.block();
+            ui::text(top(), x, l.line(), UI_MUTED "Or enable every key, no partner.");
             if (message_[0])
             {
-                ui::panel(top(), 1, 8, 30, 2);
-                at(top(), 1, 8, "%s", message_);
+                ui::panel(top(), 1, 12, 30, 2);
+                ui::text(top(), x, 12 * 8 + 4, "%s", message_);
             }
             draw_list();
         }
@@ -724,58 +787,72 @@ private:
     {
         static constexpr const char* kKeys[5] = {"Easy Mode", "Challenge Mode", "City swap",
                                                  "Iron Chamber", "Iceberg Chamber"};
+        const int x = ui::kInsetTop;
+        int top_row = 2;
         if (other_)
         {
             const char* slash = strrchr(other_path_, '/');
-            ui::panel(top(), 1, 2, 30, 2);
-            at(top(), 1, 2, "%.30s", slash ? slash + 1 : other_path_);
-            at(top(), 1, 3, UI_MUTED "Trainer" UI_MUTED "  %s", trainer_);
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), x, l.line(), "%.30s", slash ? slash + 1 : other_path_);
+            ui::text(top(), x, l.line(), UI_MUTED "Trainer" UI_MUTED "  %s", trainer_);
+            top_row = 7;
         }
         ui::bar(0, 0, false);
-        ui::panel(top(), 1, 6, 30, 9);
+        ui::panel(top(), 1, top_row, 30, 21 - top_row);
+        ui::Lines l(top_row);
         if (preview_.status != 0)
-            ui::badge(top(), 1, 6, ui::Badge::Invalid, verity_unova_status_text(preview_.status));
+            ui::badge(top(), 2, l.grid_row(), ui::Badge::Invalid, verity_unova_status_text(preview_.status));
         else if (preview_.mode == 1)
         {
-            at(top(), 1, 6, "Memory Link");
-            at(top(), 1, 7, UI_MUTED "%s", preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
+            ui::text(top(), x, l.line(), "Memory Link");
+            ui::text(top(), x, l.line(), UI_MUTED "%s", preview_.flashback ? "Unlocks a new flashback" : "No new flashbacks");
             if (replace_)
-                at(top(), 1, 9, "%s", verity_unova_status_text(1));
+            {
+                l.block();
+                ui::text(top(), x, l.line(), "%s", verity_unova_status_text(1));
+            }
         }
         else
         {
-            at(top(), 1, 6, preview_.mode == 3 ? "Keys this will enable:" : "Keys this save will receive:");
-            if (preview_.mode == 3)
-                at(top(), 1, 14, UI_MUTED "These can't be sent to other games.");
-            int row = 7;
+            ui::text(top(), x, l.line(), preview_.mode == 3 ? "Keys this will enable:" : "Keys this save will receive:");
             for (int i = 0; i < 5; i++)
                 if (preview_.keys[i])
-                    ui::badge(top(), 2, row++, ui::Badge::Legal, kKeys[i]);
+                    ui::badge(top(), 3, l.grid_row(), ui::Badge::Legal, kKeys[i]);
+            if (preview_.mode == 3)
+            {
+                l.block();
+                ui::text(top(), x, l.line(), UI_MUTED "These can't be sent to other games.");
+            }
         }
         ui::title(bottom(), "Link");
-        ui::panel(bottom(), 1, 3, 30, 2);
-        at(bottom(), 1, 3, "%s", preview_.status == 0 ? "Ready." : "Can't link these saves.");
-        at(bottom(), 1, 4, UI_MUTED "Nothing changes until you link.");
+        ui::panel(bottom(), 1, 3, 30, 4);
+        ui::Lines b(3);
+        ui::text(bottom(), x, b.line(), "%s", preview_.status == 0 ? "Ready." : "Can't link these saves.");
+        ui::text(bottom(), x, b.line(), UI_MUTED "Nothing changes until you link.");
         ui::hints(bottom(), preview_.status == 0 ? "A:Link|B:Back" : "B:Back");
     }
 
     void draw_list()
     {
         ui::title(bottom(), "Link with");
-        ui::panel(bottom(), 0, list_.first_row, 32, list_.rows);
+        ui::panel(bottom(), 0, list_.first_row, 32, 20);
         ui::hints(bottom(), "A:Choose|L/R:Page|B:Back");
+        ui::clear_px(bottom(), 16, 176);
         for (int r = 0; r < list_.rows; r++)
         {
             int i = list_.scroll + r - 1;
+            int y = list_.text_y(list_.scroll + r);
             if (i < 0)
-                at(bottom(), 0, list_.first_row + r, " Enable all keys   " UI_MUTED "no partner");
+            {
+                ui::text(bottom(), kListX, y, "Enable all keys");
+                ui::text_right(bottom(), 244, y, UI_MUTED "no partner");
+            }
             else if (i < count_)
             {
                 const char* slash = strrchr(files_[i], '/');
-                at(bottom(), 0, list_.first_row + r, " %.30s", slash ? slash + 1 : files_[i]);
+                ui::text(bottom(), kListX, y, "%.30s", slash ? slash + 1 : files_[i]);
             }
-            else
-                at(bottom(), 0, list_.first_row + r, "%s", "");
         }
     }
 };
@@ -936,65 +1013,80 @@ private:
         details(at_cell(cur_));
     }
 
+    // The top screen while browsing: one panel, grouped by space rather than borders. The
+    // verdict first (what verity is for), then who it is, its moves and IVs, and where it came
+    // from. EVs and the PID are in the editor.
     void details(const verity_pkm_view& v)
     {
         ui::clear(top());
         ui::frame_clear(top());
+        const int x = ui::kInsetTop;
         if (v.species == 0)
         {
             ui::title(top(), "Empty slot");
-            ui::panel(top(), 1, 2, 30, 2);
-            at(top(), 1, 2, "Nothing here. " UI_MUTED "X or A adds a");
-            at(top(), 1, 3, "Pokémon to this slot.");
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), x, l.line(), "Nothing here.");
+            ui::text(top(), x, l.line(), UI_MUTED "X or A adds a Pokémon to this slot.");
             return;
         }
         char nick[32], ot[32];
         ui::utf16_to_text(v.nickname, nick, sizeof(nick));
         ui::utf16_to_text(v.ot_name, ot, sizeof(ot));
         const char* sp = ui::name(VERITY_NAME_SPECIES, v.species);
-        const char* g = v.gender == 0 ? "M" : v.gender == 1 ? "F" : "-";
+        const char* g = v.gender == 0 ? "M" : v.gender == 1 ? "F" : "";
         if (v.is_egg)
         {
             ui::title(top(), "Egg");
-            ui::panel(top(), 1, 2, 30, 3);
-            at(top(), 1, 2, "%s", sp);
-            at(top(), 1, 4, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
-            legality_line();
+            ui::panel(top(), 1, 2, 30, 8);
+            ui::Lines l(2);
+            legality_line(l, v);
+            l.block();
+            ui::text(top(), x, l.line(), "%s", sp);
+            ui::text(top(), x, l.line(), UI_MUTED "OT" UI_MUTED "  %s   " UI_MUTED "ID" UI_MUTED "  %05u / %05u", ot, v.tid, v.sid);
             return;
         }
         ui::title(top(), "%s%s", nick, v.is_shiny ? " *" : "");
         char lv[12];
         snprintf(lv, sizeof(lv), "Lv %u", v.level);
         ui::title_right(top(), lv);
-        // Panels sit two rows apart so each keeps its padding.
-        ui::panel(top(), 1, 2, 30, 4);
+        ui::panel(top(), 1, 2, 30, 20);
+        ui::Lines l(2);
+        legality_line(l, v);
+        l.block();
         if (v.form)
-            at(top(), 1, 2, "#%03u %s " UI_MUTED "form %u" UI_MUTED "  %s", v.species, sp, v.form, g);
+            ui::text(top(), x, l.line(), "#%03u %s " UI_MUTED "form %u" UI_MUTED "  %s", v.species, sp, v.form, g);
         else
-            at(top(), 1, 2, "#%03u %s  %s", v.species, sp, g);
-        at(top(), 1, 3, UI_MUTED "Nature" UI_MUTED "  %s", ui::name(VERITY_NAME_NATURES, v.nature));
-        at(top(), 1, 4, UI_MUTED "Ability" UI_MUTED "  %s", ui::name(VERITY_NAME_ABILITIES, v.ability));
+            ui::text(top(), x, l.line(), "#%03u %s  %s", v.species, sp, g);
+        ui::text(top(), x, l.line(), "%s " UI_MUTED "nature, " UI_MUTED "%s", ui::name(VERITY_NAME_NATURES, v.nature),
+                 ui::name(VERITY_NAME_ABILITIES, v.ability));
         uint32_t items = core::doc().info.generation == 4 ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
-        at(top(), 1, 5, UI_MUTED "Item" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "-");
-        ui::panel(top(), 1, 8, 30, 6);
-        for (int m = 0; m < 4; m++)
-            at(top(), 1 + (m % 2) * 15, 8 + m / 2, "%.14s",
-               v.moves[m] ? ui::name(VERITY_NAME_MOVES, v.moves[m]) : "-");
-        at(top(), 1, 11, UI_MUTED "      HP  At  Df  Sp  SA  SD");
-        at(top(), 1, 12, UI_MUTED "IVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.ivs[0], v.ivs[1], v.ivs[2], v.ivs[3],
-           v.ivs[4], v.ivs[5]);
-        at(top(), 1, 13, UI_MUTED "EVs" UI_MUTED " %4u%4u%4u%4u%4u%4u", v.evs[0], v.evs[1], v.evs[2], v.evs[3],
-           v.evs[4], v.evs[5]);
-        ui::panel(top(), 1, 16, 30, 3);
-        at(top(), 1, 16, UI_MUTED "OT" UI_MUTED "  %s  " UI_MUTED "%05u/%05u", ot, v.tid, v.sid);
-        at(top(), 1, 17, UI_MUTED "Met" UI_MUTED "  %.20s Lv %u",
-           ui::location(core::doc().info.generation, v.met_location), v.met_level);
-        at(top(), 1, 18, UI_MUTED "PID" UI_MUTED "  %08lX%s", (unsigned long)v.pid,
-           v.checksum_ok ? "" : "  ! checksum mismatch");
-        legality_line();
+        ui::text(top(), x, l.line(), UI_MUTED "Holds" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "nothing");
+        l.block();
+        for (int m = 0; m < 4; m += 2)
+        {
+            int y = l.line();
+            for (int k = 0; k < 2; k++)
+                ui::text(top(), x + k * 116, y, "%.15s", v.moves[m + k] ? ui::name(VERITY_NAME_MOVES, v.moves[m + k]) : "-");
+        }
+        l.block();
+        static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
+        int hy = l.line(), iy = l.line();
+        ui::text(top(), x, iy, UI_MUTED "IVs");
+        for (int k = 0; k < 6; k++)
+        {
+            int cx = x + 56 + k * 30;  // right edge of each column
+            ui::text_right(top(), cx, hy, UI_MUTED "%s", st[k]);
+            ui::text_right(top(), cx, iy, "%u", v.ivs[k]);
+        }
+        l.block();
+        ui::text(top(), x, l.line(), UI_MUTED "OT" UI_MUTED "  %s   " UI_MUTED "ID" UI_MUTED "  %05u / %05u", ot, v.tid, v.sid);
+        ui::text(top(), x, l.line(), UI_MUTED "Met" UI_MUTED "  %.22s, Lv %u",
+                 ui::location(core::doc().info.generation, v.met_location), v.met_level);
     }
 
-    void legality_line()
+    // The verdict on one grid line: a badge, then the time or what failed.
+    void legality_line(ui::Lines& l, const verity_pkm_view& v)
     {
         uint32_t ms = 0;
         verity_legality_report r = party_ ? core::legality(0xFF, cur_, &ms)
@@ -1002,30 +1094,34 @@ private:
         static const char* why[] = {"",        "egg",       "origin game",
                                     "data missing", "Gen 5 save", "hatched",
                                     "event/trade/walker"};
-        ui::panel(top(), 1, 21, 30, 2);
+        int row = l.grid_row();
+        int c;
+        char rest[48] = "";
         if (r.status == 1)
         {
-            int c = ui::badge(top(), 1, 21, ui::Badge::Legal, "LEGAL");
-            at(top(), c, 21, UI_MUTED "checked in %lu ms", (unsigned long)ms);
+            c = ui::badge(top(), 2, row, ui::Badge::Legal, "LEGAL");
+            snprintf(rest, sizeof(rest), UI_MUTED "checked in %lu ms", (unsigned long)ms);
         }
         else if (r.status == 2)
         {
-            char list[40] = "";
-            for (int i = 0; i < r.check_count && strlen(list) < 24; i++)
+            c = ui::badge(top(), 2, row, ui::Badge::Invalid, "ILLEGAL");
+            for (int i = 0; i < r.check_count && strlen(rest) < 30; i++)
             {
-                strcat(list, i ? " " : "");
-                strcat(list, core::check_name(r.checks[i]));
+                strcat(rest, i ? " " : "");
+                strcat(rest, core::check_name(r.checks[i]));
             }
-            bool moves = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            int c = ui::badge(top(), 1, 21, ui::Badge::Invalid, "ILLEGAL");
-            at(top(), c, 21, UI_MUTED "%lu ms", (unsigned long)ms);
-            at(top(), 1, 22, "%s%s", list, moves ? " Moves" : "");
+            if (!(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]))
+                strcat(rest, " Moves");
         }
         else
         {
-            ui::badge(top(), 1, 21, ui::Badge::Fishy, "NOT CHECKED");
-            at(top(), 1, 22, "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
+            c = ui::badge(top(), 2, row, ui::Badge::Fishy, "NOT CHECKED");
+            snprintf(rest, sizeof(rest), "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
         }
+        if (!v.checksum_ok)
+            strcat(rest, "  ! checksum");
+        ui::fit(rest, 240 - (c * 8 + 4));
+        ui::text(top(), c * 8 + 4, row * 8, "%s", rest);
     }
 };
 
@@ -1059,14 +1155,14 @@ public:
         {
             list_.count = species_count_;
             int a = list_.update(in, &changed);
-            ui::bar(0, list_.bar_y(), true);
+            ui::bar(0, list_.bar_y(), true, list_.pitch);
             if (in.down & KEY_B)
                 return false;
             if ((in.down & KEY_Y) && !gen5())
             {
                 egg_ = !egg_;
                 load_species();
-                list_ = ListView();
+                list_ = spaced_list();
                 draw();
                 return true;
             }
@@ -1074,7 +1170,7 @@ public:
             {
                 version_ = other_game();
                 load_species();
-                list_ = ListView();
+                list_ = spaced_list();
                 draw();
                 return true;
             }
@@ -1086,12 +1182,12 @@ public:
                     step_ = 2;
                     opt_ = 0;
                     draw();
-                    ui::bar(0, 2 * 8, true);
+                    ui::bar(0, opt_bar_y(0), true, ui::kGridPitch);
                     return true;
                 }
                 enc_count_ = (int)verity_wild_encounters(version_, species_[a], enc_, 64);
                 step_ = 1;
-                enc_list_ = ListView();
+                enc_list_ = spaced_list();
                 enc_list_.count = enc_count_ + 1;  // row 0 is "any slot"
                 draw();
             }
@@ -1101,7 +1197,7 @@ public:
         else if (step_ == 1)
         {
             int a = enc_list_.update(in, &changed);
-            ui::bar(0, enc_list_.bar_y(), true);
+            ui::bar(0, enc_list_.bar_y(), true, enc_list_.pitch);
             if (in.down & KEY_B)
             {
                 step_ = 0;
@@ -1139,7 +1235,7 @@ public:
             int dir = (in.rep & KEY_RIGHT) ? 1 : (in.rep & KEY_LEFT) ? -1 : 0;
             if (in.tapped)
             {
-                int row = in.tap_y / 8 - 2;
+                int row = opt_at(in.tap_y);
                 if (row >= 0 && row < opts)
                 {
                     if (row == opt_ && row < opts - 1)
@@ -1150,13 +1246,13 @@ public:
             if (dir)
                 egg_ ? change_egg(dir) : change(dir);
             bool go = (opt_ == opts - 1 &&
-                       ((in.down & KEY_A) || (in.tapped && in.tap_y / 8 - 2 == opts - 1))) ||
+                       ((in.down & KEY_A) || (in.tapped && opt_at(in.tap_y) == opts - 1))) ||
                       (in.down & KEY_START);
             if (go && (egg_ ? generate_egg() : generate()))
                 return false;
             if (dir || opt_ != before)
                 draw_options();
-            ui::bar(0, (2 + opt_) * 8, true);
+            ui::bar(0, opt_bar_y(opt_), true, ui::kGridPitch);
         }
         return true;
     }
@@ -1181,7 +1277,21 @@ private:
     bool egg_ = false, hatched_ = false;
     static constexpr uint8_t kBalls[] = {4, 3, 2, 1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     char status_[48] = "";
-    ListView list_, enc_list_;
+    ListView list_ = spaced_list(), enc_list_ = spaced_list();
+    // Option rows on the grid pitch; the highlight fills the row.
+    static int opt_y(int r) { return 2 * 8 + 4 + ui::kGridPitch * r; }
+    static int opt_bar_y(int r) { return opt_y(r) - (ui::kGridPitch - 8) / 2; }
+    static int opt_at(int tap_y) { int off = tap_y - 2 * 8 - 4 + (ui::kGridPitch - 8) / 2; return off < 0 ? -1 : off / ui::kGridPitch; }
+    void opt(int r, const char* label, const char* fmt, ...) __attribute__((format(printf, 4, 5)))
+    {
+        char v[48];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(v, sizeof(v), fmt, ap);
+        va_end(ap);
+        ui::text(bottom(), kListX, opt_y(r), UI_MUTED "%s", label);
+        ui::text(bottom(), 96, opt_y(r), "%s", v);
+    }
 
     void load_species()
     {
@@ -1374,9 +1484,10 @@ private:
         if (!supported_)
         {
             ui::title(top(), "Add Pokemon");
-            ui::panel(top(), 1, 2, 30, 2);
-            at(top(), 1, 2, "Only Gen 4 saves for now");
-            at(top(), 1, 3, UI_MUTED "(D/P/Pt wild encounters).");
+            ui::panel(top(), 1, 2, 30, 3);
+            ui::Lines l(2);
+            ui::text(top(), ui::kInsetTop, l.line(), "Only Gen 4 saves for now");
+            ui::text(top(), ui::kInsetTop, l.line(), UI_MUTED "(D/P/Pt wild encounters).");
             ui::hints(bottom(), "B:Back");
             return;
         }
@@ -1384,29 +1495,34 @@ private:
         char g[32];
         snprintf(g, sizeof(g), "legal, %s", game_name(version_));
         ui::title_right(top(), g);
-        ui::panel(top(), 1, 2, 30, 2);
-        at(top(), 1, 2, UI_MUTED "To" UI_MUTED "  %s %u", box_ == 0xFF ? "party slot" : "box slot",
-           (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
-        at(top(), 1, 3, UI_MUTED "Step %d of 3", step_ + 1);
-        ui::panel(top(), 1, 6, 30, 4);
+        const int x = ui::kInsetTop;
+        ui::panel(top(), 1, 2, 30, 3);
+        ui::Lines w(2);
+        ui::text(top(), x, w.line(), "Step %d of 3  " UI_MUTED "to %s %u", step_ + 1, box_ == 0xFF ? "party slot" : "box slot",
+                 (box_ == 0xFF ? slot_ : box_ * 30 + slot_) + 1);
+        ui::panel(top(), 1, 7, 30, 7);
+        ui::Lines l(7);
         if (step_ == 0)
         {
-            at(top(), 1, 6, egg_ ? "Egg species" : "Species");
-            at(top(), 1, 7, UI_MUTED "%d %s", species_count_, egg_ ? "can be bred here" : "with wild slots");
-            at(top(), 1, 8, UI_MUTED "%s", other_game() ? "SELECT switches game" : "");
-            at(top(), 1, 9, UI_MUTED "%s", gen5() ? "" : egg_ ? "Y: wild encounter instead" : "Y: bred egg instead");
+            ui::text(top(), x, l.line(), egg_ ? "Egg species" : "Species");
+            ui::text(top(), x, l.line(), UI_MUTED "%d %s", species_count_, egg_ ? "can be bred here" : "with wild slots");
+            l.block();
+            if (other_game())
+                ui::text(top(), x, l.line(), "SELECT " UI_MUTED "switches game");
+            if (!gen5())
+                ui::text(top(), x, l.line(), "Y " UI_MUTED "%s", egg_ ? "makes a wild encounter instead" : "makes a bred egg instead");
             draw_list();
         }
         else if (step_ == 1)
         {
-            at(top(), 1, 6, "Encounter");
-            at(top(), 1, 7, UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            ui::text(top(), x, l.line(), "Encounter");
+            ui::text(top(), x, l.line(), UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
             draw_list();
         }
         else
         {
-            at(top(), 1, 6, "Options");
-            at(top(), 1, 7, UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
+            ui::text(top(), x, l.line(), "Options");
+            ui::text(top(), x, l.line(), UI_MUTED "for %s", ui::name(VERITY_NAME_SPECIES, species_[species_ix_]));
             draw_options();
         }
         ui::hints(bottom(), step_ == 2 ? "A:Next|B:Back|START:Generate" : "A:Next|L/R:Page|B:Back");
@@ -1414,29 +1530,30 @@ private:
 
     void draw_list()
     {
+        ui::clear_px(bottom(), 16, 176);
+        ui::panel(bottom(), 0, 2, 32, 20);
         if (step_ == 0)
         {
             ui::title(bottom(), "Species");
-            ui::panel(bottom(), 0, 2, 32, list_.rows);
             for (int r = 0; r < list_.rows; r++)
             {
                 int i = list_.scroll + r;
-                if (i < species_count_)
-                    at(bottom(), 0, 2 + r, " " UI_MUTED "#%03u" UI_MUTED "  %s", species_[i],
-                       ui::name(VERITY_NAME_SPECIES, species_[i]));
-                else
-                    at(bottom(), 0, 2 + r, "%s", "");
+                if (i >= species_count_)
+                    break;
+                int y = list_.text_y(i);
+                ui::text(bottom(), kListX, y, UI_MUTED "#%03u", species_[i]);
+                ui::text(bottom(), kListX + 44, y, "%s", ui::name(VERITY_NAME_SPECIES, species_[i]));
             }
         }
         else
         {
             ui::title(bottom(), "Encounter");
-            ui::panel(bottom(), 0, 2, 32, enc_list_.rows);
             for (int r = 0; r < enc_list_.rows; r++)
             {
                 int i = enc_list_.scroll + r - 1;
+                int y = enc_list_.text_y(enc_list_.scroll + r);
                 if (i == -1)
-                    at(bottom(), 0, 2 + r, " Any wild slot");
+                    ui::text(bottom(), kListX, y, "Any wild slot");
                 else if (i < enc_count_)
                 {
                     const auto& e = enc_[i];
@@ -1445,30 +1562,37 @@ private:
                         snprintf(lv, sizeof(lv), "%u", e.level_min);
                     else
                         snprintf(lv, sizeof(lv), "%u-%u", e.level_min, e.level_max);
-                    at(bottom(), 0, 2 + r, " %-14.14s  " UI_MUTED "%-7.7s" UI_MUTED "  %s",
-                       ui::location(gen5() ? 5 : 4, e.location),
-                       gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type), lv);
+                    char where[40];
+                    snprintf(where, sizeof(where), "%s", ui::location(gen5() ? 5 : 4, e.location));
+                    ui::fit(where, 140 - kListX - 4);
+                    ui::text(bottom(), kListX, y, "%s", where);
+                    ui::text(bottom(), 140, y, UI_MUTED "%s", gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type));
+                    ui::text_right(bottom(), 244, y, UI_MUTED "Lv " UI_MUTED "%s", lv);
                 }
-                else
-                    at(bottom(), 0, 2 + r, "%s", "");
             }
         }
+    }
+
+    void draw_status(int rows)
+    {
+        if (!status_[0])
+            return;
+        int row = 3 + (rows * ui::kGridPitch + 8) / 8 + 2;
+        ui::panel(bottom(), 1, row, 30, 2);
+        ui::text(bottom(), ui::kInsetTop, row * 8 + 4, "%s", status_);
     }
 
     void draw_egg_options()
     {
         ui::title(bottom(), "Options");
-        ui::panel(bottom(), 0, 2, 32, 5);
-        at(bottom(), 0, 2, " " UI_MUTED "Nature" UI_MUTED "     < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
-        at(bottom(), 0, 3, " " UI_MUTED "Gender" UI_MUTED "     < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
-        at(bottom(), 0, 4, " " UI_MUTED "Shiny" UI_MUTED "       < %s >", shiny_ ? "Yes" : "No");
-        at(bottom(), 0, 5, " " UI_MUTED "Hatched" UI_MUTED "    < %s >", hatched_ ? "Yes" : "No");
-        at(bottom(), 0, 6, " Generate and place");
-        if (status_[0])
-        {
-            ui::panel(bottom(), 1, 10, 30, 2);
-            at(bottom(), 1, 10, "%s", status_);
-        }
+        ui::clear_px(bottom(), 16, 176);
+        ui::panel(bottom(), 0, 2, 32, (5 * ui::kGridPitch + 8) / 8);
+        opt(0, "Nature", "< %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        opt(1, "Gender", "< %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+        opt(2, "Shiny", "< %s >", shiny_ ? "Yes" : "No");
+        opt(3, "Hatched", "< %s >", hatched_ ? "Yes" : "No");
+        ui::text(bottom(), kListX, opt_y(4), "Generate and place");
+        draw_status(5);
     }
 
     void draw_options()
@@ -1479,26 +1603,22 @@ private:
             return;
         }
         ui::title(bottom(), "Options");
-        ui::panel(bottom(), 0, 2, 32, 7);
-        at(bottom(), 0, 2, " " UI_MUTED "Nature" UI_MUTED "    < %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
-        at(bottom(), 0, 3, " " UI_MUTED "Shiny" UI_MUTED "      < %s >", shiny_ ? "Yes" : "No");
+        ui::clear_px(bottom(), 16, 176);
+        ui::panel(bottom(), 0, 2, 32, (7 * ui::kGridPitch + 8) / 8);
+        opt(0, "Nature", "< %s >", nature_ < 0 ? "Any" : ui::name(VERITY_NAME_NATURES, nature_));
+        opt(1, "Shiny", "< %s >", shiny_ ? "Yes" : "No");
         if (level_)
-            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "      < %d >", level_);
+            opt(2, "Level", "< %d >", level_);
         else
-            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "      < Any >");
-        at(bottom(), 0, 5, " " UI_MUTED "Gender" UI_MUTED "    < %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
+            opt(2, "Level", "< Any >");
+        opt(3, "Gender", "< %s >", gender_ < 0 ? "Any" : gender_ ? "Female" : "Male");
         if (gen5())
-            at(bottom(), 0, 6, " " UI_MUTED "Lead        not used in Gen 5");
+            opt(4, "Lead", UI_MUTED "not used in Gen 5");
         else
-            at(bottom(), 0, 6, " " UI_MUTED "Lead" UI_MUTED "       < %s >", lead_name(lead_));
-        at(bottom(), 0, 7, " " UI_MUTED "Ball" UI_MUTED "        < %s >",
-           ball_ ? ui::name(VERITY_NAME_ITEMS4, kBalls[ball_ - 1]) : "Default");
-        at(bottom(), 0, 8, " Generate and place");
-        if (status_[0])
-        {
-            ui::panel(bottom(), 1, 12, 30, 2);
-            at(bottom(), 1, 12, "%s", status_);
-        }
+            opt(4, "Lead", "< %s >", lead_name(lead_));
+        opt(5, "Ball", "< %s >", ball_ ? ui::name(VERITY_NAME_ITEMS4, kBalls[ball_ - 1]) : "Default");
+        ui::text(bottom(), kListX, opt_y(6), "Generate and place");
+        draw_status(7);
     }
 };
 
@@ -1581,9 +1701,10 @@ public:
                 tab_ = in.tap_x * kTabs / 256;
                 row_ = 0;
             }
-            else if (in.tap_y / 8 - 3 >= 0 && in.tap_y / 8 - 3 < rows)
+            else if ((in.tap_y - row_bar_y(0)) / row_pitch() >= 0 && in.tap_y >= row_bar_y(0) &&
+                     (in.tap_y - row_bar_y(0)) / row_pitch() < rows)
             {
-                int r = in.tap_y / 8 - 3;
+                int r = (in.tap_y - row_bar_y(0)) / row_pitch();
                 if (r == row_)
                     dir = in.tap_x < 128 ? -1 : 1;
                 row_ = r;
@@ -1601,7 +1722,7 @@ public:
             preview();
         if (changed || row_ != before_row || tab_ != before_tab)
             draw();
-        ui::bar(0, (3 + row_) * 8, true);
+        ui::bar(0, row_bar_y(row_), true, row_pitch());
         return true;
     }
 
@@ -1641,6 +1762,22 @@ private:
     }
 
     static constexpr int kTabs = 5;
+    // Bottom rows from y 24: Stats has 12 rows on the 12 px pitch, the other tabs the grid pitch.
+    // The highlight fills the row.
+    int row_pitch() const { return tab_ == 1 ? ui::kPitch : ui::kGridPitch; }
+    int row_text_y(int r) const { return 24 + 4 + row_pitch() * r; }
+    int row_bar_y(int r) const { return row_text_y(r) - (row_pitch() - 8) / 2; }
+    void row(int r, const char* label, const char* fmt, ...) __attribute__((format(printf, 4, 5)))
+    {
+        char v[64];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(v, sizeof(v), fmt, ap);
+        va_end(ap);
+        ui::text(bottom(), kListX, row_text_y(r), UI_MUTED "%s", label);
+        ui::text(bottom(), 104, row_text_y(r), "%s", v);
+    }
+
     int tab_rows() const
     {
         static constexpr int kRows[kTabs] = {3, 12, 4, 6, 8};
@@ -1730,7 +1867,7 @@ private:
 
     // ---- nickname keyboard -----------------------------------------------------------------
 
-    static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 5;
+    static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 8;
     static constexpr char16_t kDakuten = 0x309B, kHandakuten = 0x309C;
 
     // Four rows of ten keys per page; 0 is no key. Japanese and Korean follow the games'
@@ -1868,7 +2005,8 @@ private:
         {
             if (name_len_ == 0)
             {
-                at(bottom(), 0, 3, " A name can't be empty");
+                ui::clear_px(bottom(), 28, 40);
+                ui::text(bottom(), ui::kInsetTop, 28, "A name can't be empty");
                 return true;
             }
             memset(e_.nickname, 0, sizeof(e_.nickname));
@@ -1894,11 +2032,12 @@ private:
         char n[12];
         snprintf(n, sizeof(n), "%d/%d", name_len_, max_name());
         ui::title_right(bottom(), n);
-        ui::panel(bottom(), 1, 2, 30, 2);
-        at(bottom(), 1, 2, "%s_", text);
-        at(bottom(), 1, 3, UI_MUTED "%s", layout() == 1 ? "Japanese (Y: next page)"
-                                          : layout() == 2 ? "Korean (Y: next page)"
-                                                          : "Y: next page");
+        ui::panel(bottom(), 1, 2, 30, 3);
+        ui::Lines l(2);
+        ui::text(bottom(), ui::kInsetTop, l.line(), "%s_", text);
+        ui::text(bottom(), ui::kInsetTop, l.line(), UI_MUTED "%s", layout() == 1 ? "Japanese (Y: next page)"
+                                                         : layout() == 2 ? "Korean (Y: next page)"
+                                                                         : "Y: next page");
         ui::panel(bottom(), 0, kKeyTop, 32, kKeyRows * 2 - 1);  // keys span the full width
         for (int r = 0; r < kKeyRows; r++)
         {
@@ -1980,7 +2119,7 @@ private:
     {
         bool changed;
         int a = ribbons_.update(in, &changed);
-        ui::bar(0, ribbons_.bar_y(), true);
+        ui::bar(0, ribbons_.bar_y(), true, ribbons_.pitch);
         if (in.down & KEY_B)
         {
             ribbon_list_ = false;
@@ -2002,42 +2141,45 @@ private:
         return true;
     }
 
-    // The highlighted ribbon on the top screen (rows row..row+3): its image from the ROM, name and
-    // whether this Pokémon has it.
+    // The highlighted ribbon in the details panel (rows row..row+5): its image from the ROM, name
+    // and whether this Pokémon has it.
     void ribbon_details(int row, int i)
     {
-        ui::panel(top(), 1, row, 30, 4);
-        for (int r = row; r < row + 4; r++)
-            at(top(), 1, r, "%s", "");
+        ui::panel(top(), 1, row, 30, 6);
+        int y = row * 8;
+        ui::clear_px(top(), y, y + 48);
         uint8_t tiles[512];
         uint16_t colors[16];
         bool icon = core::ribbon_icon(i, tiles, colors);
-        ui::item_icon(true, 10, row * 8, icon ? tiles : nullptr, colors);
-        int c = icon ? 6 : 1;
-        at(top(), c, row + 1, "%s", ribbon_name(i));
-        ui::badge(top(), c, row + 2, ribbon_on(i) ? ui::Badge::Legal : ui::Badge::Fishy,
+        ui::item_icon(true, 14, y + 8, icon ? tiles : nullptr, colors);
+        int x = icon ? 56 : kX;
+        ui::text(top(), x, y + 6, "%s", ribbon_name(i));
+        ui::badge(top(), x / 8, row + 3, ribbon_on(i) ? ui::Badge::Legal : ui::Badge::Fishy,
                   ribbon_on(i) ? "Has it" : "Not set");
         if (!icon)
-            at(top(), 1, row + 3, UI_MUTED "A ROM on the SD card adds images.");
+            ui::text(top(), kX, y + 38, UI_MUTED "A ROM on the SD card adds images.");
     }
 
     void draw_ribbons()
     {
-        ribbon_details(10, ribbons_.selected);
+        ribbon_details(kDetail, ribbons_.selected);
         ui::frame_clear(bottom());
         ui::title(bottom(), "Ribbons");
         char n[16];
         snprintf(n, sizeof(n), "%d set", ribbon_count());
         ui::title_right(bottom(), n);
-        ui::panel(bottom(), 0, 2, 32, ribbons_.rows);
+        ui::panel(bottom(), 0, 2, 32, 20);
         ui::hints(bottom(), "A:Toggle|L/R:Page|B:Done");
+        ui::clear_px(bottom(), 16, 176);
         for (int r = 0; r < ribbons_.rows; r++)
         {
             int i = ribbons_.scroll + r;
-            if (ribbon_on(i))
-                at(bottom(), 0, 2 + r, " [x]  %s", ribbon_name(i));
-            else
-                at(bottom(), 0, 2 + r, " " UI_MUTED "[ ]  %s", ribbon_name(i));
+            if (i >= kRibbons)
+                break;
+            int y = ribbons_.text_y(i);
+            bool on = ribbon_on(i);
+            ui::text(bottom(), kListX, y, on ? "[x]" : UI_MUTED "[ ]");
+            ui::text(bottom(), kListX + 24, y, on ? "%s" : UI_MUTED "%s", ribbon_name(i));
         }
     }
 
@@ -2057,10 +2199,11 @@ private:
 
     void find_closest()
     {
-        at(top(), 0, 7, "Searching for legal IVs...");
+        ui::clear_px(top(), (kEdit + 2) * 8 + 14, (kEdit + 2) * 8 + 24);
+        ui::text(top(), kX, (kEdit + 2) * 8 + 14, "Searching for legal IVs...");
         uint8_t code = verity_closest_ivs(core::doc().buf, core::doc().len, verity_loc{box_, slot_},
                                           e_.ivs, &fix_);
-        at(top(), 0, 7, "%s", "");
+        ui::clear_px(top(), (kEdit + 2) * 8 + 14, (kEdit + 2) * 8 + 24);
         if (code != 0)
         {
             snprintf(status_, sizeof(status_), "%s",
@@ -2082,19 +2225,27 @@ private:
         char d[24];
         snprintf(d, sizeof(d), "%u point%s away", fix_.distance, fix_.distance == 1 ? "" : "s");
         ui::title_right(bottom(), d);
-        ui::panel(bottom(), 1, 2, 30, 7);
-        at(bottom(), 1, 2, UI_MUTED "        Yours   Legal");
+        // Columns: stat, yours, legal (right-aligned numbers), and a note on changed rows.
+        ui::panel(bottom(), 1, 2, 30, 11);
+        ui::Lines l(2);
+        const int x = ui::kInsetTop, yours = 96, legal = 150;
+        int y = l.line();
+        ui::text_right(bottom(), yours, y, UI_MUTED "Yours");
+        ui::text_right(bottom(), legal, y, UI_MUTED "Legal");
         for (int i = 0; i < 6; i++)
         {
-            if (e_.ivs[i] == fix_.ivs[i])
-                at(bottom(), 1, 3 + i, UI_MUTED "%-3s      %2u      %2u", st[i], e_.ivs[i], fix_.ivs[i]);
-            else
-                at(bottom(), 1, 3 + i, UI_MUTED "%-3s" UI_MUTED "      %2u  ->  %2u   " UI_MUTED "changes",
-                   st[i], e_.ivs[i], fix_.ivs[i]);
+            y = l.line();
+            bool same = e_.ivs[i] == fix_.ivs[i];
+            ui::text(bottom(), x, y, UI_MUTED "%s", st[i]);
+            ui::text_right(bottom(), yours, y, same ? UI_MUTED "%u" : "%u", e_.ivs[i]);
+            ui::text_right(bottom(), legal, y, same ? UI_MUTED "%u" : "%u", fix_.ivs[i]);
+            if (!same)
+                ui::text(bottom(), legal + 16, y, UI_MUTED "changes");
         }
-        ui::panel(bottom(), 1, 12, 30, 2);
-        at(bottom(), 1, 12, "Its PID changes too; nature,");
-        at(bottom(), 1, 13, "gender and ability stay.");
+        ui::panel(bottom(), 1, 16, 30, 3);
+        ui::Lines n(16);
+        ui::text(bottom(), x, n.line(), "Its PID changes too; nature,");
+        ui::text(bottom(), x, n.line(), "gender and ability stay.");
         ui::hints(bottom(), "A:Use these|B:Keep mine");
     }
 
@@ -2127,7 +2278,7 @@ private:
         if (tab_ == 4 && row_ == 7)
         {
             ribbon_list_ = true;
-            ribbons_ = ListView();
+            ribbons_ = spaced_list();
             ribbons_.count = kRibbons;
             ui::clear(bottom());
             draw_ribbons();
@@ -2136,14 +2287,14 @@ private:
         if (tab_ == 0 && row_ == 0)
         {
             picking_ = 1;
-            pick_ = ListView();
+            pick_ = spaced_list();
             pick_.count = items_;
             pick_.selected = e_.held_item;
         }
         else if (tab_ == 2)
         {
             picking_ = 2 + row_;
-            pick_ = ListView();
+            pick_ = spaced_list();
             pick_.count = moves_;
             pick_.selected = e_.moves[row_];
         }
@@ -2158,7 +2309,7 @@ private:
     {
         bool changed;
         int a = pick_.update(in, &changed);
-        ui::bar(0, pick_.bar_y(), true);
+        ui::bar(0, pick_.bar_y(), true, 12);
         if (in.down & KEY_B)
         {
             picking_ = 0;
@@ -2189,44 +2340,40 @@ private:
         return true;
     }
 
-    // A move in a panel on the top screen (rows row..row+5): the name with its type pill; the
-    // category pill with power, accuracy and PP; the description in the label shade, wrapped to
-    // four rows.
+    // A move in the details panel (rows row..row+9): name, PP and type pill; category pill,
+    // power and accuracy 16 px below; the description in the label shade on a 12 px pitch.
     void move_details(int row, uint16_t mv)
     {
-        ui::panel(top(), 1, row, 30, 6);
-        for (int r = row; r < row + 6; r++)
-            at(top(), 1, r, "%s", "");
+        ui::panel(top(), 1, row, 30, 10);
+        int y = row * 8;
+        ui::clear_px(top(), y, y + 80);
         if (mv == 0)
         {
-            at(top(), 1, row, UI_MUTED "No move in this slot.");
+            ui::text(top(), kX, y, UI_MUTED "No move in this slot.");
             return;
         }
         verity_move_stats m;
         uint8_t gen = gen4_ ? 4 : 5;
         const char* name = ui::name(VERITY_NAME_MOVES, mv);
+        ui::text(top(), kX, y, "%s", name);
         if (!core::move_info(gen, mv, &m))
         {
-            at(top(), 1, row, "%s", name);
-            at(top(), 1, row + 1, UI_MUTED "Not in Gen %u games.", gen);
+            ui::text(top(), kX, y + 16, UI_MUTED "Not in Gen %u games.", gen);
             return;
         }
-        at(top(), 1, row, "%s", name);
         if (m.type_ != 0xFF)
         {
-            // At the right edge: "n PP", then the type pill.
             const char* type = ui::name(VERITY_NAME_TYPES, m.type_);
-            int start = 31 - (ui::text_width(type) + 15) / 8;
+            int start = 30 - (ui::text_width(type) + 15) / 8;
             char pp[16];
             snprintf(pp, sizeof(pp), "%u " UI_MUTED "PP", m.pp);
-            // at() clears the rest of its row, so the pill goes last.
-            at(top(), start - 1 - (ui::text_width(pp) + 7) / 8, row, "%s", pp);
+            ui::text(top(), (start - 1) * 8 - ui::text_width(pp), y, "%s", pp);
             ui::pill(top(), start, row, ui::type_color(m.type_), type);
         }
         if (!m.from_rom)
         {
-            at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
-            at(top(), 1, row + 3, UI_MUTED "power, accuracy and a description.");
+            ui::text(top(), kX, y + 20, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
+            ui::text(top(), kX, y + 32, UI_MUTED "power, accuracy and a description.");
             return;
         }
         static const char* kCat[3] = {"Physical", "Special", "Status"};
@@ -2242,17 +2389,17 @@ private:
             snprintf(acc, sizeof(acc), "sure hit");
         else
             snprintf(acc, sizeof(acc), "%u%%", m.accuracy);
-        // Left to right by measured width (fonts differ), PP at the right edge.
-        int col = ui::pill(top(), 1, row + 1, kCatColor[m.category % 3], kCat[m.category % 3]) + 1;
+        int col = ui::pill(top(), 2, row + 2, kCatColor[m.category % 3], kCat[m.category % 3]);
+        int x = col * 8 + 8;
         char buf[24];
         snprintf(buf, sizeof(buf), UI_MUTED "Power" UI_MUTED " %s", power);
-        at(top(), col, row + 1, "%s", buf);
-        col += (ui::text_width(buf) + 7) / 8 + 1;
-        snprintf(buf, sizeof(buf), UI_MUTED "Acc" UI_MUTED " %s", acc);
-        at(top(), col, row + 1, "%s", buf);
+        ui::text(top(), x, y + 16, "%s", buf);
+        x += ui::text_width(buf) + 12;
+        ui::text(top(), x, y + 16, UI_MUTED "Acc" UI_MUTED " %s", acc);
         char desc[192];
         if (core::move_description(gen, mv, desc, sizeof(desc)))
-            ui::wrap(top(), 1, row + 2, 236, 4, desc, true);
+            // 12 px below the stats row (1.5x the line pitch); four lines end at the panel's edge.
+            ui::wrap_px(top(), kX, y + 36, 12, 30 * 8 - kX, 4, desc, true);
     }
 
     // The held item's icon from a ROM of the save's generation, if there is one; false otherwise
@@ -2266,28 +2413,24 @@ private:
         return ok;
     }
 
-    // An item in a panel on the top screen (rows row..row+3): its icon, name and number.
+    // An item in the details panel (rows row..row+5): its icon, name and number.
     void item_details(int row, uint16_t item)
     {
-        ui::panel(top(), 1, row, 30, 4);
-        for (int r = row; r < row + 4; r++)
-            at(top(), 1, r, "%s", "");
-        // The art is the top-left 24x24 of the frame: centred in the panel's 32 px.
-        bool icon = show_item_icon(true, 12, row * 8 + 4, item);
+        ui::panel(top(), 1, row, 30, 6);
+        int y = row * 8;
+        ui::clear_px(top(), y, y + 48);
+        // The art is the top-left 24x24 of the frame: centred in the panel's 48 px.
+        bool icon = show_item_icon(true, 16, y + 12, item);
         if (item == 0)
         {
-            at(top(), 1, row, UI_MUTED "No held item.");
+            ui::text(top(), kX, y + 4, UI_MUTED "No held item.");
             return;
         }
-        // Beside the icon, or at the top with a note when there is none.
-        int c = icon ? 5 : 1, r = icon ? row + 1 : row;
-        at(top(), c, r, "%s", ui::name(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5, item));
-        at(top(), c, r + 1, UI_MUTED "Item %u", item);
+        int x = icon ? 52 : kX, ty = icon ? y + 10 : y + 4;
+        ui::text(top(), x, ty, "%s", ui::name(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5, item));
+        ui::text(top(), x, ty + 14, UI_MUTED "Item %u", item);
         if (!icon)
-        {
-            at(top(), 1, row + 2, UI_MUTED "A Gen %u ROM on the SD card adds", gen4_ ? 4 : 5);
-            at(top(), 1, row + 3, UI_MUTED "the item's icon.");
-        }
+            ui::text(top(), kX, ty + 28, UI_MUTED "A Gen %u ROM on the SD card adds its icon.", gen4_ ? 4 : 5);
     }
 
     void draw_picker()
@@ -2300,27 +2443,34 @@ private:
             ui::title(bottom(), "Held item");
         else
             ui::title(bottom(), "Move %d", picking_ - 1);
-        ui::panel(bottom(), 0, 2, 32, pick_.rows);
+        ui::panel(bottom(), 0, 2, 32, 20);
         ui::hints(bottom(), "A:Choose|L/R:Page|B:Cancel");
+        ui::clear_px(bottom(), 16, 176);
         for (int r = 0; r < pick_.rows; r++)
         {
             int i = pick_.scroll + r;
-            if (i < pick_.count)
+            if (i >= pick_.count)
+                break;
+            int y = pick_.text_y(i);
+            verity_move_stats m;
+            if (picking_ >= 2 && i && core::move_info(gen4_ ? 4 : 5, (uint16_t)i, &m) && m.type_ != 0xFF)
             {
-                verity_move_stats m;
-                if (picking_ >= 2 && i && core::move_info(gen4_ ? 4 : 5, (uint16_t)i, &m) && m.type_ != 0xFF)
-                    at(bottom(), 0, 2 + r, " %-14.14s  " UI_MUTED "%-8.8s  %2u PP", ui::name(cat, i),
-                       ui::name(VERITY_NAME_TYPES, m.type_), m.pp);
-                else
-                    at(bottom(), 0, 2 + r, " " UI_MUTED "%3d" UI_MUTED "  %s", i, i ? ui::name(cat, i) : "(none)");
+                ui::text(bottom(), 12, y, "%s", ui::name(cat, i));
+                ui::text(bottom(), 136, y, UI_MUTED "%s", ui::name(VERITY_NAME_TYPES, m.type_));
+                char pp[12];
+                snprintf(pp, sizeof(pp), "%u " UI_MUTED "PP", m.pp);
+                ui::text(bottom(), 244 - ui::text_width(pp), y, "%s", pp);
             }
             else
-                at(bottom(), 0, 2 + r, "%s", "");
+            {
+                ui::text(bottom(), 12, y, UI_MUTED "%d", i);
+                ui::text(bottom(), 40, y, "%s", i ? ui::name(cat, i) : "(none)");
+            }
         }
         if (picking_ >= 2)
-            move_details(10, (uint16_t)pick_.selected);
+            move_details(kDetail, (uint16_t)pick_.selected);
         else
-            item_details(10, (uint16_t)pick_.selected);
+            item_details(kDetail, (uint16_t)pick_.selected);
     }
 
     void apply()
@@ -2351,43 +2501,59 @@ private:
         show_preview();
     }
 
+    // Spacing prototype (top screen): content starts at column 2 (8 px inside the panel), lines
+    // that carry a badge or pill sit on the 8 px grid 16 px apart, plain text uses a 12 px pitch.
+    static constexpr int kX = 16;      // text x on top-screen panels
+    static constexpr int kDetail = 2;  // first content row of the details panel
+    static constexpr int kEdit = 15;   // first content row of the edit panel (rows 15-20)
+
+    // The edit panel: mode, verdict if applied now, status, and what is wrong.
     void show_preview()
     {
-        ui::panel(top(), 1, 18, 30, 4);
-        for (int r = 18; r < 22; r++)
-            at(top(), 1, r, "%s", "");
-        at(top(), 1, 18, UI_MUTED "If applied now");
+        ui::panel(top(), 1, kEdit, 30, 6);
+        ui::clear_px(top(), kEdit * 8, (kEdit + 6) * 8);
+        int c = ui::badge(top(), 2, kEdit, legal_mode_ ? ui::Badge::Legal : ui::Badge::Safe,
+                          legal_mode_ ? "Legal mode" : "Game-safe mode");
+        ui::text(top(), c * 8 + 8, kEdit * 8, UI_MUTED "SELECT switches");
+        int y = (kEdit + 2) * 8;
+        const char* status = status_[0] ? status_ : e_.mask ? "* Edited, not applied yet." : "No changes yet.";
         if (!preview_ok_)
         {
-            at(top(), 1, 19, "Preview unavailable");
+            ui::text(top(), kX, y, "Preview unavailable");
+            ui::text(top(), kX, y + 14, UI_MUTED "%s", status);
             return;
         }
-        at(top(), 1, 19, UI_MUTED "Game-safe");
-        if (issue_)
-        {
-            int c = ui::badge(top(), 11, 19, ui::Badge::Invalid, "NO");
-            at(top(), c, 19, "%.18s", verity_issue_text(issue_));
-        }
-        else
-            ui::badge(top(), 11, 19, ui::Badge::Legal, "OK");
         const verity_legality_report& r = report_;
-        at(top(), 1, 20, UI_MUTED "Legality");
+        // Badges sit on whole cells: start each one a cell past its measured label.
+        auto label = [&](int x, const char* t) {
+            ui::text(top(), x, y, UI_MUTED "%s", t);
+            return (x + ui::text_width(t) + 9) / 8;  // the badge's dot cell adds its own gap
+        };
+        int bc = label(kX, "Legality");
         if (r.status == 1)
-            ui::badge(top(), 11, 20, ui::Badge::Legal, "LEGAL");
+            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Legal, "LEGAL");
+        else if (r.status == 2)
+            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Invalid, "ILLEGAL");
+        else
+            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Fishy, "NOT CHECKED");
+        bc = label((bc + 1) * 8, "Game-safe");
+        ui::badge(top(), bc, kEdit + 2, issue_ ? ui::Badge::Invalid : ui::Badge::Legal, issue_ ? "NO" : "OK");
+        ui::text(top(), kX, y + 14, UI_MUTED "%s", status);
+        char why[48] = "";
+        if (issue_)
+            snprintf(why, sizeof(why), "%s", verity_issue_text(issue_));
         else if (r.status == 2)
         {
-            char list[40] = "";
-            for (int i = 0; i < r.check_count && strlen(list) < 26; i++)
+            for (int i = 0; i < r.check_count && strlen(why) < 30; i++)
             {
-                strcat(list, i ? " " : "");
-                strcat(list, core::check_name(r.checks[i]));
+                strcat(why, i ? " " : "");
+                strcat(why, core::check_name(r.checks[i]));
             }
-            bool mv = !(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]);
-            ui::badge(top(), 11, 20, ui::Badge::Invalid, "ILLEGAL");
-            at(top(), 1, 21, "%s%s", list, mv ? " Moves" : "");
+            if (!(r.move_ok[0] && r.move_ok[1] && r.move_ok[2] && r.move_ok[3]))
+                strcat(why, " Moves");
         }
-        else
-            ui::badge(top(), 11, 20, ui::Badge::Fishy, "NOT CHECKED");
+        if (why[0])
+            ui::text(top(), kX, y + 26, "%s", why);
     }
 
     void draw()
@@ -2398,25 +2564,28 @@ private:
         ui::frame_clear(top());
         ui::title(top(), "Edit  %s", nick);
         ui::title_right(top(), ui::name(VERITY_NAME_SPECIES, orig_.species));
-        ui::panel(top(), 1, 2, 30, 2);
-        int c = ui::badge(top(), 1, 2, legal_mode_ ? ui::Badge::Legal : ui::Badge::Safe,
-                          legal_mode_ ? "Legal mode" : "Game-safe mode");
-        at(top(), c + 1, 2, UI_MUTED "SELECT switches");
-        at(top(), 1, 3, UI_MUTED "%s", legal_mode_ ? "Refuses edits that make it illegal."
-                                                  : "Allows anything the game accepts.");
-        ui::panel(top(), 1, 6, 30, 2);
-        at(top(), 1, 6, "%s", e_.mask ? "* Edited, not applied yet" : "No changes yet");
-        at(top(), 1, 7, UI_MUTED "%s", status_[0] ? status_ : "START applies, B goes back.");
         ui::item_icon(true, 0, 0, nullptr, nullptr);
         if (tab_ == 2)
-            move_details(10, e_.moves[row_ < 4 ? row_ : 0]);
+            move_details(kDetail, e_.moves[row_ < 4 ? row_ : 0]);
         else
         {
-        ui::panel(top(), 1, 10, 30, 4);
-        at(top(), 1, 10, UI_MUTED "Left/Right" UI_MUTED "  change the value");
-        at(top(), 1, 11, UI_MUTED "Y+Left/Right" UI_MUTED "  in tens");
-        at(top(), 1, 12, UI_MUTED "A" UI_MUTED "  pick from a list (item, moves)");
-        at(top(), 1, 13, UI_MUTED "%s", tab_ == 1 && gen4_ ? "X  closest legal IVs" : "Tap a row twice to step it");
+            // What the keys do, beyond the hint bar.
+            ui::panel(top(), 1, kDetail, 30, 6);
+            int y = kDetail * 8 + 4;
+            ui::text(top(), kX, y, "Left/Right " UI_MUTED "change the value");
+            ui::text(top(), kX, y + 12, "Y + Left/Right " UI_MUTED "steps in tens");
+            if (tab_ == 1)
+            {
+                int total = 0;
+                for (int i = 0; i < 6; i++)
+                    total += e_.evs[i];
+                ui::text(top(), kX, y + 24, UI_MUTED "EV total " UI_MUTED "%d / 510%s", total,
+                         total > 510 ? "  (over the limit)" : "");
+            }
+            else
+                ui::text(top(), kX, y + 24, "A " UI_MUTED "picks from a list");
+            ui::text(top(), kX, y + 36, "%s", tab_ == 1 && gen4_ ? "X " UI_MUTED "finds the closest legal IVs"
+                                                                : "Tap " UI_MUTED "a row twice to step it");
         }
         show_preview();
 
@@ -2425,50 +2594,51 @@ private:
         ui::frame_clear(bottom());
         ui::tabs(bottom(), tabs, kTabs, tab_);
         int rows = tab_rows();
-        ui::panel(bottom(), 0, 3, 32, tab_ == 1 ? 14 : rows < 2 ? 2 : (tab_ == 3 ? 8 : rows));
+        ui::panel(bottom(), 0, 3, 32, (rows * row_pitch() + 8) / 8 + (tab_ == 3 ? 2 : 0));
         ui::hints(bottom(), tab_ == 1 && gen4_ ? "L/R:Tab|X:Closest IVs|START:Apply"
                                                : "L/R:Tab|A:List|START:Apply");
         uint32_t items = gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
         // Beside the Main tab's three rows, at the panel's right edge.
-        show_item_icon(false, 228, 24, tab_ == 0 ? e_.held_item : 0);
+        show_item_icon(false, 220, 34, tab_ == 0 ? e_.held_item : 0);
         if (tab_ == 0)
         {
-            at(bottom(), 0, 3, " " UI_MUTED "Item" UI_MUTED "         < %s >",
-               e_.held_item ? ui::name(items, e_.held_item) : "-");
-            at(bottom(), 0, 4, " " UI_MUTED "Level" UI_MUTED "         < %u >", e_.level);
-            at(bottom(), 0, 5, " " UI_MUTED "Friendship" UI_MUTED "   < %u >", e_.friendship);
+            row(0, "Item", "< %s >", e_.held_item ? ui::name(items, e_.held_item) : "-");
+            row(1, "Level", "< %u >", e_.level);
+            row(2, "Friendship", "< %u >", e_.friendship);
         }
         else if (tab_ == 1)
         {
             static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
-            for (int i = 0; i < 6; i++)
-                at(bottom(), 0, 3 + i, " " UI_MUTED "IV" UI_MUTED "  %-3s       < %2u >   " UI_MUTED "%s",
-                   st[i], e_.ivs[i], e_.ivs[i] == 31 ? "max" : "");
-            int total = 0;
+            char label[12];
             for (int i = 0; i < 6; i++)
             {
-                at(bottom(), 0, 9 + i, " " UI_MUTED "EV" UI_MUTED "  %-3s       < %3u >", st[i], e_.evs[i]);
-                total += e_.evs[i];
+                snprintf(label, sizeof(label), "IV  %s", st[i]);
+                row(i, label, "< %2u >  " UI_MUTED "%s", e_.ivs[i], e_.ivs[i] == 31 ? "max" : "");
             }
-            at(bottom(), 0, 16, " " UI_MUTED "EV total" UI_MUTED "  %d / 510%s", total,
-               total > 510 ? "  (over the limit)" : "");
+            for (int i = 0; i < 6; i++)
+            {
+                snprintf(label, sizeof(label), "EV  %s", st[i]);
+                row(6 + i, label, "< %3u >", e_.evs[i]);
+            }
         }
         else if (tab_ == 2)
         {
+            char label[8];
             for (int m = 0; m < 4; m++)
-                at(bottom(), 0, 3 + m, " " UI_MUTED "Move %d" UI_MUTED "      < %s >", m + 1,
-                   e_.moves[m] ? ui::name(VERITY_NAME_MOVES, e_.moves[m]) : "-");
+            {
+                snprintf(label, sizeof(label), "Move %d", m + 1);
+                row(m, label, "< %s >", e_.moves[m] ? ui::name(VERITY_NAME_MOVES, e_.moves[m]) : "-");
+            }
         }
         else if (tab_ == 3)
         {
-            at(bottom(), 0, 3, " " UI_MUTED "Ball" UI_MUTED "         < %s >", ball_name(e_.ball));
-            at(bottom(), 0, 4, " " UI_MUTED "Location" UI_MUTED "   < %s >",
-               ui::location(gen4_ ? 4 : 5, e_.met_location));
-            at(bottom(), 0, 5, " " UI_MUTED "Met level" UI_MUTED "   < %u >", e_.met_level);
-            at(bottom(), 0, 6, " " UI_MUTED "Year" UI_MUTED "         < %u >", 2000 + e_.met_date[0]);
-            at(bottom(), 0, 7, " " UI_MUTED "Month" UI_MUTED "        < %u >", e_.met_date[1]);
-            at(bottom(), 0, 8, " " UI_MUTED "Day" UI_MUTED "           < %u >", e_.met_date[2]);
-            at(bottom(), 0, 10, " " UI_MUTED "OT ID  %05u / %05u", orig_.tid, orig_.sid);
+            row(0, "Ball", "< %s >", ball_name(e_.ball));
+            row(1, "Location", "< %s >", ui::location(gen4_ ? 4 : 5, e_.met_location));
+            row(2, "Met level", "< %u >", e_.met_level);
+            row(3, "Year", "< %u >", 2000 + e_.met_date[0]);
+            row(4, "Month", "< %u >", e_.met_date[1]);
+            row(5, "Day", "< %u >", e_.met_date[2]);
+            ui::text(bottom(), kListX, row_text_y(6) + 4, UI_MUTED "OT ID  %05u / %05u", orig_.tid, orig_.sid);
         }
         else
         {
@@ -2480,10 +2650,10 @@ private:
                 snprintf(nick2, sizeof(nick2), "%s", ui::name(VERITY_NAME_SPECIES, orig_.species));
             else
                 ui::utf16_to_text(orig_.nickname, nick2, sizeof(nick2));
-            at(bottom(), 0, 3, " " UI_MUTED "Nickname" UI_MUTED "    %s   " UI_MUTED "A to type", nick2);
+            row(0, "Nickname", "%s   " UI_MUTED "A to type", nick2);
             for (int i = 0; i < 6; i++)
-                at(bottom(), 0, 4 + i, " " UI_MUTED "%-6s" UI_MUTED "       < %3u >", cs[i], e_.contest[i]);
-            at(bottom(), 0, 10, " " UI_MUTED "Ribbons" UI_MUTED "     %d set   " UI_MUTED "A to list", ribbon_count());
+                row(1 + i, cs[i], "< %3u >", e_.contest[i]);
+            row(7, "Ribbons", "%d set   " UI_MUTED "A to list", ribbon_count());
         }
     }
 };
