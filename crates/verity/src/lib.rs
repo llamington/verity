@@ -6,6 +6,7 @@ extern crate std;
 #[cfg(any(feature = "alloc", feature = "std"))]
 extern crate alloc;
 
+pub mod bag;
 pub mod data;
 pub mod edit;
 pub mod generate;

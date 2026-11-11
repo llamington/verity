@@ -164,6 +164,17 @@ pub fn build_game(j: &Value, evolutions: &Value) -> Vec<u8> {
     w.indexed(gt::EGG_MOVES, &eggs);
     let held: Vec<u16> = ints(&j["held_items"]).iter().map(|v| *v as u16).collect();
     w.u16s(gt::HELD_ITEMS, &held);
+    let pouches: Vec<Vec<u8>> = j["pouch_items"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|p| ints(p).iter().flat_map(|v| (*v as u16).to_le_bytes()).collect())
+                .collect()
+        })
+        .unwrap_or_default();
+    if !pouches.is_empty() {
+        w.indexed(gt::POUCH_ITEMS, &pouches);
+    }
 
     let mut evos = vec![Vec::new(); count];
     for e in evolutions["evolutions"].as_array().unwrap() {

@@ -738,8 +738,11 @@ public static class Program
 
     private static int[] Raw(PersonalInfo pi) => pi.Write().Select(b => (int)b).ToArray();
 
+    private static readonly ushort[] Unreleased4 = [5, 16, 147, 499, 500];
+    private static readonly ushort[] Unreleased5 = [5, 16, 260, 261, 262, 263, 264, 492, 493, 494, 495, 496, 497, 498, 499, 500, 576];
+
     private static object ExportGame(string key, byte gen, IPersonalTable table, ushort maxSpecies,
-        Func<ushort, byte, Learnset> levelup, Func<ushort, byte, ReadOnlySpan<ushort>> eggs, ReadOnlySpan<ushort> held)
+        Func<ushort, byte, Learnset> levelup, Func<ushort, byte, ReadOnlySpan<ushort>> eggs, ReadOnlySpan<ushort> held, SaveFile? bag = null)
     {
         var personal = new System.Collections.Generic.List<int[]>();
         var tutors = new System.Collections.Generic.List<int[]>();
@@ -785,6 +788,11 @@ public static class Program
             levelup = learn.OrderBy(kv => kv.Key).Select(kv => new { index = kv.Key, moves = kv.Value }).ToArray(),
             egg_moves = egg,
             held_items = held.ToArray(),
+            // Items each bag pouch can hold (PKHeX `IItemStorage.GetItems`, in pouch order),
+            // without the unreleased ones (`ItemStorage4.Unreleased` / `ItemStorage5.Unreleased`,
+            // which are internal, so copied here).
+            pouch_items = bag?.Inventory.Select(p => p.Info.GetItems(p.Type).ToArray()
+                .Where(i => !(gen == 4 ? Unreleased4 : Unreleased5).Contains(i)).ToArray()).ToArray(),
         };
     }
 
@@ -794,11 +802,11 @@ public static class Program
         Directory.CreateDirectory(outDir);
         var games = new (string key, Func<object> make)[]
         {
-            ("dp", () => ExportGame("dp", 4, PersonalTable.DP, Sav(GameVersion.D).MaxSpeciesID, LearnSource4DP.Instance.GetLearnset, (s, f) => LearnSource4DP.Instance.GetEggMoves(s, f), Sav(GameVersion.D).HeldItems)),
-            ("pt", () => ExportGame("pt", 4, PersonalTable.Pt, Sav(GameVersion.Pt).MaxSpeciesID, LearnSource4Pt.Instance.GetLearnset, (s, f) => LearnSource4Pt.Instance.GetEggMoves(s, f), Sav(GameVersion.Pt).HeldItems)),
-            ("hgss", () => ExportGame("hgss", 4, PersonalTable.HGSS, Sav(GameVersion.HG).MaxSpeciesID, LearnSource4HGSS.Instance.GetLearnset, (s, f) => LearnSource4HGSS.Instance.GetEggMoves(s, f), Sav(GameVersion.HG).HeldItems)),
-            ("bw", () => ExportGame("bw", 5, PersonalTable.BW, Sav(GameVersion.B).MaxSpeciesID, LearnSource5BW.Instance.GetLearnset, (s, f) => LearnSource5BW.Instance.GetEggMoves(s, f), Sav(GameVersion.B).HeldItems)),
-            ("b2w2", () => ExportGame("b2w2", 5, PersonalTable.B2W2, Sav(GameVersion.B2).MaxSpeciesID, LearnSource5B2W2.Instance.GetLearnset, (s, f) => LearnSource5B2W2.Instance.GetEggMoves(s, f), Sav(GameVersion.B2).HeldItems)),
+            ("dp", () => ExportGame("dp", 4, PersonalTable.DP, Sav(GameVersion.D).MaxSpeciesID, LearnSource4DP.Instance.GetLearnset, (s, f) => LearnSource4DP.Instance.GetEggMoves(s, f), Sav(GameVersion.D).HeldItems, Sav(GameVersion.D))),
+            ("pt", () => ExportGame("pt", 4, PersonalTable.Pt, Sav(GameVersion.Pt).MaxSpeciesID, LearnSource4Pt.Instance.GetLearnset, (s, f) => LearnSource4Pt.Instance.GetEggMoves(s, f), Sav(GameVersion.Pt).HeldItems, Sav(GameVersion.Pt))),
+            ("hgss", () => ExportGame("hgss", 4, PersonalTable.HGSS, Sav(GameVersion.HG).MaxSpeciesID, LearnSource4HGSS.Instance.GetLearnset, (s, f) => LearnSource4HGSS.Instance.GetEggMoves(s, f), Sav(GameVersion.HG).HeldItems, Sav(GameVersion.HG))),
+            ("bw", () => ExportGame("bw", 5, PersonalTable.BW, Sav(GameVersion.B).MaxSpeciesID, LearnSource5BW.Instance.GetLearnset, (s, f) => LearnSource5BW.Instance.GetEggMoves(s, f), Sav(GameVersion.B).HeldItems, Sav(GameVersion.B))),
+            ("b2w2", () => ExportGame("b2w2", 5, PersonalTable.B2W2, Sav(GameVersion.B2).MaxSpeciesID, LearnSource5B2W2.Instance.GetLearnset, (s, f) => LearnSource5B2W2.Instance.GetEggMoves(s, f), Sav(GameVersion.B2).HeldItems, Sav(GameVersion.B2))),
         };
         var manifest = new System.Collections.Generic.Dictionary<string, object>
         {

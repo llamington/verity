@@ -21,6 +21,8 @@ pub mod game_table {
     pub const LEVELUP_FR: u16 = 9;
     pub const LEVELUP_LG: u16 = 10;
     pub const ENCOUNTERS: u16 = 11;
+    /// Items each bag pouch can hold, one record per pouch in [`crate::save::bag`] order.
+    pub const POUCH_ITEMS: u16 = 12;
 }
 
 /// Table ids in a [`BlobKind::Moves`] blob.
@@ -275,6 +277,12 @@ impl<'a> GameData<'a> {
 
     pub fn held_items(&self) -> U16s<'a> {
         U16s(self.blob.bytes(game_table::HELD_ITEMS))
+    }
+
+    /// Items bag pouch `pouch` can hold, in the game's pouch order (PKHeX
+    /// `IItemStorage.GetItems` without unreleased items).
+    pub fn pouch_items(&self, pouch: usize) -> U16s<'a> {
+        U16s(Indexed(self.blob.bytes(game_table::POUCH_ITEMS)).get(pouch))
     }
 
     /// Forward evolutions for a table index (PKHeX `EvolutionTree.Forward.GetForward`).
