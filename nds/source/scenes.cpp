@@ -859,6 +859,24 @@ private:
 
 // ---- box view ------------------------------------------------------------------------------
 
+// The Pokémon's front sprite at x, y with its ball behind the top-left corner, from the sprite
+// and item caches of the save's generation; false (nothing drawn) without them.
+static bool show_pokemon(const verity_pkm_view& v, int x, int y, bool ball = true)
+{
+    static uint8_t tiles[4608];
+    uint16_t colors[16];
+    uint8_t gen = core::doc().info.generation;
+    if (!core::pokemon_sprite(gen, v.species, v.form, v.gender == 1, v.is_egg, v.is_shiny && !v.is_egg, tiles,
+                              colors))
+        return false;
+    ui::pokemon_sprite(x, y, tiles, colors);
+    uint8_t ball_tiles[512];
+    uint16_t bc[16];
+    if (ball && !v.is_egg && core::ball_icon(gen, v.ball, ball_tiles, bc))
+        ui::item_icon(true, x - 2, y - 4, ball_tiles, bc);  // its outline clear of the panel border
+    return true;
+}
+
 class BoxView : public ui::Scene
 {
 public:
@@ -986,7 +1004,7 @@ private:
             core::box_name(box_, name, sizeof(name));
             int pad = (30 - ui::text_len(name)) / 2 - 1;
             ui::title(bottom(), "<%*s%s", pad > 0 ? pad : 0, "", name);
-            char n[12];
+            char n[24];
             snprintf(n, sizeof(n), "%d/%d  >", box_ + 1, (int)core::doc().boxes);
             ui::title_right(bottom(), n);
         }
@@ -1013,14 +1031,16 @@ private:
         details(at_cell(cur_));
     }
 
-    // The top screen while browsing: one panel, grouped by space rather than borders. The
-    // verdict first (what verity is for), then who it is, its moves and IVs, and where it came
-    // from. EVs and the PID are in the editor.
+    // The top screen while browsing, laid out like the games' summary: the Pokémon's sprite (its
+    // ball behind it) with the verdict and who it is beside it, then its moves and IVs across the
+    // panel. EVs and the PID are in the editor.
     void details(const verity_pkm_view& v)
     {
         ui::clear(top());
         ui::frame_clear(top());
-        const int x = ui::kInsetTop;
+        ui::top_art_hide();
+        ui::item_icon(true, 0, 0, nullptr, nullptr);
+        const int x = ui::kInsetTop, rx = kSideX;
         if (v.species == 0)
         {
             ui::title(top(), "Empty slot");
@@ -1033,60 +1053,108 @@ private:
         char nick[32], ot[32];
         ui::utf16_to_text(v.nickname, nick, sizeof(nick));
         ui::utf16_to_text(v.ot_name, ot, sizeof(ot));
+        ui::fit(ot, 80);
         const char* sp = ui::name(VERITY_NAME_SPECIES, v.species);
-        const char* g = v.gender == 0 ? "M" : v.gender == 1 ? "F" : "";
+        uint8_t gen = core::doc().info.generation;
+        bool art = show_pokemon(v, 8, 16);
+        // Without a ROM there is no sprite: the text starts at the panel's edge.
+        int cx = art ? rx : x;
         if (v.is_egg)
         {
             ui::title(top(), "Egg");
-            ui::panel(top(), 1, 2, 30, 8);
+            ui::panel(top(), 1, 2, 30, 11);
             ui::Lines l(2);
-            legality_line(l, v);
+            legality_line(l, v, cx / 8);
             l.block();
-            ui::text(top(), x, l.line(), "%s", sp);
-            ui::text(top(), x, l.line(), UI_MUTED "OT" UI_MUTED "  %s   " UI_MUTED "ID" UI_MUTED "  %05u / %05u", ot, v.tid, v.sid);
+            ui::text(top(), cx, l.line(), UI_MUTED "Will hatch into" UI_MUTED " %s", sp);
+            ui::text(top(), cx, l.line(), UI_MUTED "OT" UI_MUTED "  %s", ot);
+            ui::text(top(), cx, l.line(), UI_MUTED "ID" UI_MUTED "  %05u / %05u", v.tid, v.sid);
             return;
         }
-        ui::title(top(), "%s%s", nick, v.is_shiny ? " *" : "");
+        if (v.is_nicknamed && strcmp(nick, sp) != 0)
+            ui::title(top(), "%s  " UI_MUTED "%s", nick, sp);
+        else
+            ui::title(top(), "%s", nick);
         char lv[12];
         snprintf(lv, sizeof(lv), "Lv %u", v.level);
         ui::title_right(top(), lv);
+        // The box markings in the title bar, set ones bright.
+        int mx = 250 - ui::text_width(lv) - 10 - 6 * 9;
+        for (int k = 0; k < 6; k++)
+            ui::shape(top(), mx + 9 * k, 0, k, v.markings >> k & 1 ? 0 : 1);
         ui::panel(top(), 1, 2, 30, 20);
         ui::Lines l(2);
-        legality_line(l, v);
-        l.block();
-        if (v.form)
-            ui::text(top(), x, l.line(), "#%03u %s " UI_MUTED "form %u" UI_MUTED "  %s", v.species, sp, v.form, g);
-        else
-            ui::text(top(), x, l.line(), "#%03u %s  %s", v.species, sp, g);
-        ui::text(top(), x, l.line(), "%s " UI_MUTED "nature, " UI_MUTED "%s", ui::name(VERITY_NAME_NATURES, v.nature),
-                 ui::name(VERITY_NAME_ABILITIES, v.ability));
-        uint32_t items = core::doc().info.generation == 4 ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
-        ui::text(top(), x, l.line(), UI_MUTED "Holds" UI_MUTED "  %s", v.held_item ? ui::name(items, v.held_item) : "nothing");
-        l.block();
+        legality_line(l, v, cx / 8);
+        // Types (the game's icons, else names), then the gender and the shiny star.
+        int ty = 34, gx = cx;
+        for (int k = 0; k < 2; k++)
+        {
+            if (v.types[k] == 0xFF || (k == 1 && v.types[1] == v.types[0]))
+                continue;
+            uint8_t t[256];
+            uint16_t c[16];
+            if (core::type_icon(gen, 0, v.types[k], t, c))
+            {
+                ui::small_icon(k, gx, ty, t, c);
+                gx += 36;
+            }
+            else
+            {
+                const char* tn = ui::name(VERITY_NAME_TYPES, v.types[k]);
+                ui::text(top(), gx, ty + 4, "%s", tn);
+                gx += ui::text_width(tn) + 6;
+            }
+        }
+        if (v.gender < 2)
+        {
+            ui::shape(top(), gx + 2, ty + 4, v.gender == 0 ? ui::kMale : ui::kFemale, v.gender == 0 ? 3 : 4);
+            gx += 2 + 7 + 4;
+        }
+        if (v.is_shiny)
+            ui::shape(top(), gx, ty + 4, ui::kShiny, 2);
+        int y = 54;
+        char line[64];
+        snprintf(line, sizeof(line), "%s " UI_MUTED "nature", ui::name(VERITY_NAME_NATURES, v.nature));
+        ui::text(top(), cx, y, "%s", line);
+        snprintf(line, sizeof(line), "%s", ui::name(VERITY_NAME_ABILITIES, v.ability));
+        ui::fit(line, 244 - cx);
+        ui::text(top(), cx, y + 12, "%s", line);
+        uint32_t items = gen == 4 ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5;
+        snprintf(line, sizeof(line), UI_MUTED "Holds" UI_MUTED " %s", v.held_item ? ui::name(items, v.held_item) : "nothing");
+        ui::fit(line, 244 - cx);
+        ui::text(top(), cx, y + 24, "%s", line);
+        snprintf(line, sizeof(line), UI_MUTED "OT" UI_MUTED " %s  " UI_MUTED "ID" UI_MUTED " %05u", ot, v.tid);
+        ui::text(top(), cx, y + 40, "%s", line);
+        // The level first, so a long place name is what gets cut.
+        snprintf(line, sizeof(line), UI_MUTED "Met" UI_MUTED " Lv %u, %s", v.met_level,
+                 ui::location(gen, v.met_location));
+        ui::fit(line, 244 - cx);
+        ui::text(top(), cx, y + 52, "%s", line);
+        // Across the panel, under the sprite.
+        y = 120;
         for (int m = 0; m < 4; m += 2)
         {
-            int y = l.line();
             for (int k = 0; k < 2; k++)
                 ui::text(top(), x + k * 116, y, "%.15s", v.moves[m + k] ? ui::name(VERITY_NAME_MOVES, v.moves[m + k]) : "-");
+            y += ui::kPitch;
         }
-        l.block();
         static const char* st[6] = {"HP", "Atk", "Def", "Spe", "SpA", "SpD"};
-        int hy = l.line(), iy = l.line();
+        int hy = y + 8, iy = hy + ui::kPitch;
         ui::text(top(), x, iy, UI_MUTED "IVs");
         for (int k = 0; k < 6; k++)
         {
-            int cx = x + 56 + k * 30;  // right edge of each column
-            ui::text_right(top(), cx, hy, UI_MUTED "%s", st[k]);
-            ui::text_right(top(), cx, iy, "%u", v.ivs[k]);
+            int cx2 = x + 56 + k * 30;  // right edge of each column
+            ui::text_right(top(), cx2, hy, UI_MUTED "%s", st[k]);
+            ui::text_right(top(), cx2, iy, "%u", v.ivs[k]);
         }
-        l.block();
-        ui::text(top(), x, l.line(), UI_MUTED "OT" UI_MUTED "  %s   " UI_MUTED "ID" UI_MUTED "  %05u / %05u", ot, v.tid, v.sid);
-        ui::text(top(), x, l.line(), UI_MUTED "Met" UI_MUTED "  %.22s, Lv %u",
-                 ui::location(core::doc().info.generation, v.met_location), v.met_level);
     }
 
+    // Text beside the sprite starts here (the sprite is 96 px wide from x 8).
+    static constexpr int kSideX = 112;
+
+
     // The verdict on one grid line: a badge, then the time or what failed.
-    void legality_line(ui::Lines& l, const verity_pkm_view& v)
+    void legality_line(ui::Lines& l, const verity_pkm_view& v, int col = 2)
     {
         uint32_t ms = 0;
         verity_legality_report r = party_ ? core::legality(0xFF, cur_, &ms)
@@ -1099,12 +1167,12 @@ private:
         char rest[48] = "";
         if (r.status == 1)
         {
-            c = ui::badge(top(), 2, row, ui::Badge::Legal, "LEGAL");
-            snprintf(rest, sizeof(rest), UI_MUTED "checked in %lu ms", (unsigned long)ms);
+            c = ui::badge(top(), col, row, ui::Badge::Legal, "LEGAL");
+            snprintf(rest, sizeof(rest), col > 2 ? UI_MUTED "%lu ms" : UI_MUTED "checked in %lu ms", (unsigned long)ms);
         }
         else if (r.status == 2)
         {
-            c = ui::badge(top(), 2, row, ui::Badge::Invalid, "ILLEGAL");
+            c = ui::badge(top(), col, row, ui::Badge::Invalid, "ILLEGAL");
             for (int i = 0; i < r.check_count && strlen(rest) < 30; i++)
             {
                 strcat(rest, i ? " " : "");
@@ -1115,7 +1183,7 @@ private:
         }
         else
         {
-            c = ui::badge(top(), 2, row, ui::Badge::Fishy, "NOT CHECKED");
+            c = ui::badge(top(), col, row, ui::Badge::Fishy, "NOT CHECKED");
             snprintf(rest, sizeof(rest), "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
         }
         if (!v.checksum_ok)
@@ -2162,6 +2230,8 @@ private:
 
     void draw_ribbons()
     {
+        ui::top_art_hide();
+        ui::frame_clear_rows(top(), 1, kEdit - 1);  // the taller key-hint panel
         ribbon_details(kDetail, ribbons_.selected);
         ui::frame_clear(bottom());
         ui::title(bottom(), "Ribbons");
@@ -2361,14 +2431,24 @@ private:
             ui::text(top(), kX, y + 16, UI_MUTED "Not in Gen %u games.", gen);
             return;
         }
+        // The game's type and category icons when the sprite cache has them, else pills.
+        uint8_t tt[256], ct[256];
+        uint16_t tc[16], cc[16];
+        bool icons = m.type_ != 0xFF && m.from_rom && core::type_icon(gen, 0, m.type_, tt, tc) &&
+                     core::type_icon(gen, 1, m.category % 3, ct, cc);
         if (m.type_ != 0xFF)
         {
-            const char* type = ui::name(VERITY_NAME_TYPES, m.type_);
-            int start = 30 - (ui::text_width(type) + 15) / 8;
             char pp[16];
             snprintf(pp, sizeof(pp), "%u " UI_MUTED "PP", m.pp);
-            ui::text(top(), (start - 1) * 8 - ui::text_width(pp), y, "%s", pp);
-            ui::pill(top(), start, row, ui::type_color(m.type_), type);
+            if (icons)
+                ui::text_right(top(), 244, y, "%s", pp);
+            else
+            {
+                const char* type = ui::name(VERITY_NAME_TYPES, m.type_);
+                int start = 30 - (ui::text_width(type) + 15) / 8;
+                ui::text(top(), (start - 1) * 8 - ui::text_width(pp), y, "%s", pp);
+                ui::pill(top(), start, row, ui::type_color(m.type_), type);
+            }
         }
         if (!m.from_rom)
         {
@@ -2389,7 +2469,16 @@ private:
             snprintf(acc, sizeof(acc), "sure hit");
         else
             snprintf(acc, sizeof(acc), "%u%%", m.accuracy);
-        int col = ui::pill(top(), 2, row + 2, kCatColor[m.category % 3], kCat[m.category % 3]);
+        int col;
+        if (icons)
+        {
+            // Centred on the stats line (y + 16).
+            ui::small_icon(0, kX, y + 12, tt, tc);
+            ui::small_icon(1, kX + 36, y + 12, ct, cc);
+            col = (kX + 36 + 32) / 8;
+        }
+        else
+            col = ui::pill(top(), 2, row + 2, kCatColor[m.category % 3], kCat[m.category % 3]);
         int x = col * 8 + 8;
         char buf[24];
         snprintf(buf, sizeof(buf), UI_MUTED "Power" UI_MUTED " %s", power);
@@ -2435,6 +2524,8 @@ private:
 
     void draw_picker()
     {
+        ui::top_art_hide();
+        ui::frame_clear_rows(top(), 1, kEdit - 1);  // the taller key-hint panel
         uint32_t cat = picking_ == 1 ? (gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5)
                                      : VERITY_NAME_MOVES;
         ui::item_icon(false, 0, 0, nullptr, nullptr);
@@ -2565,27 +2656,34 @@ private:
         ui::title(top(), "Edit  %s", nick);
         ui::title_right(top(), ui::name(VERITY_NAME_SPECIES, orig_.species));
         ui::item_icon(true, 0, 0, nullptr, nullptr);
+        ui::top_art_hide();
         if (tab_ == 2)
             move_details(kDetail, e_.moves[row_ < 4 ? row_ : 0]);
         else
         {
-            // What the keys do, beyond the hint bar.
-            ui::panel(top(), 1, kDetail, 30, 6);
+            // What the keys do, beside the Pokémon (as saved: edits show after Apply).
+            ui::panel(top(), 1, kDetail, 30, 11);
+            show_pokemon(orig_, 148, 12, false);
             int y = kDetail * 8 + 4;
-            ui::text(top(), kX, y, "Left/Right " UI_MUTED "change the value");
-            ui::text(top(), kX, y + 12, "Y + Left/Right " UI_MUTED "steps in tens");
+            ui::text(top(), kX, y, "Left/Right " UI_MUTED "changes it");
+            ui::text(top(), kX, y + 12, "Y+Left/Right " UI_MUTED "by tens");
+            int next = y + 36;
             if (tab_ == 1)
             {
                 int total = 0;
                 for (int i = 0; i < 6; i++)
                     total += e_.evs[i];
-                ui::text(top(), kX, y + 24, UI_MUTED "EV total " UI_MUTED "%d / 510%s", total,
-                         total > 510 ? "  (over the limit)" : "");
+                ui::text(top(), kX, y + 24, UI_MUTED "EV total " UI_MUTED "%d / 510", total);
+                if (total > 510)
+                {
+                    ui::text(top(), kX, next, UI_RED "Over the limit" UI_RED);
+                    next += 12;
+                }
             }
             else
                 ui::text(top(), kX, y + 24, "A " UI_MUTED "picks from a list");
-            ui::text(top(), kX, y + 36, "%s", tab_ == 1 && gen4_ ? "X " UI_MUTED "finds the closest legal IVs"
-                                                                : "Tap " UI_MUTED "a row twice to step it");
+            ui::text(top(), kX, next, "%s", tab_ == 1 && gen4_ ? "X " UI_MUTED "closest legal IVs"
+                                                              : "Tap twice " UI_MUTED "steps a row");
         }
         show_preview();
 

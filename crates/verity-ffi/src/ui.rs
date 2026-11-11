@@ -185,6 +185,8 @@ pub struct VerityPkmView {
     pub contest: [u8; 6],
     /// Bytes 0x24..0x28, 0x3C..0x40, 0x60..0x64.
     pub ribbons: [u8; 12],
+    /// A bit per mark: circle, triangle, square, heart, star, diamond.
+    pub markings: u8,
 }
 
 fn decode(gen4: bool, raw: &[u16], out: &mut [u16]) {
@@ -223,6 +225,7 @@ fn view(kind: SaveKind, pk: &Pkm) -> VerityPkmView {
         met_date: pk.met_date(),
         contest: pk.contest(),
         ribbons: pk.ribbons(),
+        markings: pk.markings(),
         nickname: [0; 13],
         ot_name: [0; 9],
         form: pk.form(),

@@ -54,6 +54,15 @@ bool item_icon(uint8_t generation, uint16_t item, uint8_t* tiles, uint16_t* colo
 // A ribbon's image from the ROM by verity's list position: 512 bytes of 4 bpp tiles (1D 32x32)
 // and 16 colours. False without a ROM.
 bool ribbon_icon(int index, uint8_t* tiles, uint16_t* colors);
+// A Pokémon's front sprite from the generation's sprite cache: 4608 tile bytes (96x96 4 bpp, 1D
+// blocks 64x64, 32x64, 64x32, 32x32) and 16 colours (normal or shiny). False without a cache.
+bool pokemon_sprite(uint8_t generation, uint16_t species, uint8_t form, bool female, bool egg, bool shiny,
+                    uint8_t* tiles, uint16_t* colors);
+// A type icon (kind 0, verity's type number) or move category icon (kind 1: physical, special,
+// status) from the sprite cache: 256 tile bytes (32x16 4 bpp) and 16 colours.
+bool type_icon(uint8_t generation, int kind, int index, uint8_t* tiles, uint16_t* colors);
+// The item icon of the ball a Pokémon is in (a Poké Ball for none or an unknown ball).
+bool ball_icon(uint8_t generation, uint8_t ball, uint8_t* tiles, uint16_t* colors);
 // Type and PP of a move, plus category, power and accuracy when a ROM of the save's generation
 // was found (from_rom). False for a move number the generation doesn't have.
 bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out);

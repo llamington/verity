@@ -96,6 +96,7 @@ typedef struct verity_pkm_view {
     uint8_t met_date[3]; /* years since 2000, month, day */
     uint8_t contest[6];  /* Cool, Beauty, Cute, Smart, Tough, Sheen */
     uint8_t ribbons[12]; /* bytes 0x24..0x28, 0x3C..0x40, 0x60..0x64 */
+    uint8_t markings;    /* bit per mark: circle, triangle, square, heart, star, diamond */
 } verity_pkm_view;
 
 /**
@@ -364,6 +365,27 @@ size_t verity_items_head_len(const uint8_t *p, size_t len);
 uint8_t verity_items_generation(const uint8_t *head, size_t len);
 bool verity_items_find(const uint8_t *head, size_t len, uint16_t item, uint32_t *palette_at,
                        uint32_t *tiles_at);
+
+/* Pokémon front sprites and type/category icons, one cache per generation (sprites4.vspr,
+ * sprites5.vspr). The cache is written as the ROM is read (it doesn't fit in memory) and ends
+ * with its index: the DS reads the last VERITY_SPRITES_FOOTER bytes, keeps the tail from
+ * verity_sprites_tail_start on in memory, and reads each sprite by offset. */
+#define VERITY_SPRITES_FOOTER 24
+typedef bool (*verity_write_fn)(void *ctx, const uint8_t *buf, uint32_t len);
+uint32_t verity_rom_build_sprite_cache(verity_read_fn read, void *ctx, verity_write_fn write,
+                                       void *wctx);
+uint32_t verity_sprites_tail_start(const uint8_t *footer, size_t len, uint32_t file_len);
+uint8_t verity_sprites_generation(const uint8_t *tail, size_t len, uint32_t start);
+/* Palette: 64 bytes at palette_at (normal, then shiny). Tiles: tiles_len bytes at tiles_at, for
+ * verity_sprite_decode (4608 bytes out: 96x96 4 bpp in 1D blocks 64x64, 32x64, 64x32, 32x32). */
+bool verity_sprites_find(const uint8_t *tail, size_t len, uint32_t start, uint16_t species,
+                         uint8_t form, bool female, bool egg, uint32_t *palette_at,
+                         uint32_t *tiles_at, uint32_t *tiles_len);
+bool verity_sprite_decode(const uint8_t *blob, size_t len, uint8_t *out);
+/* kind 0: type (verity's numbering); kind 1: category (0 physical, 1 special, 2 status).
+ * 256 tile bytes (32x16 4 bpp, tiles in rows of four) and 16 colours. */
+bool verity_sprites_icon(const uint8_t *tail, size_t len, uint32_t start, uint8_t kind,
+                         uint8_t index, uint8_t *tiles, uint16_t *colors);
 
 /* Move stats from the ROM (category, power, accuracy), one cache per generation: values differ
  * between Gen 4 and Gen 5. */

@@ -18,6 +18,7 @@ pub mod moves;
 pub mod narc;
 pub mod nds;
 pub mod ribbons;
+pub mod sprites;
 pub mod text;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

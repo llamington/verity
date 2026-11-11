@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Writes a small stand-in for a Gen 4/5 ROM that keeps only what verity reads (header, ARM9,
-file tables, the font, icon, species-data and move files), so the DS can build its font and icon caches
+file tables, the font, icon, sprite, species-data and move files), so the DS can build its font and icon caches
 in the emulator without a 512 MB SD image. Output goes under build/ (gitignored), never the repo.
 
 usage: standin_rom.py <rom.nds> <out.nds>
@@ -10,13 +10,17 @@ import sys
 
 KEEP = {b"CPU": ["graphic/pl_font.narc", "poketool/icongra/pl_poke_icon.narc", "poketool/waza/pl_waza_tbl.narc",
                  "itemtool/itemdata/item_icon.narc", "msgdata/pl_msg.narc",
-                 "graphic/pl_pst_gra.narc"],
+                 "graphic/pl_pst_gra.narc", "poketool/pokegra/pl_pokegra.narc",
+                 "poketool/pokegra/pl_otherpoke.narc", "battle/graphic/pl_batt_obj.narc"],
         b"ADA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
                  "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
         b"APA": ["graphic/font.narc", "poketool/icongra/poke_icon.narc", "poketool/waza/waza_tbl.narc",
                  "itemtool/itemdata/item_icon.narc", "msgdata/msg.narc"],
-        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9"], b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9"]}
-GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5", "a/0/0/2", "a/0/7/7", "a/0/7/8"]
+        b"IPK": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9",
+                 "a/0/0/4", "a/1/1/4", "a/0/0/8"],
+        b"IPG": ["a/0/1/6", "a/0/2/0", "a/0/1/1", "a/0/1/8", "a/0/2/7", "a/0/3/9", "a/0/0/4", "a/1/1/4", "a/0/0/8"]}
+GEN5 = ["a/0/2/3", "a/0/0/7", "a/0/1/6", "a/0/2/1", "a/0/2/5", "a/0/0/2", "a/0/7/7", "a/0/7/8", "a/0/0/4", "a/0/8/2",
+        "a/0/8/3"]
 
 
 def file_id(d, fnt, path):
