@@ -51,6 +51,45 @@ pub enum PkmIssue {
     PartyStats,
 }
 
+impl PkmIssue {
+    /// What to tell the user.
+    pub fn text(self) -> &'static str {
+        let t = ISSUE_TEXTS[self as usize];
+        &t[..t.len() - 1]
+    }
+
+    /// [`Self::text`] NUL-terminated, for the C ABI.
+    pub fn c_text(self) -> &'static str {
+        ISSUE_TEXTS[self as usize]
+    }
+}
+
+/// By `PkmIssue` order, NUL-terminated for the C ABI.
+const ISSUE_TEXTS: [&str; 22] = [
+    "wrong format\0",
+    "checksum mismatch\0",
+    "bad egg flags\0",
+    "species\0",
+    "form\0",
+    "ability\0",
+    "held item not in this game\0",
+    "move not in this game\0",
+    "no moves\0",
+    "duplicate move\0",
+    "PP out of range\0",
+    "nature\0",
+    "level\0",
+    "EXP out of range\0",
+    "nickname\0",
+    "OT name\0",
+    "language\0",
+    "origin game\0",
+    "ball\0",
+    "met location\0",
+    "egg location\0",
+    "party stats\0",
+];
+
 /// Why a save is unsafe for the game.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveIssue {

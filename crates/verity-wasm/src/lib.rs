@@ -8,16 +8,18 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
 use verity::data::{string_table as st, GameData, Strings};
+use verity::edit::{self, Edit, Met, Nickname};
 use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
 use verity::legality::moves4::MoveResult;
 use verity::legality::verdict;
 use verity::pkm::{Format, Pkm};
+use verity::safety::{self, Rules};
 use verity::save::{Save, SaveKind, Slot, BOX_SLOTS};
 use verity::text;
 
@@ -200,6 +202,8 @@ pub struct Summary {
     /// Circle, triangle, square, heart, star, diamond.
     pub markings: Vec<bool>,
     pub ribbon_count: u32,
+    /// By [`Choices::ribbons`] order.
+    pub ribbons: Vec<bool>,
 }
 
 #[derive(Serialize, Tsify)]
@@ -236,6 +240,186 @@ pub struct SaveCheck {
     pub slot: Option<u8>,
 }
 
+/// What the editor's pickers offer.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Choices {
+    /// Items this game lets a Pokémon hold, `0` (none) first.
+    pub held_items: Vec<Named>,
+    pub moves: Vec<Named>,
+    pub balls: Vec<Named>,
+    pub locations: Vec<Named>,
+    /// Ribbon names, in [`EditRequest::ribbons`] order.
+    pub ribbons: Vec<String>,
+    /// Longest nickname (5 for Japanese and Korean Pokémon, enforced by `preview`).
+    pub nickname_max: u8,
+}
+
+/// A met location, level and date.
+#[derive(Deserialize, Tsify, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MetRequest {
+    pub location: u16,
+    pub level: u8,
+    /// `YYYY-MM-DD`, 2000-2099.
+    pub date: String,
+}
+
+/// An edit from the page; absent fields stay as they are.
+#[derive(Deserialize, Tsify, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct EditRequest {
+    #[tsify(optional)]
+    pub held_item: Option<u16>,
+    /// Four move ids (0 for empty). PP are refilled and PP Ups cleared.
+    #[tsify(optional)]
+    pub moves: Option<Vec<u16>>,
+    /// The PID from [`Session::closest_ivs`], sent with its IVs.
+    #[tsify(optional)]
+    pub pid: Option<u32>,
+    /// HP, Atk, Def, Spe, SpA, SpD.
+    #[tsify(optional)]
+    pub ivs: Option<Vec<u8>>,
+    #[tsify(optional)]
+    pub evs: Option<Vec<u8>>,
+    #[tsify(optional)]
+    pub level: Option<u8>,
+    #[tsify(optional)]
+    pub friendship: Option<u8>,
+    #[tsify(optional)]
+    pub ball: Option<u8>,
+    #[tsify(optional)]
+    pub met: Option<MetRequest>,
+    /// Cool, Beauty, Cute, Smart, Tough, Sheen.
+    #[tsify(optional)]
+    pub contest: Option<Vec<u8>>,
+    /// One flag per [`Choices::ribbons`] entry.
+    #[tsify(optional)]
+    pub ribbons: Option<Vec<bool>>,
+    #[tsify(optional)]
+    pub nickname: Option<String>,
+    /// Back to the species name (ignored when `nickname` is set).
+    #[tsify(optional)]
+    pub reset_nickname: Option<bool>,
+}
+
+fn array<T: Copy + Default, const N: usize>(v: &[T], what: &str) -> Result<[T; N], JsError> {
+    v.try_into()
+        .map_err(|_| JsError::new(&format!("{what}: {N} values expected")))
+}
+
+impl EditRequest {
+    fn to_edit(&self, pk: &Pkm) -> Result<Edit, JsError> {
+        let met = match &self.met {
+            None => None,
+            Some(m) => {
+                let bad = || JsError::new("met date: YYYY-MM-DD between 2000 and 2099 expected");
+                let parts: Vec<u16> = m
+                    .date
+                    .split('-')
+                    .map(|p| p.parse().map_err(|_| bad()))
+                    .collect::<Result<_, _>>()?;
+                let [y, mo, d] = parts[..] else {
+                    return Err(bad());
+                };
+                if !(2000..=2099).contains(&y) || !(1..=12).contains(&mo) || !(1..=31).contains(&d)
+                {
+                    return Err(bad());
+                }
+                Some(Met {
+                    location: m.location,
+                    level: m.level,
+                    date: [(y - 2000) as u8, mo as u8, d as u8],
+                })
+            }
+        };
+        let ribbons = match &self.ribbons {
+            None => None,
+            Some(flags) => {
+                let mut r = pk.ribbons();
+                for (i, &on) in flags.iter().enumerate().take(edit::RIBBONS.len()) {
+                    let (byte, bit) = edit::ribbon_pos(i);
+                    r[byte] = (r[byte] & !(1 << bit)) | ((on as u8) << bit);
+                }
+                Some(r)
+            }
+        };
+        let nickname = match (&self.nickname, self.reset_nickname) {
+            (Some(n), _) => Some(nickname(n, pk)?),
+            (None, Some(true)) => Some(Nickname::Reset),
+            _ => None,
+        };
+        Ok(Edit {
+            held_item: self.held_item,
+            moves: self
+                .moves
+                .as_deref()
+                .map(|m| array(m, "moves"))
+                .transpose()?,
+            pid: self.pid,
+            ivs: self
+                .ivs
+                .as_deref()
+                .map(|v| array(v, "IVs"))
+                .transpose()?
+                .map(|v: [u8; 6]| v.map(|x| x.min(31))),
+            evs: self.evs.as_deref().map(|v| array(v, "EVs")).transpose()?,
+            level: self.level,
+            friendship: self.friendship,
+            ball: self.ball,
+            met,
+            contest: self
+                .contest
+                .as_deref()
+                .map(|v| array(v, "contest"))
+                .transpose()?,
+            ribbons,
+            nickname,
+        })
+    }
+}
+
+/// Checks a typed nickname against what the game can store.
+fn nickname(n: &str, pk: &Pkm) -> Result<Nickname, JsError> {
+    let units: Vec<u16> = n.encode_utf16().collect();
+    let cjk = matches!(pk.language(), 1 | 8);
+    let max = if cjk { 5 } else { edit::NICKNAME_MAX };
+    if units.is_empty() {
+        return Err(JsError::new("nickname: empty"));
+    }
+    if units.len() > max {
+        return Err(JsError::new(&format!("nickname: at most {max} characters")));
+    }
+    if matches!(pk.format(), Format::Pk4) {
+        if let Some(c) = n
+            .chars()
+            .find(|c| !text::is_encodable_g4(&c.encode_utf16(&mut [0; 2])[..]))
+        {
+            return Err(JsError::new(&format!("nickname: Gen 4 can't store “{c}”")));
+        }
+    }
+    Ok(Nickname::new(&units))
+}
+
+/// The result of [`Session::preview`].
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Preview {
+    /// Why the game-safe validator would refuse it.
+    pub issue: Option<String>,
+    pub legality: Legality,
+    pub summary: Summary,
+}
+
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct IvFix {
+    pub ivs: Vec<u8>,
+    pub pid: u32,
+    /// Total IV points away from the request.
+    pub distance: u32,
+}
+
 fn game_id(kind: SaveKind) -> &'static str {
     match kind {
         SaveKind::DP => "dp",
@@ -256,6 +440,7 @@ fn err(e: impl core::fmt::Debug) -> JsError {
 #[wasm_bindgen]
 pub struct Session {
     save: Vec<u8>,
+    dirty: bool,
 }
 
 #[wasm_bindgen]
@@ -265,7 +450,7 @@ impl Session {
     pub fn new(bytes: Vec<u8>) -> Result<Session, JsError> {
         let mut save = bytes;
         Save::open(&mut save).map_err(err)?;
-        Ok(Session { save })
+        Ok(Session { save, dirty: false })
     }
 
     /// The data blob this save's game needs (fetch `data/<name>.bin`).
@@ -335,55 +520,153 @@ impl Session {
     pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Ts<Legality>, JsError> {
         let (_, pk) = self.pkm(box_index, slot)?;
         let gen = self.open().generation();
-        let c5 = if gen == 5 { context5() } else { None };
-        let l = match verdict::check(gen, &pk, context4(), c5) {
-            Ok(r) => legality(&pk, &r),
-            Err(why) => Legality {
-                status: "unchecked".into(),
-                reason: Some(why.text().into()),
-                checks: vec![],
-                moves: vec![],
-                origin: None,
-            },
-        };
-        Ok(l.into_ts()?)
+        Ok(judge(gen, &pk).into_ts()?)
     }
 
     /// The game-safe validator over the whole save (needs the game blob and `moves4`/`moves5`).
     #[wasm_bindgen(js_name = saveCheck)]
     pub fn save_check(&mut self) -> Result<Ts<SaveCheck>, JsError> {
-        use verity::safety::{self, SaveIssue};
-        let save = self.open();
-        let kind = save.kind();
-        let moves = blob(if save.generation() == 4 { "moves4" } else { "moves5" })
-            .and_then(|b| verity::data::MoveData::load(b).ok());
-        let mut c = SaveCheck {
-            ok: false,
-            issue: None,
-            box_index: None,
-            slot: None,
-        };
-        let (Some(game), Some(moves)) = (game_data(kind), moves) else {
-            c.issue = Some("validator data missing".into());
-            return Ok(c.into_ts()?);
-        };
-        let rules = safety::Rules { kind, game, moves };
-        match safety::check_save(&rules, &save) {
-            Ok(()) => c.ok = true,
-            Err(SaveIssue::PartyCount) => c.issue = Some("party count out of range".into()),
-            Err(SaveIssue::NoUsablePartyMember) => {
-                c.issue = Some("no party Pokémon that can battle".into())
-            }
-            Err(SaveIssue::Checksums) => c.issue = Some("checksums".into()),
-            Err(SaveIssue::Pkm(at, why)) => {
-                c.issue = Some(format!("{why:?}"));
-                (c.box_index, c.slot) = match at {
-                    Slot::Party(i) => (None, Some(i)),
-                    Slot::Box(b, s) => (Some(b), Some(s)),
-                };
-            }
+        Ok(self.check_save().into_ts()?)
+    }
+
+    /// What the editor's pickers offer for this save's game.
+    pub fn choices(&mut self) -> Result<Ts<Choices>, JsError> {
+        let kind = self.open().kind();
+        let gen = self.open().generation();
+        let rules = rules(kind).ok_or_else(|| JsError::new("game data missing"))?;
+        let items = if gen == 4 { st::ITEMS4 } else { st::ITEMS5 };
+        let held = core::iter::once(0)
+            .chain(rules.game.held_items().iter())
+            .map(|i| named(items, i))
+            .collect();
+        let moves = (1..=rules.moves.max_move())
+            .map(|m| named(st::MOVES, m))
+            .filter(|n| n.name.is_some())
+            .collect();
+        let balls = (1..=if gen == 4 { 24 } else { 25 })
+            .map(|b| Named {
+                id: b,
+                name: named(items, ball_item(b as u8)).name,
+            })
+            .collect();
+        Ok(Choices {
+            held_items: held,
+            moves,
+            balls,
+            locations: locations(gen),
+            ribbons: edit::RIBBONS.iter().map(|r| (*r).into()).collect(),
+            nickname_max: 10,
         }
-        Ok(c.into_ts()?)
+        .into_ts()?)
+    }
+
+    /// Applies `edit` to a copy of the Pokémon and reports the game-safe check, legality and
+    /// the resulting summary, without writing.
+    pub fn preview(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        edit: Ts<EditRequest>,
+    ) -> Result<Ts<Preview>, JsError> {
+        let (pk, rules) = self.edited(box_index, slot, &edit.to_rust()?)?;
+        let issue = safety::check_pkm(&rules, &pk, pk.is_party_format())
+            .err()
+            .map(|i| i.text().into());
+        let gen = self.open().generation();
+        Ok(Preview {
+            issue,
+            legality: judge(gen, &pk),
+            summary: summary(rules.kind, &pk),
+        }
+        .into_ts()?)
+    }
+
+    /// Writes `edit` through the game-safe validator. In legal mode a result legality judges
+    /// illegal is refused too. Returns why it was refused, or nothing when written.
+    pub fn apply(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        edit: Ts<EditRequest>,
+        legal_mode: bool,
+    ) -> Result<Option<String>, JsError> {
+        let (pk, rules) = self.edited(box_index, slot, &edit.to_rust()?)?;
+        let gen = self.open().generation();
+        if legal_mode && judge(gen, &pk).status == "illegal" {
+            return Ok(Some("illegal (legal mode)".into()));
+        }
+        let at = slot_at(box_index, slot);
+        let mut save = self.open();
+        match safety::checked_set_pkm(&rules, &mut save, at, &pk) {
+            Ok(()) => {
+                self.dirty = true;
+                Ok(None)
+            }
+            Err(safety::WriteError::Pkm(i)) => Ok(Some(i.text().into())),
+            Err(e) => Err(err(e)),
+        }
+    }
+
+    /// Whether edits were applied since the save was opened.
+    #[wasm_bindgen(getter)]
+    pub fn dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// The legal IV spread closest to `target` (HP, Atk, Def, Spe, SpA, SpD) for a Gen 4 wild
+    /// catch, with the PID that goes with it. Nothing is written. Needs the legality blobs.
+    #[wasm_bindgen(js_name = closestIvs)]
+    pub fn closest_ivs(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        target: Vec<u8>,
+    ) -> Result<Ts<IvFix>, JsError> {
+        use verity::gen::status::GenStatus;
+        let goal: [u8; 6] = target
+            .try_into()
+            .map_err(|_| JsError::new("six IVs expected"))?;
+        let (_, pk) = self.pkm(box_index, slot)?;
+        let ctx = context4().ok_or_else(|| JsError::new("legality data missing"))?;
+        match verity::gen::api4::closest_ivs_for(ctx, &pk, goal, CLOSEST_IV_BUDGET) {
+            Ok(f) => Ok(IvFix {
+                ivs: f.ivs.to_vec(),
+                pid: f.pid,
+                distance: f.distance,
+            }
+            .into_ts()?),
+            Err(e) => Err(JsError::new(GenStatus::from(e).text())),
+        }
+    }
+
+    /// Prepares the save for writing, as the DS does: updates the checksums, then runs the
+    /// whole-save game-safe check. Returns the bytes to write, or an error saying what the
+    /// validator refused. The page writes them, reads the file back and calls
+    /// [`Session::mark_saved`] when they match.
+    pub fn finalize(&mut self) -> Result<Vec<u8>, JsError> {
+        self.open().finalize();
+        let c = self.check_save();
+        if !c.ok {
+            let at = match (c.box_index, c.slot) {
+                (Some(b), Some(s)) => format!(" (box {}, slot {})", b + 1, s + 1),
+                (None, Some(s)) => format!(" (party slot {})", s + 1),
+                _ => String::new(),
+            };
+            return Err(JsError::new(&format!(
+                "not saved: {}{at}",
+                c.issue.unwrap_or_default()
+            )));
+        }
+        if !self.open().checksums_valid() {
+            return Err(JsError::new("not saved: checksums didn't update"));
+        }
+        Ok(self.save.clone())
+    }
+
+    /// Records that the save was written and read back intact.
+    #[wasm_bindgen(js_name = markSaved)]
+    pub fn mark_saved(&mut self) {
+        self.dirty = false;
     }
 
     /// The save file as it stands, for downloading.
@@ -399,20 +682,146 @@ impl Session {
 
     fn pkm(&mut self, box_index: i32, slot: u8) -> Result<(SaveKind, Pkm), JsError> {
         let save = self.open();
-        let at = if box_index < 0 {
-            if slot as usize >= save.party_count() {
+        let at = slot_at(box_index, slot);
+        if let Slot::Party(i) = at {
+            if i as usize >= save.party_count() {
                 return Err(JsError::new("no Pokémon there"));
             }
-            Slot::Party(slot)
-        } else {
-            Slot::Box(box_index as u8, slot)
-        };
+        }
         let pk = save.pkm(at).map_err(err)?;
         if pk.species() == 0 {
             return Err(JsError::new("no Pokémon there"));
         }
         Ok((save.kind(), pk))
     }
+
+    fn check_save(&mut self) -> SaveCheck {
+        use verity::safety::SaveIssue;
+        let save = self.open();
+        let mut c = SaveCheck {
+            ok: false,
+            issue: None,
+            box_index: None,
+            slot: None,
+        };
+        let Some(rules) = rules(save.kind()) else {
+            c.issue = Some("validator data missing".into());
+            return c;
+        };
+        match safety::check_save(&rules, &save) {
+            Ok(()) => c.ok = true,
+            Err(SaveIssue::PartyCount) => c.issue = Some("party count out of range".into()),
+            Err(SaveIssue::NoUsablePartyMember) => {
+                c.issue = Some("no party Pokémon that can battle".into())
+            }
+            Err(SaveIssue::Checksums) => c.issue = Some("checksums".into()),
+            Err(SaveIssue::Pkm(at, why)) => {
+                c.issue = Some(why.text().into());
+                (c.box_index, c.slot) = match at {
+                    Slot::Party(i) => (None, Some(i)),
+                    Slot::Box(b, s) => (Some(b), Some(s)),
+                };
+            }
+        }
+        c
+    }
+
+    fn edited(
+        &mut self,
+        box_index: i32,
+        slot: u8,
+        req: &EditRequest,
+    ) -> Result<(Pkm, Rules<'static>), JsError> {
+        let (kind, pk) = self.pkm(box_index, slot)?;
+        let rules = rules(kind).ok_or_else(|| JsError::new("game data missing"))?;
+        let e = req.to_edit(&pk)?;
+        let names = match e.nickname {
+            Some(Nickname::Reset) => Some(
+                &context4()
+                    .ok_or_else(|| JsError::new("legality data missing"))?
+                    .names4,
+            ),
+            _ => None,
+        };
+        let save = self.open();
+        let pk = edit::edited(&save, &rules, slot_at(box_index, slot), &e, names)
+            .ok_or_else(|| JsError::new("no Pokémon there"))?;
+        Ok((pk, rules))
+    }
+}
+
+/// Spreads tested per lead (as on the DS).
+const CLOSEST_IV_BUDGET: u32 = 30_000;
+
+fn slot_at(box_index: i32, slot: u8) -> Slot {
+    if box_index < 0 {
+        Slot::Party(slot)
+    } else {
+        Slot::Box(box_index as u8, slot)
+    }
+}
+
+fn rules(kind: SaveKind) -> Option<Rules<'static>> {
+    let moves = blob(if matches!(kind, SaveKind::BW | SaveKind::B2W2) {
+        "moves5"
+    } else {
+        "moves4"
+    })
+    .and_then(|b| verity::data::MoveData::load(b).ok())?;
+    Some(Rules {
+        kind,
+        game: game_data(kind)?,
+        moves,
+    })
+}
+
+/// The legality verdict for `pk` in a save of `gen`.
+fn judge(gen: u8, pk: &Pkm) -> Legality {
+    let c5 = if gen == 5 { context5() } else { None };
+    match verdict::check(gen, pk, context4(), c5) {
+        Ok(r) => legality(pk, &r),
+        Err(why) => Legality {
+            status: "unchecked".into(),
+            reason: Some(why.text().into()),
+            checks: vec![],
+            moves: vec![],
+            origin: None,
+        },
+    }
+}
+
+/// Every named met location of a generation, in id order.
+fn locations(gen: u8) -> Vec<Named> {
+    let Some(s) = strings() else {
+        return vec![];
+    };
+    let banks: &[(u16, u16)] = if gen == 4 {
+        &[
+            (st::LOC4_0, 0),
+            (st::LOC4_2000, 2000),
+            (st::LOC4_3000, 3000),
+        ]
+    } else {
+        &[
+            (st::LOC5_0, 0),
+            (st::LOC5_30000, 30000),
+            (st::LOC5_40000, 40000),
+            (st::LOC5_60000, 60000),
+        ]
+    };
+    let mut out = vec![];
+    for &(cat, base) in banks {
+        for i in 0..s.count(cat) {
+            let id = base + i as u16;
+            if let Some(name) = utf16(s.location(gen, id)) {
+                out.push(Named {
+                    id,
+                    name: Some(name),
+                });
+            }
+        }
+    }
+    out
 }
 
 // ---- conversions ---------------------------------------------------------------------------
@@ -582,6 +991,15 @@ fn summary(kind: SaveKind, pk: &Pkm) -> Summary {
         contest: pk.contest().to_vec(),
         markings: (0..6).map(|i| markings & (1 << i) != 0).collect(),
         ribbon_count: pk.ribbons().iter().map(|b| b.count_ones()).sum(),
+        ribbons: {
+            let r = pk.ribbons();
+            (0..edit::RIBBONS.len())
+                .map(|i| {
+                    let (byte, bit) = edit::ribbon_pos(i);
+                    r[byte] & (1 << bit) != 0
+                })
+                .collect()
+        },
     }
 }
 

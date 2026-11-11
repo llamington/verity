@@ -44,5 +44,9 @@ export type {
 	SaveCheck,
 	Named,
 	MoveSlot,
-	MoveCheck
+	MoveCheck,
+	Choices,
+	EditRequest,
+	Preview,
+	IvFix
 } from '#lib/wasm/verity_wasm.js';

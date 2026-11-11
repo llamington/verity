@@ -4,7 +4,7 @@
 use core::slice;
 
 use verity::gen::api4::{self, EncounterChoice, Error, GenRequest, IvRequest};
-use verity::gen::wild4::{GenError, Lead};
+use verity::gen::wild4::Lead;
 use verity::safety::{self, SaveIssue};
 use verity::save::{SaveKind, Slot};
 
@@ -166,87 +166,16 @@ pub struct VerityGenRequest {
     pub seed: u32,
 }
 
-/// Result codes of `verity_gen_insert` (`verity_gen_status`).
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GenStatus {
-    Ok = 0,
-    Unsupported = 1,
-    NoEncounter = 2,
-    NotInEncounter = 3,
-    LevelOutsideSlot = 4,
-    NatureConflictsWithSynchronize = 5,
-    ShinyImpossibleForCuteCharm = 6,
-    GenderImpossible = 7,
-    CuteCharmNeedsGenderedSpecies = 8,
-    FormUnavailable = 9,
-    RadarNotAllowedHere = 10,
-    MunchlaxTreeUnavailable = 11,
-    NoFrameFound = 12,
-    BallNotAllowed = 13,
-    AbilityUnavailable = 14,
-    MovesIllegal = 15,
-    SlotUnavailable = 16,
-    Unsafe = 17,
-    Internal = 18,
-    NotWild = 19,
-    ShinyInGrotto = 20,
-}
+pub use verity::gen::status::GenStatus;
 
 fn status(e: Error) -> GenStatus {
-    use GenStatus as S;
-    match e {
-        Error::Gen(g) => match g {
-            GenError::LevelOutsideSlot => S::LevelOutsideSlot,
-            GenError::NatureConflictsWithSynchronize => S::NatureConflictsWithSynchronize,
-            GenError::ShinyImpossibleForCuteCharm => S::ShinyImpossibleForCuteCharm,
-            GenError::GenderImpossible => S::GenderImpossible,
-            GenError::CuteCharmNeedsGenderedSpecies => S::CuteCharmNeedsGenderedSpecies,
-            GenError::FormUnavailable => S::FormUnavailable,
-            GenError::RadarNotAllowedHere => S::RadarNotAllowedHere,
-            GenError::MunchlaxTreeUnavailable => S::MunchlaxTreeUnavailable,
-            GenError::BudgetExhausted => S::NoFrameFound,
-        },
-        Error::VersionUnsupported => S::Unsupported,
-        Error::NoEncounter => S::NoEncounter,
-        Error::NotInEncounter => S::NotInEncounter,
-        Error::BallNotAllowed => S::BallNotAllowed,
-        Error::AbilityUnavailable => S::AbilityUnavailable,
-        Error::MovesIllegal => S::MovesIllegal,
-        Error::PartyGap | Error::Save(_) | Error::WrongFormat => S::SlotUnavailable,
-        Error::Unsafe(_) => S::Unsafe,
-        Error::Illegal(_) => S::Internal,
-        Error::NotWild => S::NotWild,
-    }
+    e.into()
 }
 
 /// C ABI: human-readable text for a `verity_gen_status` (static, NUL-terminated ASCII).
 #[no_mangle]
 pub extern "C" fn verity_gen_status_text(code: u8) -> *const u8 {
-    let s: &'static [u8] = match code {
-        0 => b"OK\0",
-        1 => b"Only Gen 4 wild encounters for now\0",
-        2 => b"No wild encounter in this game\0",
-        3 => b"Not in that encounter\0",
-        4 => b"Level outside the slot\0",
-        5 => b"Nature conflicts with Synchronize\0",
-        6 => b"Shiny impossible with Cute Charm\0",
-        7 => b"Gender impossible here\0",
-        8 => b"Cute Charm needs a gendered species\0",
-        9 => b"Form not available here\0",
-        10 => b"Poke Radar not usable here\0",
-        11 => b"Munchlax not in this tree for this ID\0",
-        12 => b"No legal frame found (try again)\0",
-        13 => b"Ball not allowed\0",
-        14 => b"Ability not available\0",
-        15 => b"Moves not legal\0",
-        16 => b"Slot not available\0",
-        17 => b"Rejected by the game-safe check\0",
-        19 => b"Only for Gen 4 wild catches\0",
-        20 => b"Hidden Grotto Pokemon are never shiny\0",
-        _ => b"Internal error\0",
-    };
-    s.as_ptr()
+    GenStatus::c_text(code).as_ptr()
 }
 
 /// The Gen 5 half of `verity_gen_insert`.
@@ -529,82 +458,41 @@ fn edited(
     loc: VerityLoc,
     e: &VerityEdit,
 ) -> Option<verity::pkm::Pkm> {
-    let slot = slot_of(loc);
-    if let Slot::Party(i) = slot {
-        if i as usize >= save.party_count() {
-            return None;
-        }
-    }
-    let mut pk = save.pkm(slot).ok()?;
-    if pk.species() == 0 {
-        return None;
-    }
-    let pi = rules.game.species_form(pk.species(), pk.form());
-    if e.mask & EDIT_ITEM != 0 {
-        pk.set_held_item(e.held_item);
-    }
-    if e.mask & EDIT_MOVES != 0 {
-        pk.set_moves_with_pp(e.moves, &rules.moves);
-        pk.set_pp_ups([0; 4]);
-    }
-    if e.mask & EDIT_PID != 0 {
-        pk.set_pid(e.pid);
-    }
-    if e.mask & EDIT_IVS != 0 {
-        pk.set_ivs(e.ivs);
-    }
-    if e.mask & EDIT_EVS != 0 {
-        pk.set_evs(e.evs);
-    }
-    if e.mask & EDIT_LEVEL != 0 {
-        pk.set_exp(verity::pkm::derived::exp_for_level(
-            e.level.clamp(1, 100),
-            pi.growth(),
-        ));
-    }
-    if e.mask & EDIT_FRIENDSHIP != 0 {
-        pk.set_friendship(e.friendship);
-    }
-    if e.mask & EDIT_BALL != 0 {
-        pk.set_ball(e.ball);
-    }
-    if e.mask & EDIT_MET != 0 {
-        pk.set_met_location(e.met_location);
-        pk.set_met_level(e.met_level);
-        pk.set_met_date(e.met_date);
-    }
-    if e.mask & EDIT_CONTEST != 0 {
-        pk.set_contest(e.contest);
-    }
-    if e.mask & EDIT_RIBBONS != 0 {
-        pk.set_ribbons(e.ribbons);
-    }
-    if e.mask & EDIT_NICKNAME != 0 {
-        let n = e
-            .nickname
-            .iter()
-            .position(|&c| c == 0)
-            .unwrap_or(10)
-            .min(10);
-        pk.set_nickname(&e.nickname[..n]);
-        pk.set_is_nicknamed(true);
-    } else if e.mask & EDIT_NICKNAME_RESET != 0 {
-        let ctx = legal::context()?;
-        let name = ctx.names4.get(pk.language() as u16, pk.species() as usize);
-        let mut buf = [0u16; 11];
-        let mut n = 0;
-        for c in name.iter().take(10) {
-            buf[n] = c;
-            n += 1;
-        }
-        pk.set_nickname(&buf[..n]);
-        pk.set_is_nicknamed(false);
-    }
-    if pk.is_party_format() {
-        pk.reset_party_stats(&pi.base_info());
-    }
-    pk.refresh_checksum();
-    Some(pk)
+    use verity::edit::{Edit, Met, Nickname};
+    let on = |bit: u32| e.mask & bit != 0;
+    let nickname = if on(EDIT_NICKNAME) {
+        let n = e.nickname.iter().position(|&c| c == 0).unwrap_or(10);
+        Some(Nickname::new(&e.nickname[..n]))
+    } else if on(EDIT_NICKNAME_RESET) {
+        Some(Nickname::Reset)
+    } else {
+        None
+    };
+    let edit = Edit {
+        held_item: on(EDIT_ITEM).then_some(e.held_item),
+        moves: on(EDIT_MOVES).then_some(e.moves),
+        pid: on(EDIT_PID).then_some(e.pid),
+        ivs: on(EDIT_IVS).then_some(e.ivs),
+        evs: on(EDIT_EVS).then_some(e.evs),
+        level: on(EDIT_LEVEL).then_some(e.level),
+        friendship: on(EDIT_FRIENDSHIP).then_some(e.friendship),
+        ball: on(EDIT_BALL).then_some(e.ball),
+        met: on(EDIT_MET).then_some(Met {
+            location: e.met_location,
+            level: e.met_level,
+            date: e.met_date,
+        }),
+        contest: on(EDIT_CONTEST).then_some(e.contest),
+        ribbons: on(EDIT_RIBBONS).then_some(e.ribbons),
+        nickname,
+    };
+    // The species names live in the Gen 4 context; build it only for a reset.
+    let names = if matches!(nickname, Some(Nickname::Reset)) {
+        Some(&legal::context()?.names4)
+    } else {
+        None
+    };
+    verity::edit::edited(save, rules, slot_of(loc), &edit, names)
 }
 
 /// C ABI: applies `edit` to a copy of the Pokémon at `loc` and reports the game-safe verdict
@@ -843,33 +731,34 @@ pub unsafe extern "C" fn verity_closest_ivs(
 /// C ABI: text for a game-safe issue code from `verity_edit_preview`/`verity_edit_apply`.
 #[no_mangle]
 pub extern "C" fn verity_issue_text(code: u8) -> *const u8 {
-    const T: [&[u8]; 23] = [
-        b"OK\0",
-        b"wrong format\0",
-        b"checksum mismatch\0",
-        b"bad egg flags\0",
-        b"species\0",
-        b"form\0",
-        b"ability\0",
-        b"held item not in this game\0",
-        b"move not in this game\0",
-        b"no moves\0",
-        b"duplicate move\0",
-        b"PP out of range\0",
-        b"nature\0",
-        b"level\0",
-        b"EXP out of range\0",
-        b"nickname\0",
-        b"OT name\0",
-        b"language\0",
-        b"origin game\0",
-        b"ball\0",
-        b"met location\0",
-        b"egg location\0",
-        b"party stats\0",
+    use verity::safety::PkmIssue as I;
+    const ISSUES: [I; 22] = [
+        I::WrongFormat,
+        I::ChecksumMismatch,
+        I::SanityFlags,
+        I::Species,
+        I::Form,
+        I::Ability,
+        I::HeldItem,
+        I::Move,
+        I::NoMoves,
+        I::DuplicateMove,
+        I::Pp,
+        I::Nature,
+        I::Level,
+        I::Exp,
+        I::Nickname,
+        I::OtName,
+        I::Language,
+        I::OriginGame,
+        I::Ball,
+        I::MetLocation,
+        I::EggLocation,
+        I::PartyStats,
     ];
     match code {
-        0..=22 => T[code as usize].as_ptr(),
+        0 => c"OK".as_ptr().cast(),
+        1..=22 => ISSUES[code as usize - 1].c_text().as_ptr(),
         100 => c"illegal (legal mode)".as_ptr().cast(),
         _ => c"cannot edit this slot".as_ptr().cast(),
     }
