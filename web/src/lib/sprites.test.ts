@@ -1,0 +1,45 @@
+import { describe, expect, it } from 'vitest';
+import { SPRITES_BASE, formSuffix, spriteUrls } from './sprites.js';
+
+const mon = { species: 25, form: 0, female: false, shiny: false, egg: false };
+const pt = `${SPRITES_BASE}/generation-iv/platinum/`;
+
+describe('spriteUrls', () => {
+	it('points at the game folder, pinned to a commit', () => {
+		expect(spriteUrls('pt', mon)).toEqual([`${pt}25.png`]);
+		expect(SPRITES_BASE).toMatch(/@[0-9a-f]{40}\//);
+		expect(spriteUrls('b2w2', mon)[0]).toContain('/generation-v/black-white/25.png');
+	});
+
+	it('tries the most specific sprite first', () => {
+		expect(spriteUrls('pt', { ...mon, species: 422, form: 1, female: true, shiny: true })).toEqual([
+			`${pt}shiny/female/422-east.png`,
+			`${pt}shiny/female/422.png`,
+			`${pt}shiny/422-east.png`,
+			`${pt}shiny/422.png`
+		]);
+	});
+
+	it('has none for eggs, empty slots and species the game lacks', () => {
+		expect(spriteUrls('pt', { ...mon, egg: true })).toEqual([]);
+		expect(spriteUrls('pt', { ...mon, species: 0 })).toEqual([]);
+		expect(spriteUrls('hgss', { ...mon, species: 494 })).toEqual([]);
+		expect(spriteUrls('bw', { ...mon, species: 649 })).toHaveLength(1);
+		expect(spriteUrls('rs', mon)).toEqual([]);
+	});
+});
+
+describe('formSuffix', () => {
+	it('names Unown, Arceus and the other forms', () => {
+		expect(formSuffix(201, 0, 4)).toBe('');
+		expect(formSuffix(201, 1, 4)).toBe('b');
+		expect(formSuffix(201, 27, 4)).toBe('question');
+		// Gen 4 has the ??? type at 9; Gen 5 doesn't.
+		expect(formSuffix(493, 9, 4)).toBe('unknown');
+		expect(formSuffix(493, 9, 5)).toBe('fire');
+		expect(formSuffix(493, 17, 4)).toBe('dark');
+		expect(formSuffix(479, 2, 4)).toBe('wash');
+		expect(formSuffix(585, 3, 5)).toBe('winter');
+		expect(formSuffix(25, 3, 4)).toBe('');
+	});
+});

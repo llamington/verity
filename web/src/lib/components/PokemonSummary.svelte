@@ -1,9 +1,19 @@
 <script lang="ts">
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
+	import Sprite from '#lib/components/Sprite.svelte';
 	import type { Summary, Named, Legality } from '#lib/verity.js';
 
-	let { summary, legality }: { summary: Summary; legality?: Legality | undefined } = $props();
+	let {
+		summary,
+		legality,
+		game
+	}: {
+		summary: Summary;
+		legality?: Legality | undefined;
+		/** The save's game id; with it, the summary shows the Pokémon's sprite. */
+		game?: string | undefined;
+	} = $props();
 
 	// The save stores stats as HP, Atk, Def, Spe, SpA, SpD; show them in the games' order.
 	const ORDER = [0, 1, 2, 4, 5, 3];
@@ -19,19 +29,24 @@
 </script>
 
 <div class="flex flex-col gap-4 text-sm" data-testid="summary">
-	<div class="flex flex-col gap-1">
-		<div class="flex flex-wrap items-baseline gap-2">
-			<span class="text-lg font-semibold">{mon.egg ? 'Egg' : mon.nickname}</span>
-			{#if gender}<span aria-label={summary.gender ? 'female' : 'male'}>{gender}</span>{/if}
-			{#if mon.level != null && !mon.egg}
-				<span class="text-muted-foreground">Lv. {mon.level}</span>
-			{/if}
-		</div>
-		<div class="flex flex-wrap items-center gap-1">
-			<span class="text-muted-foreground">{species}{mon.form ? ` (form ${mon.form})` : ''}</span>
-			{#each summary.types as t (t.id)}<Badge variant="outline">{name(t)}</Badge>{/each}
-			{#if mon.shiny}<Badge variant="secondary">Shiny</Badge>{/if}
-			{#if !mon.checksumOk}<Badge variant="destructive">Bad checksum</Badge>{/if}
+	<div class="flex items-center gap-3">
+		{#if game && !mon.egg}
+			<Sprite {game} {mon} name={species} size={80} />
+		{/if}
+		<div class="flex min-w-0 flex-col gap-1">
+			<div class="flex flex-wrap items-baseline gap-2">
+				<span class="text-lg font-semibold">{mon.egg ? 'Egg' : mon.nickname}</span>
+				{#if gender}<span aria-label={summary.gender ? 'female' : 'male'}>{gender}</span>{/if}
+				{#if mon.level != null && !mon.egg}
+					<span class="text-muted-foreground">Lv. {mon.level}</span>
+				{/if}
+			</div>
+			<div class="flex flex-wrap items-center gap-1">
+				<span class="text-muted-foreground">{species}{mon.form ? ` (form ${mon.form})` : ''}</span>
+				{#each summary.types as t (t.id)}<Badge variant="outline">{name(t)}</Badge>{/each}
+				{#if mon.shiny}<Badge variant="secondary">Shiny</Badge>{/if}
+				{#if !mon.checksumOk}<Badge variant="destructive">Bad checksum</Badge>{/if}
+			</div>
 		</div>
 	</div>
 

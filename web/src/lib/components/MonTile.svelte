@@ -1,13 +1,17 @@
 <script lang="ts">
 	import { Badge } from '#lib/components/ui/badge/index.js';
+	import Sprite from '#lib/components/Sprite.svelte';
 	import type { Mon } from '#lib/verity.js';
 
 	let {
 		mon,
+		game,
 		onselect,
 		onadd
 	}: {
 		mon: Mon | null | undefined;
+		/** The save's game id; with it, the tile shows the Pokémon's sprite. */
+		game?: string | undefined;
 		onselect?: () => void;
 		/** Makes an empty slot a button that adds a Pokémon. */
 		onadd?: () => void;
@@ -19,18 +23,23 @@
 </script>
 
 {#snippet body(mon: Mon)}
-	<div class="flex items-baseline justify-between gap-2">
-		<span class="truncate font-medium">{mon.egg ? 'Egg' : label}</span>
-		{#if mon.level != null && !mon.egg}
-			<span class="shrink-0 text-xs text-muted-foreground">Lv. {mon.level}</span>
+	<div class="flex items-center gap-2">
+		{#if game}
+			<Sprite {game} {mon} name={mon.egg ? 'Egg' : label} size={40} />
 		{/if}
-	</div>
-	{#if nicknamed}
-		<span class="truncate text-xs text-muted-foreground">“{mon.nickname}”</span>
-	{/if}
-	<div class="flex flex-wrap gap-1">
-		{#if mon.shiny}<Badge variant="secondary">Shiny</Badge>{/if}
-		{#if !mon.checksumOk}<Badge variant="destructive">Bad checksum</Badge>{/if}
+		<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+			<span class="truncate font-medium">{mon.egg ? 'Egg' : label}</span>
+			{#if (mon.level != null && !mon.egg) || nicknamed}
+				<span class="truncate text-xs text-muted-foreground">
+					{#if mon.level != null && !mon.egg}Lv. {mon.level}{/if}
+					{#if nicknamed}“{mon.nickname}”{/if}
+				</span>
+			{/if}
+			<div class="flex flex-wrap gap-1">
+				{#if mon.shiny}<Badge variant="secondary">Shiny</Badge>{/if}
+				{#if !mon.checksumOk}<Badge variant="destructive">Bad checksum</Badge>{/if}
+			</div>
+		</div>
 	</div>
 {/snippet}
 

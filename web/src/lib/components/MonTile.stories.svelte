@@ -10,6 +10,7 @@
 		nicknamed: false,
 		level: 42,
 		form: 0,
+		female: false,
 		egg: false,
 		shiny: false,
 		checksumOk: true
