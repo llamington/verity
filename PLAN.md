@@ -561,7 +561,8 @@ A browser build of the core, after the DS loads its font and graphics from the u
     origins (`verity_gen_insert`, `verity_wild_*`, `verity_egg_*`) (done).
   - Mystery Gift list and delivery, Gen 4 and Gen 5 (`verity_events_list`, `verity_event_inject`)
     (done).
-  - Bag/items (Gen 4 and Gen 5), the misc tabs.
+  - Bag/items (Gen 4 and Gen 5) (done 2026-11-11, on both front ends: the DS had no bag screen,
+    and the user chose to build one there too). The misc tabs are the editor's Misc tab (done).
   - Memory Link and Key System screen, including "Enable all keys" (`verity_unova_*`).
   - Japanese and Korean names (browser fonts), the leave-without-saving warning, backups before
     overwrite (`.bak1` on DS; on the web, keep the original download or a second file handle).
