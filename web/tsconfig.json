@@ -2,10 +2,7 @@
 	"extends": "$app/tsconfig",
 	"compilerOptions": {
 		"strict": true,
-		"types": [
-			"$app/types",
-			"node"
-		]
+		"types": ["$app/types", "node"]
 	},
 	"include": [
 		"src",
@@ -13,5 +10,6 @@
 		"prettier.config.js",
 		"eslint.config.js",
 		"playwright.config.ts"
-	]
+	],
+	"exclude": ["src/lib/wasm/*.js"]
 }

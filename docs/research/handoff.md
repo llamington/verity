@@ -7,7 +7,36 @@ and gaps are in `docs/research/p5-plan.md`.
 
 **Next tasks (user, 2026-11-10), in order:**
 
-1. PLAN P12 (the web version). The stats hexagon is dropped (user, 2026-11-10).
+1. PLAN P12 (the web version), in progress. The stats hexagon is dropped (user, 2026-11-10).
+
+**P12 web version, started 2026-11-10.** Stack chosen by the user after comparing Leptos, Dioxus,
+Svelte, Solid and Astro: **SvelteKit 3** (static adapter, every page prerendered; the editor at
+`/app` renders in the browser only and is `noindex`), strict TypeScript, **Tailwind v4**,
+**shadcn-svelte** (preset "nova"; components are copied into `web/src/lib/components/ui`),
+**Storybook 10** (Chromatic add-on removed), Vitest and Playwright. Hosting target: Cloudflare Pages
+(free), not set up yet. Node is managed with **mise** (user installed it; `~/.local/bin/mise`),
+pinned by `web/.node-version` (26, the LTS). Run npm through `mise exec --` unless the shell has
+mise activated.
+
+- `crates/verity-wasm`: wasm-bindgen + tsify (`Ts<T>` returns; the `into_wasm_abi` attribute is
+  deprecated for leaking). `Session::new(bytes)`, `gameBlob()`, `attach("strings"|"game", bytes)`,
+  `overview()`, `boxView(i)`, `bytes()`. About 56 KB of WASM.
+- `web/`: `npm run core` builds the WASM into `src/lib/wasm` and copies the game and string blobs
+  into `static/data` (both gitignored); `predev`/`prebuild` run it. Imports use `#lib/...` with full
+  paths (`#lib/verity.js`, `#lib/components/ui/button/index.js`), not `$lib`. Links use
+  `resolve()` from `$app/paths` (lint rule).
+- Shows the trainer card, party and boxes (names, levels, nickname flag, shiny, egg, checksums).
+  `npx playwright test` opens Platinum, HeartGold, Black and White 2 saves from the gitignored
+  corpus (skips without it) and checks a non-save is refused. `npm run check` and `npm run lint`
+  are clean.
+- npm 11 blocks install scripts; esbuild's was denied and esbuild works without it. `npm audit`
+  lists 14 low/moderate issues, all in dev tooling.
+- Next: Pokémon detail and legality verdicts (needs the full Gen 4/5 contexts, see
+  `verity-ffi/src/ui.rs` `context()`), editing and saving (File System Access API in Chromium,
+  download elsewhere), sprites (P12 hotlink plan), the per-game landing pages for SEO, and deploy.
+  Cloudflare Pages' builders have no Rust, so deploy from a GitHub Action (needs a Cloudflare API
+  token from the user). Publishing the site ships PKHeX-derived data blobs: the legal-advice note
+  below applies.
 
 **Done 2026-11-10 (all committed and pushed):**
 

@@ -21,6 +21,8 @@ pub struct Mon {
     /// From the strings blob; `None` until it is attached.
     pub species_name: Option<String>,
     pub nickname: String,
+    /// The game's nickname flag; default names are stored in capitals in Gen 4.
+    pub nicknamed: bool,
     /// `None` until the game's data blob is attached.
     pub level: Option<u8>,
     pub form: u8,
@@ -36,7 +38,8 @@ pub struct Trainer {
     pub tid: u16,
     pub sid: u16,
     pub money: u32,
-    pub badges: u8,
+    /// Badges earned (the save stores one bit per badge).
+    pub badges: u32,
     pub played: String,
 }
 
@@ -89,7 +92,11 @@ impl Session {
     pub fn new(bytes: Vec<u8>) -> Result<Session, JsError> {
         let mut save = bytes;
         Save::open(&mut save).map_err(err)?;
-        Ok(Session { save, game: None, strings: None })
+        Ok(Session {
+            save,
+            game: None,
+            strings: None,
+        })
     }
 
     /// The data blob this save's game needs (fetch `data/<name>.bin`).
@@ -133,7 +140,7 @@ impl Session {
                 tid: t.tid,
                 sid: t.sid,
                 money: t.money,
-                badges: t.badges,
+                badges: t.badges.count_ones(),
                 played: format!(
                     "{}:{:02}:{:02}",
                     t.played_hours, t.played_minutes, t.played_seconds
@@ -189,8 +196,13 @@ impl<'a> Ctx<'a> {
     fn mon(&self, pk: &Pkm, gen: u8) -> Mon {
         let species = pk.species();
         let species_name = self.strings.as_ref().and_then(|s| {
-            ((species as usize) < s.count(string_table::SPECIES))
-                .then(|| String::from_utf16_lossy(&s.get(string_table::SPECIES, species as usize).iter().collect::<Vec<_>>()))
+            ((species as usize) < s.count(string_table::SPECIES)).then(|| {
+                String::from_utf16_lossy(
+                    &s.get(string_table::SPECIES, species as usize)
+                        .iter()
+                        .collect::<Vec<_>>(),
+                )
+            })
         });
         let level = self.game.as_ref().and_then(|g| {
             (species <= g.max_species())
@@ -200,6 +212,7 @@ impl<'a> Ctx<'a> {
             species,
             species_name,
             nickname: decode(&pk.nickname_raw(), gen),
+            nicknamed: pk.is_nicknamed(),
             level,
             form: pk.form(),
             egg: pk.is_egg(),
@@ -211,6 +224,10 @@ impl<'a> Ctx<'a> {
 
 fn decode(raw: &[u16], gen: u8) -> String {
     let mut out = [0u16; 32];
-    let n = if gen == 4 { text::decode4(raw, &mut out) } else { text::decode5(raw, &mut out) };
+    let n = if gen == 4 {
+        text::decode4(raw, &mut out)
+    } else {
+        text::decode5(raw, &mut out)
+    };
     String::from_utf16_lossy(&out[..n])
 }
