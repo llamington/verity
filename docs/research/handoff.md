@@ -83,6 +83,11 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   data); opening now fetches `Editor::save_blobs` (game + moves).
 - **Proposed, not picked:** run the WASM in a Web Worker (closest IVs/generation block the main
   thread), real `<form>`s in the editor/wizard, remember the file handle in IndexedDB.
+- **After the parity work (user, 2026-11-11): switch to a PR workflow.** Branch per change and
+  `gh pr create` instead of pushing to main; CI on `pull_request` only, push-to-main keeps just
+  the deploy job. Open choice for the user then: squash merges (lint the PR title) or merge
+  commits (lint every commit, as now). Requiring PRs needs GitHub Pro or a public repo (rulesets
+  are refused on this private Free-plan repo). Until then, keep pushing to main.
 - Next: bag (Gen 4/5 items), Memory Link/keys, misc tabs, sprites, landing pages, deploy.
 
 **Done 2026-11-10 (all committed and pushed):**
