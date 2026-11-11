@@ -19,5 +19,5 @@
 		".storybook/*.ts",
 		"scripts/*.js"
 	],
-	"exclude": ["src/lib/wasm/*.js"]
+	"exclude": ["src/lib/wasm/*.js", "src/service-worker"]
 }

@@ -14,6 +14,7 @@
 		alt=""
 		width={size}
 		height={size}
+		crossorigin="anonymous"
 		loading="lazy"
 		decoding="async"
 		class="shrink-0 [image-rendering:pixelated]"

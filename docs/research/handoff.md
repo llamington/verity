@@ -114,6 +114,13 @@ workspace, one lockfile at the root) holding repo tooling: commitlint + husky.
   then a generic icon with the name; `Mon.female` added), Noto Sans JP/KR (Fontsource,
   unicode-range subsets; an English page fetches at most the subset with ♂/♀, which Geist
   lacks; `fonts.e2e.ts`), the landing page (features, saves, credits, not-affiliated notice).
+- **Offline and install (2026-11-11):** `web/src/service-worker/` (own tsconfig extending
+  `$app/tsconfig/service-worker`; `npm run check` runs `tsc -p` on it) precaches the pages, code,
+  WASM, data blobs and Latin fonts (~5 MB); CJK font subsets and jsDelivr sprites are cached on
+  first use (`crossorigin` on the imgs so they aren't opaque). Cache lookups use `ignoreVary`
+  (vite preview sends `Vary: Origin`). A new release waits; `UpdatePrompt.svelte` offers Reload,
+  which posts `skip-waiting`. Manifest `web/static/manifest.webmanifest`; icons from
+  `assets/logo/mark.py`. `offline.e2e.ts` covers offline use and the manifest.
 - **Deploy (ci.yml `deploy` job):** on pushes to main after the web job, builds blobs
   (`scripts/build-data.sh` with setup-dotnet; PKHeX.Core comes from NuGet), WASM and the site,
   then `cloudflare/wrangler-action@v4` runs `wrangler deploy` (`web/wrangler.jsonc`, Worker `verity`), **only once the user adds the

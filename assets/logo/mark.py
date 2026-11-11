@@ -190,6 +190,22 @@ def ds_logo_header(path):
     )
 
 
+
+def app_icon(size, scale, background=None):
+    """A web app icon: the mark at `scale` centred on a size x size canvas (transparent, or
+    `background` for a maskable icon, whose outer ring Android may crop away)."""
+    from PIL import Image
+
+    def write(path):
+        out = Image.new("RGBA", (size, size), background or (0, 0, 0, 0))
+        mark = image(scale)
+        offset = (size - mark.width) // 2
+        out.alpha_composite(mark, (offset, offset))
+        out.save(path)
+
+    return write
+
+
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUTS = {
     "assets/logo/mark.svg": lambda p: p.write_text(svg(16, 16, rects())),
@@ -198,11 +214,16 @@ OUTPUTS = {
     "assets/logo/mark-512.png": lambda p: image(32).save(p),
     "web/src/lib/assets/favicon.svg": lambda p: p.write_text(svg(16, 16, rects())),
     "web/static/apple-touch-icon.png": lambda p: touch_icon(p),
+    "web/static/icons/icon-192.png": app_icon(192, 10),
+    "web/static/icons/icon-512.png": app_icon(512, 28),
+    # The maskable safe zone is the centre 80% circle; the mark (288 px) stays well inside it.
+    "web/static/icons/icon-maskable-512.png": app_icon(512, 18, (248, 244, 234, 255)),
     "nds/icon.gif": ds_icon,
     "nds/include/logo.h": ds_logo_header,
 }
 
 if __name__ == "__main__":
     for rel, write in OUTPUTS.items():
+        (ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
         write(ROOT / rel)
         print(rel)
