@@ -428,6 +428,64 @@ void open_items(int g, const char* file)
     g_item_head_len[g] = n;
 }
 
+FILE* g_sprite_file[2] = {nullptr, nullptr};  // sprites4/5.vspr, kept open: sprites read per view
+uint8_t* g_sprite_tail[2] = {nullptr, nullptr};  // icons, index and footer (about 20 KB)
+size_t g_sprite_tail_len[2] = {0, 0};
+uint32_t g_sprite_start[2] = {0, 0};
+
+void open_sprites(int g, const char* file)
+{
+    if (g_sprite_file[g])
+        fclose(g_sprite_file[g]);
+    free(g_sprite_tail[g]);
+    g_sprite_file[g] = nullptr;
+    g_sprite_tail[g] = nullptr;
+    g_sprite_tail_len[g] = 0;
+    FILE* f = fopen(file, "rb");
+    if (!f)
+        return;
+    uint8_t foot[VERITY_SPRITES_FOOTER];
+    long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
+    uint32_t start = UINT32_MAX;
+    if (size > VERITY_SPRITES_FOOTER && fseek(f, size - VERITY_SPRITES_FOOTER, SEEK_SET) == 0 &&
+        fread(foot, 1, sizeof(foot), f) == sizeof(foot))
+        start = verity_sprites_tail_start(foot, sizeof(foot), (uint32_t)size);
+    size_t n = start < (uint32_t)size ? (size_t)size - start : 0;
+    uint8_t* tail = n > 0 && n < 64 * 1024 ? (uint8_t*)malloc(n) : nullptr;
+    if (!tail || fseek(f, (long)start, SEEK_SET) != 0 || fread(tail, 1, n, f) != n ||
+        verity_sprites_generation(tail, n, start) != 4 + g)
+    {
+        free(tail);
+        fclose(f);
+        return;
+    }
+    g_sprite_file[g] = f;
+    g_sprite_tail[g] = tail;
+    g_sprite_tail_len[g] = n;
+    g_sprite_start[g] = start;
+}
+
+bool write_file(void* ctx, const uint8_t* buf, uint32_t len)
+{
+    return fwrite(buf, 1, len, (FILE*)ctx) == len;
+}
+
+// Streams the sprite cache straight to the card (a Gen 4 one is about 1 MB).
+void build_sprites(int g, FILE* rom, const char* file)
+{
+    ui::at(ui::top(), 0, 2 + 2 * g, "Copying Gen %d sprites (once)...", 4 + g);
+    ensure_config_dir();
+    FILE* out = fopen(file, "wb");
+    if (!out)
+        return;
+    bool ok = verity_rom_build_sprite_cache(read_rom, rom, write_file, out) > 0;
+    ok = fclose(out) == 0 && ok;
+    if (!ok)
+        remove(file);
+    else
+        open_sprites(g, file);
+}
+
 }  // namespace
 
 void rom_assets_init()
@@ -448,23 +506,25 @@ void rom_assets_init()
     }
     int icon_rank = open_icons(icon_file);
     int ribbon_rank = load_ribbons(ribbon_file);
-    char move_file[2][80], item_file[2][80];
+    char move_file[2][80], item_file[2][80], sprite_file[2][80];
     for (int g = 0; g < 2; g++)
     {
+        snprintf(sprite_file[g], sizeof(sprite_file[g]), "%s/sprites%d.vspr", config_path(), 4 + g);
+        open_sprites(g, sprite_file[g]);
         snprintf(move_file[g], sizeof(move_file[g]), "%s/moves%d.vmov", config_path(), 4 + g);
         load_moves(g, move_file[g]);
         snprintf(item_file[g], sizeof(item_file[g]), "%s/items%d.vitm", config_path(), 4 + g);
         open_items(g, item_file[g]);
     }
     if (font_rank < 3 || icon_rank < 3 || ribbon_rank < 3 || !g_moves[0] || !g_moves[1] || !g_item_head[0] ||
-        !g_item_head[1])
+        !g_item_head[1] || !g_sprite_tail[0] || !g_sprite_tail[1])
     {
         RomScan scan;
         for (const char* root : {"sd:/", "fat:/"})
             scan_roms(root, 3, &scan);
         for (int g = 0; g < 2; g++)
         {
-            if ((g_moves[g] && g_item_head[g]) || !scan.gen_rank[g])
+            if ((g_moves[g] && g_item_head[g] && g_sprite_tail[g]) || !scan.gen_rank[g])
                 continue;
             FILE* f = fopen(scan.gen[g], "rb");
             if (!f)
@@ -482,6 +542,8 @@ void rom_assets_init()
                 if (built && write_cache(item_file[g], built, n))
                     open_items(g, item_file[g]);
             }
+            if (!g_sprite_tail[g])
+                build_sprites(g, f, sprite_file[g]);
             fclose(f);
         }
         const char* best = scan.best;
@@ -563,6 +625,39 @@ bool item_icon(uint8_t generation, uint16_t item, uint8_t* tiles, uint16_t* colo
     return f && verity_items_find(g_item_head[g], g_item_head_len[g], item, &pal_at, &at) &&
            fseek(f, (long)pal_at, SEEK_SET) == 0 && fread(colors, 2, 16, f) == 16 &&
            fseek(f, (long)at, SEEK_SET) == 0 && fread(tiles, 1, 512, f) == 512;
+}
+
+bool pokemon_sprite(uint8_t generation, uint16_t species, uint8_t form, bool female, bool egg, bool shiny,
+                    uint8_t* tiles, uint16_t* colors)
+{
+    int g = generation == 5 ? 1 : 0;
+    FILE* f = g_sprite_file[g];
+    uint32_t pal_at = 0, at = 0, len = 0;
+    if (!f || !verity_sprites_find(g_sprite_tail[g], g_sprite_tail_len[g], g_sprite_start[g], species, form, female,
+                                   egg, &pal_at, &at, &len) ||
+        len > 8 * 1024)
+        return false;
+    uint8_t* blob = (uint8_t*)malloc(len);
+    bool ok = blob && fseek(f, (long)(pal_at + (shiny ? 32 : 0)), SEEK_SET) == 0 && fread(colors, 2, 16, f) == 16 &&
+              fseek(f, (long)at, SEEK_SET) == 0 && fread(blob, 1, len, f) == len &&
+              verity_sprite_decode(blob, len, tiles);
+    free(blob);
+    return ok;
+}
+
+bool type_icon(uint8_t generation, int kind, int index, uint8_t* tiles, uint16_t* colors)
+{
+    int g = generation == 5 ? 1 : 0;
+    return index >= 0 && index < 32 &&
+           verity_sprites_icon(g_sprite_tail[g], g_sprite_tail_len[g], g_sprite_start[g], (uint8_t)kind,
+                               (uint8_t)index, tiles, colors);
+}
+
+bool ball_icon(uint8_t generation, uint8_t ball, uint8_t* tiles, uint16_t* colors)
+{
+    // Balls 1-16 are items 1-16; Fast to Sport (17-24) are 492-499; the Dream Ball (25) is 576.
+    uint16_t item = ball >= 1 && ball <= 16 ? ball : ball >= 17 && ball <= 24 ? 492 + (ball - 17) : ball == 25 ? 576 : 4;
+    return item_icon(generation, item, tiles, colors);
 }
 
 bool move_info(uint8_t generation, uint16_t mv, verity_move_stats* out)

@@ -11,6 +11,7 @@ use verity_rom::items::{self, CachedItems};
 use verity_rom::moves::{self, CachedMoves};
 use verity_rom::nds::{Game, Rom};
 use verity_rom::ribbons::{self, CachedRibbons};
+use verity_rom::sprites::{self, CachedSprites};
 use verity_rom::{Error, Source};
 
 /// Reads `len` bytes at `offset` of the ROM file into `buf`; false on failure.
@@ -317,6 +318,174 @@ pub unsafe extern "C" fn verity_ribbon_icon(
     unsafe {
         core::ptr::copy_nonoverlapping(t.as_ptr(), tiles, t.len());
         core::ptr::copy_nonoverlapping(pal.as_ptr(), colors, 16);
+    }
+    true
+}
+
+/// Appends `len` bytes to the file being written; false on failure.
+pub type WriteFn = unsafe extern "C" fn(ctx: *mut c_void, buf: *const u8, len: u32) -> bool;
+
+/// C ABI: writes the sprite cache of the ROM's generation (Pokémon front sprites, type and
+/// category icons) through `write`, in order, as it reads the ROM; the cache is too big to build
+/// in memory. Returns the number of sprites, 0 on failure (the file is then incomplete).
+///
+/// # Safety
+///
+/// As for `verity_rom_build_font_cache`; `write` is called with `wctx`.
+#[no_mangle]
+pub unsafe extern "C" fn verity_rom_build_sprite_cache(
+    read: Option<ReadFn>,
+    ctx: *mut c_void,
+    write: Option<WriteFn>,
+    wctx: *mut c_void,
+) -> u32 {
+    let (Some(read), Some(write)) = (read, write) else {
+        return 0;
+    };
+    let Ok(mut rom) = Rom::open(Callback { read, ctx }) else {
+        return 0;
+    };
+    let mut out = |b: &[u8]| -> Result<(), Error> {
+        let len = u32::try_from(b.len()).map_err(|_| Error::Io)?;
+        // SAFETY: the caller vouches for `write` and `wctx`; `b` is valid for `len` bytes.
+        if unsafe { write(wctx, b.as_ptr(), len) } {
+            Ok(())
+        } else {
+            Err(Error::Io)
+        }
+    };
+    sprites::build(&mut rom, &mut out).map_or(0, |n| n as u32)
+}
+
+/// C ABI: from a sprite cache's last `VERITY_SPRITES_FOOTER` bytes and the file length, the file
+/// offset of the tail the DS keeps in memory (icons, index, footer: about 20 KB); `u32::MAX` if
+/// the file isn't a sprite cache.
+///
+/// # Safety
+///
+/// `footer` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_sprites_tail_start(
+    footer: *const u8,
+    len: usize,
+    file_len: u32,
+) -> u32 {
+    if footer.is_null() {
+        return u32::MAX;
+    }
+    let f = unsafe { slice::from_raw_parts(footer, len) };
+    CachedSprites::tail_start(f, file_len).unwrap_or(u32::MAX)
+}
+
+fn cached_sprites(tail: *const u8, len: usize, start: u32) -> Option<CachedSprites<'static>> {
+    if tail.is_null() {
+        return None;
+    }
+    // SAFETY: callers vouch that `tail` is valid for `len` bytes while the sprites are in use.
+    CachedSprites::parse(unsafe { slice::from_raw_parts(tail, len) }, start).ok()
+}
+
+/// C ABI: the generation of a sprite cache tail read from file offset `start`, 0 if invalid.
+///
+/// # Safety
+///
+/// `tail` is null or valid for `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_sprites_generation(tail: *const u8, len: usize, start: u32) -> u8 {
+    cached_sprites(tail, len, start).map_or(0, |c| c.generation)
+}
+
+/// C ABI: where a Pokémon's sprite is in the cache file: 64 palette bytes at `palette_at` (normal
+/// then shiny, 16 BGR555 colours each) and `tiles_len` bytes at `tiles_at` for
+/// `verity_sprite_decode`. Falls back to the male's sprite, then the base form's.
+///
+/// # Safety
+///
+/// `tail` as for `verity_sprites_generation`; the outputs are null or writable.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn verity_sprites_find(
+    tail: *const u8,
+    len: usize,
+    start: u32,
+    species: u16,
+    form: u8,
+    female: bool,
+    egg: bool,
+    palette_at: *mut u32,
+    tiles_at: *mut u32,
+    tiles_len: *mut u32,
+) -> bool {
+    let Some(c) = cached_sprites(tail, len, start) else {
+        return false;
+    };
+    let Some(r) = c.find(IconKey {
+        species,
+        form,
+        female,
+        egg,
+    }) else {
+        return false;
+    };
+    if palette_at.is_null() || tiles_at.is_null() || tiles_len.is_null() {
+        return false;
+    }
+    unsafe {
+        *palette_at = r.palette;
+        *tiles_at = r.tiles;
+        *tiles_len = r.tiles_len;
+    }
+    true
+}
+
+/// C ABI: decodes sprite data read from the cache into `out` (4608 bytes: 96x96, 4 bpp, in four
+/// 1D blocks of 64x64, 32x64, 64x32 and 32x32).
+///
+/// # Safety
+///
+/// `blob` is null or valid for `len` bytes; `out` is null or writable for 4608 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn verity_sprite_decode(blob: *const u8, len: usize, out: *mut u8) -> bool {
+    if blob.is_null() || out.is_null() {
+        return false;
+    }
+    match sprites::decode(unsafe { slice::from_raw_parts(blob, len) }) {
+        Ok(tiles) => {
+            unsafe { core::ptr::copy_nonoverlapping(tiles.as_ptr(), out, tiles.len()) };
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// C ABI: a type icon (`kind` 0, type in verity's numbering) or move category icon (`kind` 1:
+/// 0 physical, 1 special, 2 status) from the cache tail: 256 tile bytes (32x16, 4 bpp, tiles in
+/// rows of four) and 16 BGR555 colours.
+///
+/// # Safety
+///
+/// `tail` as for `verity_sprites_generation`; `tiles` is null or writable for 256 bytes and
+/// `colors` for 16 values.
+#[no_mangle]
+pub unsafe extern "C" fn verity_sprites_icon(
+    tail: *const u8,
+    len: usize,
+    start: u32,
+    kind: u8,
+    index: u8,
+    tiles: *mut u8,
+    colors: *mut u16,
+) -> bool {
+    let Some((t, c)) = cached_sprites(tail, len, start).and_then(|s| s.icon(kind, index.into()))
+    else {
+        return false;
+    };
+    if tiles.is_null() || colors.is_null() {
+        return false;
+    }
+    unsafe {
+        core::ptr::copy_nonoverlapping(t.as_ptr(), tiles, t.len());
+        core::ptr::copy_nonoverlapping(c.as_ptr(), colors, c.len());
     }
     true
 }
@@ -800,6 +969,81 @@ mod tests {
         assert!(pal as usize + 32 <= at as usize && at as usize + 512 <= v.len());
         assert!(!unsafe { verity_items_find(v.as_ptr(), head, 0, &mut pal, &mut at) });
         assert!(!unsafe { verity_items_find(v.as_ptr(), head, 537, &mut pal, &mut at) });
+    }
+
+    unsafe extern "C" fn write_vec(ctx: *mut c_void, buf: *const u8, len: u32) -> bool {
+        let out = unsafe { &mut *(ctx as *mut std::vec::Vec<u8>) };
+        out.extend_from_slice(unsafe { slice::from_raw_parts(buf, len as usize) });
+        true
+    }
+
+    #[test]
+    fn sprite_cache_through_the_c_abi() {
+        for (name, gen) in [("platinum.nds", 4u8), ("black2.nds", 5)] {
+            let Some(mut rom) = rom(name) else {
+                continue;
+            };
+            let mut cache = std::vec::Vec::new();
+            let n = unsafe {
+                verity_rom_build_sprite_cache(
+                    Some(read_slice),
+                    &mut rom as *mut _ as *mut c_void,
+                    Some(write_vec),
+                    &mut cache as *mut _ as *mut c_void,
+                )
+            };
+            assert!(n > 600, "{name}: {n}");
+            let foot = &cache[cache.len() - 24..];
+            let start = unsafe { verity_sprites_tail_start(foot.as_ptr(), 24, cache.len() as u32) };
+            let tail = &cache[start as usize..];
+            assert_eq!(
+                unsafe { verity_sprites_generation(tail.as_ptr(), tail.len(), start) },
+                gen
+            );
+            let (mut pal, mut at, mut len) = (0, 0, 0);
+            // Pikachu, female: falls back to the male's sprite where there's no own one.
+            assert!(unsafe {
+                verity_sprites_find(
+                    tail.as_ptr(),
+                    tail.len(),
+                    start,
+                    25,
+                    0,
+                    true,
+                    false,
+                    &mut pal,
+                    &mut at,
+                    &mut len,
+                )
+            });
+            let mut out = [0u8; 4608];
+            let blob = &cache[at as usize..(at + len) as usize];
+            assert!(unsafe { verity_sprite_decode(blob.as_ptr(), blob.len(), out.as_mut_ptr()) });
+            assert!(out.iter().any(|&b| b != 0));
+            let (mut tiles, mut colors) = ([0u8; 256], [0u16; 16]);
+            assert!(unsafe {
+                verity_sprites_icon(
+                    tail.as_ptr(),
+                    tail.len(),
+                    start,
+                    0,
+                    16,
+                    tiles.as_mut_ptr(),
+                    colors.as_mut_ptr(),
+                )
+            });
+            assert!(!unsafe {
+                verity_sprites_icon(
+                    tail.as_ptr(),
+                    tail.len(),
+                    start,
+                    0,
+                    17,
+                    tiles.as_mut_ptr(),
+                    colors.as_mut_ptr(),
+                )
+            });
+        }
     }
 
     #[test]

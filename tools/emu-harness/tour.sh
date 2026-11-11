@@ -12,7 +12,7 @@ fresh() { rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx; cp -r sd bu
 mkdir -p build/emu/tour-roms
 for g in black2 platinum; do python3 tools/emu-harness/standin_rom.py roms/$g.nds build/emu/tour-roms/$g.nds; done
 fresh; $H tools/emu-harness/scripts/ui-rom-font.json --out $T/ui-rom-font > /dev/null 2>&1
-cp -r build/emu/sd/_nds $T/../tour-nds; rm -f $T/../tour-nds/verity/last.txt
+rm -rf $T/../tour-nds; cp -r build/emu/sd/_nds $T/../tour-nds; rm -f $T/../tour-nds/verity/last.txt
 ls $T/../tour-nds/verity
 for f in tools/emu-harness/scripts/ui-*.json; do n=$(basename $f .json); [ $n = ui-rom-font ] && continue
   fresh; cp -r $T/../tour-nds build/emu/sd/_nds

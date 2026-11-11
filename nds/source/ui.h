@@ -67,6 +67,9 @@ void at(Surface* c, int col, int row, const char* fmt, ...) __attribute__((forma
 // Toggles the muted label shade inside a string: "Ability" UI_MUTED ... (a macro, so the next
 // letter can't be read as part of a hex escape).
 #define UI_MUTED "\x01"
+// Toggle blue and red text on a panel (gender symbols).
+#define UI_BLUE "\x02"
+#define UI_RED "\x03"
 
 enum class Badge : uint8_t
 {
@@ -77,6 +80,8 @@ enum class Badge : uint8_t
 };
 
 void frame_clear(Surface* c);
+// Back to the backdrop (frame and text) for rows [row0, row1).
+void frame_clear_rows(Surface* c, int row0, int row1);
 // Row 0 as a dark bar with a title (and optional right-aligned text).
 void title(Surface* c, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
 void title_right(Surface* c, const char* text);
@@ -171,6 +176,20 @@ void icon_rom(int oam_id, int x, int y, const uint8_t* tiles, uint8_t palette, b
 // or bottom screen; one per screen. Null tiles hide it.
 void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* colors);
 // Selection cursor (32x32 frame) on the bottom screen.
+// A Pokémon's front sprite on the top screen (96x96: 4608 tile bytes in 1D blocks 64x64, 32x64,
+// 64x32, 32x32, and 16 colours); null tiles hide it. Drawn over the item icon (a ball behind it).
+void pokemon_sprite(int x, int y, const uint8_t* tiles, const uint16_t* colors);
+// A 32x16 icon (type or move category: 256 tile bytes, 16 colours) on the top screen in one of
+// kSmallIcons slots; null tiles hide the slot.
+constexpr int kSmallIcons = 6;
+void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* colors);
+// Hides the sprite and the small icons.
+void top_art_hide();
+// A 7x7 shape drawn into the text layer: the six box markings (circle, triangle, square, heart,
+// star, diamond), kShiny (the shiny star), kMale or kFemale. Tone 0 ink, 1 muted (an unset
+// mark), 2 gold, 3 blue, 4 red. (The ROM fonts' gender signs need a second shade.)
+constexpr int kShiny = 6, kMale = 7, kFemale = 8;
+void shape(Surface* c, int x, int y, int kind, int tone);
 void cursor(int oam_id, int x, int y);
 // Highlight bar (8 px high, full width) on the bottom screen.
 void bar(int oam_first, int y, bool visible, int height = 8);

@@ -299,6 +299,7 @@ enum : uint16_t
 uint16_t* g_fmap[2];
 uint8_t g_kind[2][kTiles];
 bool g_muted = false;
+uint8_t g_tint = 0;  // a text colour on panels (UI_BLUE, UI_RED), 0 for none
 
 int screen_of(Surface* c) { return c == &g_bottom ? 1 : 0; }
 
@@ -319,6 +320,8 @@ uint8_t ink_for(Surface* c, int x, int y)
     if (k == K_PILL_LIGHT)
         return C_WHITE;
     bool dark = k == K_PANEL || k == K_CHIP || k == K_SLOT;
+    if (g_tint && dark)
+        return g_tint;
     if (g_muted)
         return dark ? C_MUTED : C_MUTED_L;
     return dark ? C_INK : C_CREAM;
@@ -475,6 +478,13 @@ int draw_text(Surface* c, int x, int y, const char* text)
             i++;
             continue;
         }
+        if (text[i] == '\x02' || text[i] == '\x03')
+        {
+            uint8_t t = text[i] == '\x02' ? C_LEGAL : C_INVALID;
+            g_tint = g_tint == t ? 0 : t;
+            i++;
+            continue;
+        }
         if (text[i] == ' ')
         {
             x += kSpaceWidth;
@@ -487,6 +497,7 @@ int draw_text(Surface* c, int x, int y, const char* text)
         x = glyph(c, x, y, cp);
     }
     g_muted = false;
+    g_tint = 0;
     return x;
 }
 }  // namespace
@@ -516,6 +527,13 @@ void at(Surface* c, int col, int row, const char* fmt, ...)
             i++;
             continue;
         }
+        if (text[i] == '\x02' || text[i] == '\x03')
+        {
+            uint8_t t = text[i] == '\x02' ? C_LEGAL : C_INVALID;
+            g_tint = g_tint == t ? 0 : t;
+            i++;
+            continue;
+        }
         if (text[i] != ' ')
         {
             uint32_t cp = next_cp(text, &i);
@@ -538,6 +556,7 @@ void at(Surface* c, int col, int row, const char* fmt, ...)
         i += run;
     }
     g_muted = false;
+    g_tint = 0;
 }
 
 void utf16_to_text(const uint16_t* s, char* out, int cap)
@@ -605,6 +624,16 @@ void frame_clear(Surface* c)
     for (int i = 0; i < kTiles; i++)
         set_cell(c, i % 32, i / 32, T_BACK, K_BACK);
     g_pills[screen_of(c)] = 0;
+}
+
+void frame_clear_rows(Surface* c, int row0, int row1)
+{
+    for (int row = row0; row < row1 && row < 24; row++)
+    {
+        for (int col = 0; col < 32; col++)
+            set_cell(c, col, row, T_BACK, K_BACK);
+        memset(c->tiles + row * 32 * 16, 0, 32 * 32);
+    }
 }
 
 int pill(Surface* c, int col, int row, uint16_t color, const char* text)
@@ -1218,6 +1247,94 @@ void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* col
     // Priority 0: above the row highlight bar, which crosses the icon on the Item row.
     oamSet(oam, kId, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
            false, false, false, false);
+}
+
+namespace {
+// Top screen OAM: small icons 110.., the Pokémon sprite 120-123, the item icon 127 (behind the
+// sprite: lower IDs draw on top). Palette banks: 8 item icon, 9 sprite, 10.. small icons.
+constexpr int kSmallId = 110, kSpriteId = 120, kSpriteBank = 9, kSmallBank = 10;
+
+void copy16(uint16_t* dst, const uint8_t* src, int bytes)
+{
+    for (int i = 0; i < bytes / 2; i++)
+        dst[i] = (uint16_t)(src[2 * i] | src[2 * i + 1] << 8);
+}
+}  // namespace
+
+void pokemon_sprite(int x, int y, const uint8_t* tiles, const uint16_t* colors)
+{
+    static const SpriteSize size[4] = {SpriteSize_64x64, SpriteSize_32x64, SpriteSize_64x32, SpriteSize_32x32};
+    static const int dx[4] = {0, 64, 0, 64}, dy[4] = {0, 0, 64, 64}, bytes[4] = {2048, 1024, 1024, 512};
+    static uint16_t* gfx[4];
+    if (!tiles)
+    {
+        oamClear(&oamMain, kSpriteId, 4);
+        return;
+    }
+    for (int i = 1; i < 16; i++)
+        SPRITE_PALETTE[16 * kSpriteBank + i] = colors[i];
+    int off = 0;
+    for (int b = 0; b < 4; b++)
+    {
+        if (!gfx[b])
+            gfx[b] = oamAllocateGfx(&oamMain, size[b], SpriteColorFormat_16Color);
+        copy16(gfx[b], tiles + off, bytes[b]);
+        off += bytes[b];
+        oamSet(&oamMain, kSpriteId + b, x + dx[b], y + dy[b], 2, kSpriteBank, size[b], SpriteColorFormat_16Color,
+               gfx[b], -1, false, false, false, false, false);
+    }
+}
+
+void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* colors)
+{
+    static uint16_t* gfx[kSmallIcons];
+    if (slot < 0 || slot >= kSmallIcons)
+        return;
+    if (!tiles)
+    {
+        oamClear(&oamMain, kSmallId + slot, 1);
+        return;
+    }
+    if (!gfx[slot])
+        gfx[slot] = oamAllocateGfx(&oamMain, SpriteSize_32x16, SpriteColorFormat_16Color);
+    for (int i = 1; i < 16; i++)
+        SPRITE_PALETTE[16 * (kSmallBank + slot) + i] = colors[i];
+    copy16(gfx[slot], tiles, 256);
+    oamSet(&oamMain, kSmallId + slot, x, y, 1, kSmallBank + slot, SpriteSize_32x16, SpriteColorFormat_16Color,
+           gfx[slot], -1, false, false, false, false, false);
+}
+
+void top_art_hide()
+{
+    oamClear(&oamMain, kSmallId, kSmallIcons);
+    oamClear(&oamMain, kSpriteId, 4);
+}
+
+void shape(Surface* c, int x, int y, int kind, int tone)
+{
+    // 7 rows of 7 bits (bit 6 is the left column).
+    static const uint8_t k[9][7] = {
+        {0x1C, 0x3E, 0x7F, 0x7F, 0x7F, 0x3E, 0x1C},  // circle
+        {0x08, 0x1C, 0x1C, 0x3E, 0x3E, 0x7F, 0x7F},  // triangle
+        {0x00, 0x7E, 0x7E, 0x7E, 0x7E, 0x7E, 0x7E},  // square
+        {0x36, 0x7F, 0x7F, 0x7F, 0x3E, 0x1C, 0x08},  // heart
+        {0x08, 0x08, 0x7F, 0x3E, 0x1C, 0x36, 0x22},  // star
+        {0x08, 0x1C, 0x3E, 0x7F, 0x3E, 0x1C, 0x08},  // diamond
+        {0x08, 0x08, 0x7F, 0x3E, 0x1C, 0x36, 0x22},  // shiny star
+        {0x07, 0x03, 0x3A, 0x44, 0x44, 0x44, 0x38},  // male
+        {0x1C, 0x22, 0x22, 0x1C, 0x08, 0x3E, 0x08},  // female
+    };
+    if (kind < 0 || kind > kFemale)
+        return;
+    bool muted = g_muted;
+    g_muted = tone == 1;
+    static const uint8_t fixed[5] = {0, 0, C_FISHY, C_LEGAL, C_INVALID};
+    g_ink = tone >= 2 && tone <= 4 ? fixed[tone] : ink_for(c, x, y);
+    g_muted = muted;
+    for (int r = 0; r < 7; r++)
+        for (int col = 0; col < 7; col++)
+            if (k[kind][r] & (0x40 >> col))
+                plot(c, x + col, y + r);
 }
 
 void cursor(int id, int x, int y)
