@@ -4,11 +4,11 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
-	import { backupName, canWriteInPlace, download, pickSave } from '#lib/files.js';
+	import { backupName, download } from '#lib/files.js';
 	import { doc } from '#lib/editor.svelte.js';
-	import { errorText } from '#lib/utils.js';
 	import BallMark from '#lib/components/BallMark.svelte';
 	import Logo from '#lib/components/Logo.svelte';
+	import OpenSaveButton from '#lib/components/OpenSaveButton.svelte';
 	import { badgeSlots, gameGradient } from '#lib/theme.js';
 	import type { LayoutProps } from './$types';
 
@@ -29,24 +29,6 @@
 	const LINK = { href: resolve('/app/link'), label: 'Memory Link' };
 	// Memory Link and keys exist in Black 2 and White 2 only.
 	const sections = $derived(doc.session?.hasUnovaLink() ? [...SECTIONS, LINK] : SECTIONS);
-	const inPlace = canWriteInPlace();
-
-	async function onPick() {
-		try {
-			const f = await pickSave();
-			if (f) doc.open(f);
-		} catch (err) {
-			doc.error = errorText(err);
-		}
-	}
-
-	async function onFile(e: Event & { currentTarget: HTMLInputElement }) {
-		const input = e.currentTarget;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file) return;
-		doc.open({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-	}
 
 	function onBeforeUnload(e: BeforeUnloadEvent) {
 		if (doc.dirty) e.preventDefault();
@@ -66,33 +48,7 @@
 			<a href={resolve('/')} class="flex items-center gap-2"><Logo size={32} tile />verity</a>
 		</h1>
 		<div class="flex items-center gap-2">
-			{#if inPlace}
-				<Button size="sm" variant="secondary" onclick={onPick}>Open a save…</Button>
-				<!-- Kept for drag-and-drop style uploads and tests; saves opened here download. -->
-				<input
-					type="file"
-					accept=".sav,.dsv,.bin"
-					class="sr-only"
-					tabindex="-1"
-					aria-hidden="true"
-					onchange={onFile}
-					data-testid="file"
-				/>
-			{:else}
-				<label class="cursor-pointer">
-					<input
-						type="file"
-						accept=".sav,.dsv,.bin"
-						class="sr-only"
-						onchange={onFile}
-						data-testid="file"
-					/>
-					<span
-						class="inline-flex h-8 items-center rounded-md bg-secondary px-3 text-sm font-semibold text-secondary-foreground"
-						>Open a save…</span
-					>
-				</label>
-			{/if}
+			<OpenSaveButton size="sm" variant="secondary" testid="file">Open a save…</OpenSaveButton>
 		</div>
 	</div>
 </header>
@@ -227,6 +183,7 @@
 			<p class="max-w-md text-muted-foreground">
 				Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
 			</p>
+			<OpenSaveButton size="lg" class="font-pixel text-base">Open a save…</OpenSaveButton>
 		</section>
 	{/if}
 </main>

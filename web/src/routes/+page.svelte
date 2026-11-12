@@ -6,7 +6,8 @@
 	import Gift from '@lucide/svelte/icons/gift';
 	import Backpack from '@lucide/svelte/icons/backpack';
 	import KeyRound from '@lucide/svelte/icons/key-round';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import { goto } from '$app/navigation';
+	import OpenSaveButton from '#lib/components/OpenSaveButton.svelte';
 	import BallMark from '#lib/components/BallMark.svelte';
 	import Logo from '#lib/components/Logo.svelte';
 	import { gameGradient, typeSwatch } from '#lib/theme.js';
@@ -100,12 +101,14 @@
 			It runs entirely in your browser. Your save file never leaves your device.
 		</p>
 		<div>
-			<Button
-				href={resolve('/app')}
+			<!-- Picks the save here, then opens the editor with it loaded. -->
+			<OpenSaveButton
 				size="lg"
 				variant="secondary"
+				testid="landing-file"
+				onopened={() => void goto(resolve('/app'))}
 				class="font-pixel text-base shadow-[0_4px_0_var(--ball-band)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-none"
-				>Open a save <span aria-hidden="true">▶</span></Button
+				>Open a save <span aria-hidden="true">▶</span></OpenSaveButton
 			>
 		</div>
 	</div>
