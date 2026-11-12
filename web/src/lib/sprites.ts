@@ -67,6 +67,22 @@ const FORMS: Record<number, string[]> = {
 	649: ['', 'douse', 'shock', 'burn', 'chill']
 };
 
+// Species with a female sprite (female/<species>.png, shiny too), listed from the repository at
+// SPRITES_COMMIT; asking for any other female sprite is a 404. The Gen 4 folders share one list;
+// Black and White add Eevee, Unfezant, Frillish and Jellicent. No form has a female sprite.
+// prettier-ignore
+const FEMALE4 = [
+	3, 12, 19, 20, 25, 26, 41, 42, 44, 45, 64, 65, 84, 85, 97, 111, 112, 118, 119, 123, 129, 130,
+	154, 165, 166, 178, 185, 186, 190, 194, 195, 198, 202, 203, 207, 208, 212, 214, 215, 217, 221,
+	224, 229, 232, 255, 256, 257, 267, 269, 272, 274, 275, 307, 308, 315, 316, 317, 322, 323, 332,
+	350, 369, 396, 397, 398, 399, 400, 401, 402, 403, 404, 405, 407, 415, 417, 418, 419, 424, 443,
+	444, 445, 449, 450, 453, 454, 456, 457, 459, 460, 461, 464, 465, 473
+];
+const FEMALE: Record<4 | 5, ReadonlySet<number>> = {
+	4: new Set(FEMALE4),
+	5: new Set([...FEMALE4, 133, 521, 592, 593])
+};
+
 /** The repository's form suffix, or '' for the plain sprite. */
 export function formSuffix(species: number, form: number, generation: 4 | 5): string {
 	if (form === 0) return '';
@@ -91,9 +107,9 @@ export function spriteUrls(game: string, mon: SpriteMon): string[] {
 	const dir = `${SPRITES_BASE}/${folder.path}/${mon.shiny ? 'shiny/' : ''}`;
 	const names = [String(mon.species)];
 	if (form) names.unshift(`${String(mon.species)}-${form}`);
+	const female = mon.female && FEMALE[folder.generation].has(mon.species);
 	const urls = [
-		// Only some species have female sprites; the others fall through.
-		...(mon.female ? names.map((n) => `${dir}female/${n}.png`) : []),
+		...(female ? [`${dir}female/${String(mon.species)}.png`] : []),
 		...names.map((n) => `${dir}${n}.png`)
 	];
 	return [...new Set(urls)];
