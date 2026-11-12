@@ -12,6 +12,7 @@
 		"core:wasm": "node scripts/build-wasm.js",
 		"core:data": "node scripts/copy-data.js",
 		"screenshots": "node scripts/screenshots.js",
+		"coverage": "vitest run --coverage",
 		"predev": "npm run core",
 		"prebuild": "npm run core",
 		"dev": "vite dev",

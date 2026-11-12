@@ -55,6 +55,11 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org) (`fea
 `npm install` once at the repo root: it installs the web app (the `web/` workspace) and turns on
 the commit-msg hook (husky). CI checks every pushed commit too. Node is pinned in `.node-version`.
 
+Coverage is local only: `npm run coverage` in `web/` (unit and component tests; report in
+`web/coverage/`) and `cargo coverage` (report in `target/llvm-cov/html/`; needs
+`rustup component add llvm-tools-preview` and `cargo install cargo-llvm-cov`). Build the data blobs
+and keep the corpus saves in place first, or the tests that need them skip.
+
 Releases: pushing a `v*` tag builds `verity.nds` and publishes it as a GitHub release
 (`.github/workflows/release.yml`).
 

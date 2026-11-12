@@ -24,6 +24,21 @@ export default defineConfig({
 		expect: {
 			requireAssertions: true
 		},
+		// `npm run coverage` (local only): unit and component tests, not the Playwright e2e tests,
+		// so pages show low. Report in coverage/index.html.
+		coverage: {
+			provider: 'v8',
+			include: ['src/**/*.{ts,svelte}'],
+			exclude: [
+				'src/**/*.{test,spec,e2e}.ts',
+				'src/**/*.stories.svelte',
+				'src/lib/wasm/**',
+				'src/lib/components/ui/**',
+				'src/lib/components/fixtures.ts'
+			],
+			reporter: ['text-summary', 'html'],
+			reportsDirectory: 'coverage'
+		},
 		projects: [
 			{
 				extends: './vite.config.ts',
