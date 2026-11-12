@@ -1,50 +1,26 @@
 name: Release
 
-# release-please keeps a release PR open (version bump + CHANGELOG.md from the Conventional
-# Commits on main). Merging it tags the release, and the nds job then builds verity.nds and
-# attaches it. The build lives here rather than in an on-tag workflow because tags pushed with
-# GITHUB_TOKEN don't trigger other workflows. Run it by hand to build the .nds as a run artifact
-# without releasing.
+# Pushing a v* tag (git tag v0.1.0 && git push origin v0.1.0) builds verity.nds and publishes it
+# as a GitHub release with notes generated from the changes since the last tag. Run it by hand to
+# build the .nds as a run artifact without releasing.
 on:
   push:
-    branches: [ "main" ]
+    tags: [ "v*" ]
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: release
-  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
   BLOCKSDS: /opt/wonderful/thirdparty/blocksds/core
 
 jobs:
-  release-please:
-    name: Release PR
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      created: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - id: release
-        uses: googleapis/release-please-action@v5
-
   nds:
     name: Build verity.nds
-    needs: release-please
-    if: >-
-      !cancelled() &&
-      (github.event_name == 'workflow_dispatch' || needs.release-please.outputs.created == 'true')
     runs-on: ubuntu-latest
     permissions:
-      contents: write # upload to the release
+      contents: write # create the release
     steps:
       - uses: actions/checkout@v7
       - name: Install pinned toolchain
@@ -77,9 +53,8 @@ jobs:
           name: verity-nds
           path: nds/verity.nds
           if-no-files-found: error
-      - name: Attach to the release
-        if: needs.release-please.outputs.created == 'true'
+      - name: Publish the release
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag }}
-        run: gh release upload "$TAG" nds/verity.nds
+        run: gh release create "$GITHUB_REF_NAME" nds/verity.nds --verify-tag --generate-notes
