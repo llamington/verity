@@ -210,6 +210,39 @@ fn edit_unlearnable_move_is_game_safe_but_illegal() {
 }
 
 #[test]
+fn edit_that_breaks_a_matched_origin_is_illegal() {
+    let Some((c4, c5)) = contexts() else { return };
+    let Some(mut bytes) = save_bytes("gen4_platinum.sav") else {
+        return;
+    };
+    let save = Save::open(&mut bytes).unwrap();
+    let r = rules(SaveKind::Pt);
+    // The party Floatzel: wild, met at Lv. 11. At Lv. 5 it can't have evolved yet, so no
+    // encounter matches.
+    let orig = save.pkm(Slot::Party(0)).unwrap();
+    let e = Edit {
+        level: Some(5),
+        ..Edit::default()
+    };
+    let pk = edit::edited(&save, &r, Slot::Party(0), &e, None).unwrap();
+    assert_eq!(safety::check_pkm(&r, &pk, true), Ok(()));
+    // On its own nothing matches, which reads as an origin verity doesn't model.
+    assert_eq!(
+        verdict::check(4, &pk, Some(c4), Some(c5)).err(),
+        Some(Unchecked::Unmatched)
+    );
+    // As an edit of a Pokémon whose origin matched, it's illegal.
+    let edited = verdict::check_edit(4, &orig, &pk, Some(c4), Some(c5)).unwrap();
+    assert!(!edited.valid());
+    // An edit that keeps the match is judged as usual.
+    assert!(
+        verdict::check_edit(4, &orig, &orig, Some(c4), Some(c5))
+            .unwrap()
+            .valid()
+    );
+}
+
+#[test]
 fn edit_nickname_set_and_reset() {
     let Some((c4, _)) = contexts() else { return };
     let Some(mut bytes) = save_bytes("gen4_platinum.sav") else {

@@ -419,8 +419,11 @@ pub unsafe extern "C" fn verity_edit_preview(
     // SAFETY: `issue` is non-null (checked above) and points to a writable value (this function's
     // contract).
     unsafe { *issue = code };
+    let Ok(original) = save.pkm(slot_of(loc)) else {
+        return VerityErr::BadArgument;
+    };
     let mut r = crate::ui::empty_legality();
-    legal::check(&save, &pk, &mut r);
+    legal::check_edit(&save, &original, &pk, &mut r);
     // SAFETY: `legality` is non-null (checked above) and points to a writable value (this
     // function's contract).
     unsafe { *legality = r };
@@ -460,8 +463,11 @@ pub unsafe extern "C" fn verity_edit_apply(
         return 200;
     };
     if mode == 0 {
+        let Ok(original) = save.pkm(slot_of(loc)) else {
+            return 200;
+        };
         let mut r = crate::ui::empty_legality();
-        legal::check(&save, &pk, &mut r);
+        legal::check_edit(&save, &original, &pk, &mut r);
         if r.status == 2 {
             return 100;
         }
@@ -808,6 +814,20 @@ mod tests {
             verity_edit_preview(b, len, loc, &ed, &mut lg, &mut issue);
             assert_eq!(issue, 1 + safety::PkmIssue::DuplicateMove as u8);
             assert_eq!(verity_edit_apply(b, len, loc, &ed, 1), issue);
+            // The party Floatzel (wild, met at Lv. 11) can't have evolved by Lv. 5, so no
+            // origin matches: illegal, not "not checked", because the unedited one matched.
+            let floatzel = VerityLoc {
+                box_index: 0xFF,
+                slot: 0,
+            };
+            ed = VerityEdit {
+                mask: EDIT_LEVEL,
+                level: 5,
+                ..Default::default()
+            };
+            verity_edit_preview(b, len, floatzel, &ed, &mut lg, &mut issue);
+            assert_eq!((issue, lg.status, lg.unsupported), (0, 2, 0));
+            assert_eq!(verity_edit_apply(b, len, floatzel, &ed, 0), 100);
             // An illegal-but-safe edit (Psychic on Bidoof) is refused in legal mode only.
             ed = VerityEdit {
                 mask: EDIT_MOVES,

@@ -550,6 +550,17 @@ pub(crate) mod legal {
             Err(why) => out.unsupported = why as u8,
         }
     }
+
+    /// [`check`] for `edited`, an edit of `original`: an edit that breaks a matched origin is
+    /// illegal rather than not checked (`verdict::check_edit`).
+    pub(crate) fn check_edit(save: &Save, original: &Pkm, edited: &Pkm, out: &mut VerityLegality) {
+        let generation = save.generation();
+        let c5 = if generation == 5 { context5() } else { None };
+        match verdict::check_edit(generation, original, edited, context(), c5) {
+            Ok(r) => fill(&r, out),
+            Err(why) => out.unsupported = why as u8,
+        }
+    }
 }
 
 /// C ABI: legality of the Pokémon at `loc` (PKHeX-equivalent; D/P/Pt wild origins for now).

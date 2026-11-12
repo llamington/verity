@@ -173,6 +173,40 @@ pub fn check<'a>(
     c4: Option<&'a Context4<'a>>,
     c5: Option<&'a Context5<'a>>,
 ) -> Result<Report<'a>, Unchecked> {
+    // Without a match the origin is something verity can't judge yet, so it says nothing rather
+    // than a false "illegal".
+    let r = analyze(generation, pk, c4, c5)?;
+    if matches!(r.matched, Matched::Invalid) {
+        return Err(Unchecked::Unmatched);
+    }
+    Ok(r)
+}
+
+/// Judges `edited`, an edit of `original`, for the editors' previews and legal mode. As
+/// [`check`], except when `original` matched a modelled origin and `edited` matches none: the
+/// edit broke the origin (a level below the evolution, a met location that doesn't fit), so the
+/// report stands and is illegal, as in PKHeX.
+pub fn check_edit<'a>(
+    generation: u8,
+    original: &Pkm,
+    edited: &Pkm,
+    c4: Option<&'a Context4<'a>>,
+    c5: Option<&'a Context5<'a>>,
+) -> Result<Report<'a>, Unchecked> {
+    let r = analyze(generation, edited, c4, c5)?;
+    if matches!(r.matched, Matched::Invalid) && check(generation, original, c4, c5).is_err() {
+        return Err(Unchecked::Unmatched);
+    }
+    Ok(r)
+}
+
+/// The analysis for `pk`'s origin game, unmatched results included.
+fn analyze<'a>(
+    generation: u8,
+    pk: &Pkm,
+    c4: Option<&'a Context4<'a>>,
+    c5: Option<&'a Context5<'a>>,
+) -> Result<Report<'a>, Unchecked> {
     let r = match generation {
         5 => {
             let c5 = c5.ok_or(Unchecked::DataMissing)?;
@@ -201,10 +235,5 @@ pub fn check<'a>(
         }
         _ => return Err(Unchecked::Generation),
     };
-    // Without a match the origin is something verity can't judge yet, so it says nothing rather
-    // than a false "illegal".
-    if matches!(r.matched, Matched::Invalid) {
-        return Err(Unchecked::Unmatched);
-    }
     Ok(r)
 }
