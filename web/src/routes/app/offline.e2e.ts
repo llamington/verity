@@ -27,7 +27,7 @@ test('the site can be installed', async ({ page, request }) => {
 	const href = await page.locator('link[rel="manifest"]').getAttribute('href');
 	expect(href).toBeTruthy();
 	const manifest: unknown = await (await request.get(href ?? '')).json();
-	expect(manifest).toMatchObject({ name: 'verity', start_url: '/app', display: 'standalone' });
+	expect(manifest).toMatchObject({ name: 'Verity', start_url: '/app', display: 'standalone' });
 	for (const icon of ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png'])
 		expect((await request.get(icon)).ok()).toBe(true);
 });

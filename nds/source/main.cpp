@@ -17,7 +17,7 @@ extern "C" void verity_on_panic(void)
     setBrightness(3, 0);
     consoleDemoInit();
     BG_PALETTE_SUB[0] = RGB15(16, 0, 0);
-    printf("\x1b[2J\x1b[10;8Hverity: core panic\n");
+    printf("\x1b[2J\x1b[10;8HVerity: core panic\n");
     while (1)
         swiWaitForVBlank();
 }
@@ -30,12 +30,12 @@ int main(int argc, char **argv)
     keysSetRepeat(15, 4);
     if (!fatInitDefault())
     {
-        ui::at(ui::top(), 0, 0, "verity: no SD card / flashcart");
+        ui::at(ui::top(), 0, 0, "Verity: no SD card / flashcart");
         ui::at(ui::top(), 0, 2, "(FAT init failed)");
         while (1)
             swiWaitForVBlank();
     }
-    ui::at(ui::top(), 0, 0, "verity: reading font and icons...");
+    ui::at(ui::top(), 0, 0, "Verity: reading font and icons...");
     core::rom_assets_init();
     ui::push(scenes::file_picker());
     ui::run();

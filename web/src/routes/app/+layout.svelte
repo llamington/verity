@@ -38,7 +38,7 @@
 <svelte:window onbeforeunload={onBeforeUnload} />
 
 <svelte:head>
-	<title>verity editor</title>
+	<title>Verity editor</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

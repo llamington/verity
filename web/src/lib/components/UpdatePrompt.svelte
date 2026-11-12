@@ -69,7 +69,7 @@
 	>
 		<RefreshCw size={18} class="shrink-0 text-primary" aria-hidden="true" />
 		<p class="min-w-0 flex-1">
-			A new version of verity is ready.{doc.dirty ? ' Save your changes first.' : ''}
+			A new version of Verity is ready.{doc.dirty ? ' Save your changes first.' : ''}
 		</p>
 		<div class="flex gap-2">
 			<Button size="sm" variant="ghost" onclick={() => (dismissed = true)}>Later</Button>
