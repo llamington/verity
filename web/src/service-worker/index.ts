@@ -14,8 +14,9 @@ const SPRITES = 'verity-sprites';
 const SPRITE_HOST = 'https://cdn.jsdelivr.net/';
 
 /** CJK subsets are fetched only for the characters on a page; legacy .woff never by browsers.
- * _headers is Cloudflare's config, never served (one missing file fails the whole install). */
-const skip = (path: string) => /noto-sans-(jp|kr)|\.woff$|\/_headers$/.test(path);
+ * _headers is Cloudflare's config, never served (one missing file fails the whole install).
+ * The landing page screenshots aren't worth their size offline. */
+const skip = (path: string) => /noto-sans-(jp|kr)|\.woff$|\/_headers$|\/screenshots\//.test(path);
 const PRECACHED = [...immutable, ...assets, ...prerendered]
 	// Paths are relative to the base path, which is the worker's scope.
 	.map((f) => new URL(f.path, sw.registration.scope).pathname)

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { asset, resolve } from '$app/paths';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import SquarePen from '@lucide/svelte/icons/square-pen';
 	import Egg from '@lucide/svelte/icons/egg';
@@ -47,6 +47,22 @@
 			icon: KeyRound,
 			type: 15,
 			text: 'Link a Black or White save into Black 2 or White 2, receive keys from another save, or enable every key.'
+		}
+	];
+	// Captured by scripts/screenshots.ts at 2x; sizes are in CSS pixels.
+	const SHOT_CLASS = 'h-auto w-full rounded-2xl border-2 bg-card shadow-sm';
+	const SOURCES = [
+		{
+			title: 'Emulator',
+			text: 'melonDS and most emulators keep a .sav beside the game or in a saves folder; DeSmuME and DraStic use .dsv. Close the game first, or the emulator may overwrite your edits when it exits.'
+		},
+		{
+			title: 'TWiLight Menu++ or a flashcart',
+			text: 'The .sav is on the SD card, in a saves folder next to the game or beside the game itself.'
+		},
+		{
+			title: 'Game cartridge',
+			text: 'Copy the save off the cartridge with Checkpoint on a 3DS or GodMode9i on a DSi, and restore the edited save with the same tool.'
 		}
 	];
 	const GAMES = [
@@ -108,6 +124,54 @@
 		{/each}
 	</ul>
 
+	<section aria-labelledby="look" class="flex flex-col gap-4">
+		<h2 id="look" class="font-pixel text-2xl font-bold">A look inside</h2>
+		<div class="grid gap-4 sm:grid-cols-2 sm:items-start">
+			<figure class="flex flex-col gap-2">
+				<img
+					src={asset('screenshots/summary.png')}
+					width="384"
+					height="700"
+					loading="lazy"
+					class={SHOT_CLASS}
+					alt="A Floatzel's summary: a Legal verdict with its origin, then nature, ability, items, moves and stats with IVs and EVs."
+				/>
+				<figcaption class="text-sm text-muted-foreground">
+					Every Pokémon's summary leads with its legality verdict.
+				</figcaption>
+			</figure>
+			<figure class="flex flex-col gap-2">
+				<img
+					src={asset('screenshots/edit.png')}
+					width="384"
+					height="610"
+					loading="lazy"
+					class={SHOT_CLASS}
+					alt="The editor with Legal mode on, a game-safe check, the legality verdict, and fields for nickname, held item, level and friendship."
+				/>
+				<figcaption class="text-sm text-muted-foreground">
+					In Legal mode the editor refuses changes that would make the Pokémon illegal.
+				</figcaption>
+			</figure>
+		</div>
+		<figure class="flex flex-col gap-2">
+			<img
+				src={asset('screenshots/gifts.png')}
+				width="1024"
+				height="452"
+				loading="lazy"
+				class={SHOT_CLASS}
+				alt="The Mystery Gift list for a Platinum save: searchable event gifts with their original trainer, ID and region, each with a Deliver button."
+			/>
+			<figcaption class="text-sm text-muted-foreground">
+				Mystery Gifts for your save's game and language, ready to deliver.
+			</figcaption>
+		</figure>
+		<p class="text-xs text-muted-foreground">
+			The app shows Pokémon sprites; they're left out of these pictures.
+		</p>
+	</section>
+
 	<section aria-labelledby="features" class="flex flex-col gap-4">
 		<h2 id="features" class="font-pixel text-2xl font-bold">What it does</h2>
 		<ul class="grid gap-4 sm:grid-cols-2">
@@ -132,12 +196,23 @@
 		</ul>
 	</section>
 
-	<section aria-labelledby="saves" class="flex flex-col gap-2 text-sm text-muted-foreground">
-		<h2 id="saves" class="font-pixel text-2xl font-bold text-foreground">Your saves</h2>
-		<p>
-			Open a raw save (.sav) or a DeSmuME save (.dsv). In Chrome and Edge, verity can write the
-			edited save back to the same file after checking it reads back intact; elsewhere it downloads
-			the edited save. Either way you can download the original first, as a backup.
+	<section aria-labelledby="saves" class="flex flex-col gap-4">
+		<h2 id="saves" class="font-pixel text-2xl font-bold">Getting your save</h2>
+		<p class="text-sm text-muted-foreground">
+			verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
+		</p>
+		<ul class="grid gap-4 sm:grid-cols-3">
+			{#each SOURCES as s (s.title)}
+				<li class="flex flex-col gap-1 rounded-2xl border-2 bg-card p-4 shadow-sm">
+					<h3 class="font-bold">{s.title}</h3>
+					<p class="text-sm text-muted-foreground">{s.text}</p>
+				</li>
+			{/each}
+		</ul>
+		<p class="text-sm text-muted-foreground">
+			In Chrome and Edge, verity can write the edited save back to the same file after checking it
+			reads back intact; elsewhere it downloads the edited save. Either way, download the original
+			first as a backup.
 		</p>
 	</section>
 
