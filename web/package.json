@@ -11,6 +11,7 @@
 		"core": "npm run core:wasm && npm run core:data",
 		"core:wasm": "node scripts/build-wasm.js",
 		"core:data": "node scripts/copy-data.js",
+		"screenshots": "node scripts/screenshots.js",
 		"predev": "npm run core",
 		"prebuild": "npm run core",
 		"dev": "vite dev",
