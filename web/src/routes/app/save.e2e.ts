@@ -91,7 +91,8 @@ test('writes back in place through the File System Access API', async ({ page })
 		Array.from(readFileSync(W2))
 	);
 	await page.goto('/app');
-	await page.getByRole('button', { name: 'Open a save…' }).click();
+	// The empty state's button (the header has one too).
+	await page.getByRole('main').getByRole('button', { name: 'Open a save…' }).click();
 	await expect(page.getByText('Black 2 / White 2 · white2.sav')).toBeVisible();
 	await rename(page, 'InPlace');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -106,7 +107,8 @@ test('writes back in place through the File System Access API', async ({ page })
 		Array.from(readFileSync(W2))
 	);
 	expect(changed).toBe(true);
-	await page.getByRole('button', { name: 'Open a save…' }).click();
+	// Reopening goes through the header's button (the empty state is gone).
+	await page.getByRole('banner').getByRole('button', { name: 'Open a save…' }).click();
 	await expect(page.getByTestId('party').getByTestId('mon').first()).toContainText('InPlace');
 	await expect(page.getByText('Checksums OK')).toBeVisible();
 });
