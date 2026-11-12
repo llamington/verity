@@ -1,7 +1,7 @@
 {
 	"id": "/app",
-	"name": "verity",
-	"short_name": "verity",
+	"name": "Verity",
+	"short_name": "Verity",
 	"description": "A legality-aware save editor for the Gen 4 and Gen 5 Pokémon games. Works offline; your save never leaves your device.",
 	"start_url": "/app",
 	"scope": "/",

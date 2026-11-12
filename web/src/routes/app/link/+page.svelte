@@ -25,7 +25,7 @@
 </script>
 
 <svelte:head>
-	<title>Memory Link · verity editor</title>
+	<title>Memory Link · Verity editor</title>
 </svelte:head>
 
 {#if doc.session?.hasUnovaLink()}

@@ -76,7 +76,7 @@
 </script>
 
 <svelte:head>
-	<title>verity: Gen 4 and 5 save editor</title>
+	<title>Verity: Gen 4 and 5 save editor</title>
 	<meta
 		name="description"
 		content="A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. Runs in your browser; your save never leaves your device."
@@ -202,7 +202,7 @@
 	<section aria-labelledby="saves" class="flex flex-col gap-4">
 		<h2 id="saves" class="font-pixel text-2xl font-bold">Getting your save</h2>
 		<p class="text-sm text-muted-foreground">
-			verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
+			Verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
 		</p>
 		<ul class="grid gap-4 sm:grid-cols-3">
 			{#each SOURCES as s (s.title)}
@@ -213,7 +213,7 @@
 			{/each}
 		</ul>
 		<p class="text-sm text-muted-foreground">
-			In Chrome and Edge, verity can write the edited save back to the same file after checking it
+			In Chrome and Edge, Verity can write the edited save back to the same file after checking it
 			reads back intact; elsewhere it downloads the edited save. Either way, download the original
 			first as a backup.
 		</p>
@@ -224,10 +224,10 @@
 			Legality rules and game data come from
 			<a class="underline" href="https://github.com/kwsch/PKHeX">PKHeX</a> (GPLv3). Sprites load
 			from the <a class="underline" href="https://github.com/PokeAPI/sprites">PokeAPI sprites</a>
-			repository. verity is free software under the GPLv3.
+			repository. Verity is free software under the GPLv3.
 		</p>
 		<p>
-			verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The
+			Verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The
 			Pokémon Company. Pokémon and its names are trademarks of their respective owners.
 		</p>
 	</footer>

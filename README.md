@@ -1,8 +1,8 @@
-# verity
+# Verity
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/logo/lockup-dark.svg">
-  <img alt="verity" src="assets/logo/lockup.svg" height="64">
+  <img alt="Verity" src="assets/logo/lockup.svg" height="64">
 </picture>
 
 A legality-aware save editor for the Gen 4 and Gen 5 Pokémon games: Diamond, Pearl, Platinum,
@@ -10,7 +10,7 @@ HeartGold, SoulSilver, Black, White, Black 2 and White 2. Every Pokémon is chec
 rules [PKHeX](https://github.com/kwsch/PKHeX) uses, and the editor refuses changes that would make
 one illegal.
 
-**[Open verity in your browser](https://verity.llamington.workers.dev)**: nothing to install, and
+**[Open Verity in your browser](https://verity.llamington.workers.dev)**: nothing to install, and
 your save never leaves your device. It also runs on the DS itself (see below).
 
 <p>
@@ -32,7 +32,7 @@ your save never leaves your device. It also runs on the DS itself (see below).
 
 ## Getting your save
 
-verity opens a raw save (`.sav`) or a DeSmuME save (`.dsv`). Keep a copy of the original.
+Verity opens a raw save (`.sav`) or a DeSmuME save (`.dsv`). Keep a copy of the original.
 
 - **Emulator:** the `.sav` (or `.dsv` for DeSmuME and DraStic) is beside the game or in a saves
   folder. Close the game first, or the emulator may overwrite your edits.
@@ -75,5 +75,5 @@ See [PLAN.md](PLAN.md) for the plan, specifications and milestones.
 - Licensed under **GPLv3**.
 - Logic and legality rules ported from [PKHeX](https://github.com/kwsch/PKHeX) (kwsch and contributors).
 - Memory Link research and references adapted from [BW_tool](https://github.com/suloku/BW_tool) (suloku).
-- verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The Pokémon
+- Verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The Pokémon
   Company.

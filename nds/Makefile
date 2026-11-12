@@ -3,7 +3,7 @@
 BLOCKSDS	?= /opt/blocksds/core
 
 NAME		:= verity
-GAME_TITLE	:= verity
+GAME_TITLE	:= Verity
 # The release tag (v0.1.0) on a tagged commit; otherwise e.g. v0.1.0-3-gabc1234, or the hash.
 VERSION		:= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 GAME_SUBTITLE	:= Gen 4/5 save editor $(VERSION)

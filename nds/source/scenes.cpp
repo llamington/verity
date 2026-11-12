@@ -224,7 +224,7 @@ private:
     {
         ui::clear(top());
         ui::frame_clear(top());
-        ui::title(top(), "verity");
+        ui::title(top(), "Verity");
         ui::title_right(top(), "Gen 4/5 save editor");
         ui::panel(top(), 1, 2, 30, message[0] ? 6 : 3);
         // The logo (48 px inside its 64 px sprite) centred in the gap between the panels: from

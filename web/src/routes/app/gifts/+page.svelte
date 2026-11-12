@@ -36,7 +36,7 @@
 </script>
 
 <svelte:head>
-	<title>Mystery Gifts · verity editor</title>
+	<title>Mystery Gifts · Verity editor</title>
 </svelte:head>
 
 {#if error}

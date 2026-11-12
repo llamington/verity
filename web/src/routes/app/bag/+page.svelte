@@ -23,7 +23,7 @@
 </script>
 
 <svelte:head>
-	<title>Bag · verity editor</title>
+	<title>Bag · Verity editor</title>
 </svelte:head>
 
 <BagEditor {pouches} {addable} {add} {setCount} {remove} />
