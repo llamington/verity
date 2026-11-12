@@ -12,12 +12,24 @@ describe('spriteUrls', () => {
 	});
 
 	it('tries the most specific sprite first', () => {
-		expect(spriteUrls('pt', { ...mon, species: 422, form: 1, female: true, shiny: true })).toEqual([
-			`${pt}shiny/female/422-east.png`,
-			`${pt}shiny/female/422.png`,
+		expect(spriteUrls('pt', { ...mon, female: true, shiny: true })).toEqual([
+			`${pt}shiny/female/25.png`,
+			`${pt}shiny/25.png`
+		]);
+		expect(spriteUrls('pt', { ...mon, species: 422, form: 1, shiny: true })).toEqual([
 			`${pt}shiny/422-east.png`,
 			`${pt}shiny/422.png`
 		]);
+	});
+
+	it('asks for a female sprite only where the repository has one', () => {
+		// Bulbasaur looks the same either way (a request for female/1.png would 404).
+		expect(spriteUrls('pt', { ...mon, species: 1, female: true })).toEqual([`${pt}1.png`]);
+		// Unfezant's female sprite exists in Black and White only (Gen 5 species).
+		expect(spriteUrls('bw', { ...mon, species: 521, female: true })[0]).toContain(
+			'/black-white/female/521.png'
+		);
+		expect(spriteUrls('pt', { ...mon, species: 400, female: true })[0]).toBe(`${pt}female/400.png`);
 	});
 
 	it('has none for eggs, empty slots and species the game lacks', () => {
