@@ -1,0 +1,60 @@
+name: Release
+
+# Pushing a v* tag (git tag v0.1.0 && git push origin v0.1.0) builds verity.nds and publishes it
+# as a GitHub release with notes generated from the changes since the last tag. Run it by hand to
+# build the .nds as a run artifact without releasing.
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BLOCKSDS: /opt/wonderful/thirdparty/blocksds/core
+
+jobs:
+  nds:
+    name: Build verity.nds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-workspace-crates: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+      # BlocksDS through the Wonderful toolchain, as installed locally (/opt/wonderful).
+      - name: Install BlocksDS
+        run: |
+          sudo mkdir -p /opt/wonderful
+          sudo chown "$USER" /opt/wonderful
+          curl -sSfL https://wonderful.asie.pl/bootstrap/wf-bootstrap-x86_64.tar.gz | tar -xz -C /opt/wonderful
+          export PATH=/opt/wonderful/bin:$PATH
+          wf-pacman -Syu --noconfirm
+          wf-pacman -S --noconfirm wf-tools
+          wf-config repo enable blocksds
+          wf-pacman -Syu --noconfirm
+          wf-pacman -S --noconfirm blocksds-toolchain
+      # The data blobs (gitignored) come from PKHeX.Core's NuGet package through the oracle.
+      - name: Build the data blobs
+        run: scripts/build-data.sh
+      - name: Build the .nds
+        run: make nds
+      - uses: actions/upload-artifact@v7
+        with:
+          name: verity-nds
+          path: nds/verity.nds
+          if-no-files-found: error
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" nds/verity.nds --verify-tag --generate-notes
