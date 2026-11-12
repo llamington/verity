@@ -20,10 +20,11 @@
 	play={async ({ canvas }) => {
 		const dir = `${SPRITES_BASE}/generation-iv/platinum/`;
 		const img = () => canvas.getByTestId('sprite');
-		await expect(img()).toHaveAttribute('src', `${dir}female/422-east.png`);
+		// Shellos has no female sprite, so the form sprite comes first.
+		await expect(img()).toHaveAttribute('src', `${dir}422-east.png`);
 		await expect(img()).toHaveAttribute('alt', 'Shellos');
-		// No female or form sprite on the host: each failure tries the next.
-		for (const next of ['female/422.png', '422-east.png', '422.png']) {
+		// Each failure tries the next candidate.
+		for (const next of ['422.png']) {
 			await fireEvent.error(img());
 			await expect(img()).toHaveAttribute('src', dir + next);
 		}
