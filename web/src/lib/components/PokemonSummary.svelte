@@ -6,6 +6,7 @@
 	import TypeBadge from '#lib/components/TypeBadge.svelte';
 	import ItemIcon from '#lib/components/ItemIcon.svelte';
 	import { typeSwatch } from '#lib/theme.js';
+	import { formatDate } from '#lib/utils.js';
 	import type { Summary, Named, Legality } from '#lib/verity.js';
 
 	let {
@@ -172,11 +173,13 @@
 		<dd>{summary.origin} · {summary.language}</dd>
 		<dt class="text-muted-foreground">Met</dt>
 		<dd>
-			{name(summary.metLocation)}{summary.metLevel ? `, Lv. ${summary.metLevel}` : ''}, {summary.metDate}
+			{name(summary.metLocation)}{summary.metLevel ? `, Lv. ${summary.metLevel}` : ''}, {formatDate(
+				summary.metDate
+			)}
 		</dd>
 		{#if summary.eggDate}
 			<dt class="text-muted-foreground">Egg</dt>
-			<dd>{name(summary.eggLocation)}, {summary.eggDate}</dd>
+			<dd>{name(summary.eggLocation)}, {formatDate(summary.eggDate)}</dd>
 		{/if}
 		{#if summary.fateful}
 			<dt class="text-muted-foreground">Fateful</dt>
