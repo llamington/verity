@@ -877,6 +877,7 @@ impl Editor {
         slot: u8,
         edit: &EditRequest,
     ) -> Result<Preview, Invalid> {
+        let (_, original) = self.pkm(box_index, slot)?;
         let (pk, rules) = self.edited(box_index, slot, edit)?;
         let issue = safety::check_pkm(&rules, &pk, pk.is_party_format())
             .err()
@@ -884,7 +885,7 @@ impl Editor {
         let generation = self.open().generation();
         Ok(Preview {
             issue,
-            legality: judge(generation, &pk),
+            legality: judge_edit(generation, &original, &pk),
             summary: summary(rules.kind, &pk),
         })
     }
@@ -898,9 +899,10 @@ impl Editor {
         edit: &EditRequest,
         legal_mode: bool,
     ) -> Result<Option<String>, Invalid> {
+        let (_, original) = self.pkm(box_index, slot)?;
         let (pk, rules) = self.edited(box_index, slot, edit)?;
         let generation = self.open().generation();
-        if legal_mode && judge(generation, &pk).status == "illegal" {
+        if legal_mode && judge_edit(generation, &original, &pk).status == "illegal" {
             return Ok(Some("illegal (legal mode)".into()));
         }
         let at = slot_at(box_index, slot);
@@ -1667,7 +1669,19 @@ fn rules(kind: SaveKind) -> Option<Rules<'static>> {
 /// The legality verdict for `pk` in a save of `generation`.
 fn judge(generation: u8, pk: &Pkm) -> Legality {
     let c5 = if generation == 5 { context5() } else { None };
-    match verdict::check(generation, pk, context4(), c5) {
+    verdict_legality(pk, verdict::check(generation, pk, context4(), c5))
+}
+
+/// [`judge`] for `edited`, an edit of `original`: an edit that breaks a matched origin is
+/// illegal rather than not checked (`verdict::check_edit`).
+fn judge_edit(generation: u8, original: &Pkm, edited: &Pkm) -> Legality {
+    let c5 = if generation == 5 { context5() } else { None };
+    let r = verdict::check_edit(generation, original, edited, context4(), c5);
+    verdict_legality(edited, r)
+}
+
+fn verdict_legality(pk: &Pkm, r: Result<Report<'_>, verdict::Unchecked>) -> Legality {
+    match r {
         Ok(r) => legality(pk, &r),
         Err(why) => Legality {
             status: "unchecked".into(),
