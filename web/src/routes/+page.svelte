@@ -12,7 +12,7 @@
 	import Logo from '#lib/components/Logo.svelte';
 	import { onMount } from 'svelte';
 	import { analyticsAvailable, consent } from '#lib/analytics.svelte.js';
-	import { SITE } from '#lib/site.js';
+	import { REPO, SITE } from '#lib/site.js';
 	import { gameGradient, typeSwatch } from '#lib/theme.js';
 
 	const FEATURES = [
@@ -96,7 +96,8 @@
 		isAccessibleForFree: true,
 		license: 'https://www.gnu.org/licenses/gpl-3.0.html',
 		offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-		image: `${SITE}/screenshots/social.png`
+		image: `${SITE}/screenshots/social.png`,
+		sameAs: [REPO]
 	});
 	// The closing tag is escaped so neither this script block nor the parser sees one; `<` is escaped so
 	// the JSON can never end the tag either.
@@ -149,7 +150,7 @@
 			HeartGold, SoulSilver, Black, White, Black 2 and White 2.
 		</p>
 		<p>It runs entirely in your browser. Your save file never leaves your device.</p>
-		<div>
+		<div class="flex flex-wrap items-center gap-x-6 gap-y-3">
 			<!-- Picks the save here, then opens the editor with it loaded. -->
 			<OpenSaveButton
 				size="lg"
@@ -158,6 +159,10 @@
 				onopened={() => void goto(resolve('/app'))}
 				class="font-pixel text-base shadow-[0_4px_0_var(--ball-band)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-none"
 				>Open a save <span aria-hidden="true">▶</span></OpenSaveButton
+			>
+			<a
+				class="font-semibold underline underline-offset-4"
+				href="https://github.com/llamington/verity">View source on GitHub</a
 			>
 		</div>
 	</div>
@@ -276,7 +281,8 @@
 			Legality rules and game data come from
 			<a class="underline" href="https://github.com/kwsch/PKHeX">PKHeX</a> (GPLv3). Sprites load
 			from the <a class="underline" href="https://github.com/PokeAPI/sprites">PokeAPI sprites</a>
-			repository. Verity is free software under the GPLv3.
+			repository. Verity is free software under the GPLv3; its source is
+			<a class="underline" href="https://github.com/llamington/verity">on GitHub</a>.
 		</p>
 		<p>
 			Verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The
