@@ -73,14 +73,59 @@
 		{ id: 'bw', name: 'Black · White' },
 		{ id: 'b2w2', name: 'Black 2 · White 2' }
 	];
+	// The live site, for the absolute URLs that link previews and search engines want.
+	const SITE = 'https://verity.llamington.workers.dev';
+	const TITLE = 'Verity: Pokémon Gen 4 and 5 save editor';
+	const DESCRIPTION =
+		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. Runs in your browser; your save never leaves your device.';
+	const JSON_LD = JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'WebApplication',
+		name: 'Verity',
+		url: `${SITE}/`,
+		description: DESCRIPTION,
+		applicationCategory: 'UtilitiesApplication',
+		operatingSystem: 'Any (runs in the browser)',
+		browserRequirements: 'Requires JavaScript and WebAssembly',
+		isAccessibleForFree: true,
+		license: 'https://www.gnu.org/licenses/gpl-3.0.html',
+		offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+		image: `${SITE}/screenshots/social.png`
+	});
+	// The closing tag is escaped so neither this script block nor the parser sees one; `<` is escaped so
+	// the JSON can never end the tag either.
+	const JSON_LD_TAG = `<script type="application/ld+json">${JSON_LD.replaceAll('<', '\\u003c')}<\u002fscript>`;
+	/** WebP sources for a screenshot captured at 2x; `width` is its CSS width. */
+	function shot(name: 'summary' | 'edit' | 'gifts', width: number) {
+		const x1 = asset(`screenshots/${name}-1x.webp`);
+		const x2 = asset(`screenshots/${name}.webp`);
+		return { src: x2, srcset: `${x1} ${String(width)}w, ${x2} ${String(width * 2)}w` };
+	}
+	// Half the 736px content column (less the gap) from sm up, else the screen less its gutters.
+	const HALF = '(min-width: 640px) 360px, calc(100vw - 32px)';
+	const FULL = '(min-width: 768px) 736px, calc(100vw - 32px)';
 </script>
 
 <svelte:head>
-	<title>Verity: Gen 4 and 5 save editor</title>
+	<title>{TITLE}</title>
+	<meta name="description" content={DESCRIPTION} />
+	<link rel="canonical" href="{SITE}/" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Verity" />
+	<meta property="og:url" content="{SITE}/" />
+	<meta property="og:title" content={TITLE} />
+	<meta property="og:description" content={DESCRIPTION} />
+	<meta property="og:image" content="{SITE}/screenshots/social.png" />
+	<meta property="og:image:width" content="2048" />
+	<meta property="og:image:height" content="904" />
 	<meta
-		name="description"
-		content="A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. Runs in your browser; your save never leaves your device."
+		property="og:image:alt"
+		content="Verity's Mystery Gift list for a Platinum save, each gift with a Deliver button."
 	/>
+	<meta name="twitter:card" content="summary_large_image" />
+	<!-- JSON_LD_TAG is built from our own constants, so {@html} is safe here. -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html JSON_LD_TAG}
 </svelte:head>
 
 <header class="relative overflow-hidden bg-primary text-primary-foreground">
@@ -97,9 +142,7 @@
 			A legality-aware save editor for the Gen 4 and Gen 5 games: Diamond, Pearl, Platinum,
 			HeartGold, SoulSilver, Black, White, Black 2 and White 2.
 		</p>
-		<p class="opacity-90">
-			It runs entirely in your browser. Your save file never leaves your device.
-		</p>
+		<p>It runs entirely in your browser. Your save file never leaves your device.</p>
 		<div>
 			<!-- Picks the save here, then opens the editor with it loaded. -->
 			<OpenSaveButton
@@ -132,10 +175,11 @@
 		<div class="grid gap-4 sm:grid-cols-2 sm:items-start">
 			<figure class="flex flex-col gap-2">
 				<img
-					src={asset('screenshots/summary.png')}
+					{...shot('summary', 384)}
+					sizes={HALF}
 					width="384"
 					height="700"
-					loading="lazy"
+					fetchpriority="high"
 					class={SHOT_CLASS}
 					alt="A Floatzel's summary: a Legal verdict with its origin, then nature, ability, items, moves and stats with IVs and EVs."
 				/>
@@ -145,7 +189,8 @@
 			</figure>
 			<figure class="flex flex-col gap-2">
 				<img
-					src={asset('screenshots/edit.png')}
+					{...shot('edit', 384)}
+					sizes={HALF}
 					width="384"
 					height="610"
 					loading="lazy"
@@ -159,7 +204,8 @@
 		</div>
 		<figure class="flex flex-col gap-2">
 			<img
-				src={asset('screenshots/gifts.png')}
+				{...shot('gifts', 1024)}
+				sizes={FULL}
 				width="1024"
 				height="452"
 				loading="lazy"

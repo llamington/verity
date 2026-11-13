@@ -1,4 +1,5 @@
 <script lang="ts">
+	import './cjk.css';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
