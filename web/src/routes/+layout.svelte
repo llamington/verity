@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import UpdatePrompt from '#lib/components/UpdatePrompt.svelte';
+	import ConsentBanner from '#lib/components/ConsentBanner.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -15,3 +16,4 @@
 {@render children()}
 
 <UpdatePrompt />
+<ConsentBanner />
