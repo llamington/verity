@@ -1,14 +1,43 @@
-# Handoff (2026-11-11, end of session)
+# Handoff (2026-11-13, end of session)
 
 Start here when resuming. The spec is `PLAN.md`; deviations are in `docs/discrepancies.md`; P5 scope
 and gaps are in `docs/research/p5-plan.md`.
 
 ## Resume here
 
+**State on 2026-11-13** (sessions of 2026-11-11 to 13; older notes below still hold):
+- Name: written **Verity** in text (titles, prose, the DS banner and title bar, the PWA); lowercase
+  stays for the logo wordmarks and all code, crate, file and path names.
+- Site live at https://verity.llamington.workers.dev (deploys from `main` via CI). The landing page
+  has screenshots (`web/scripts/screenshots.js`, `npm run screenshots`; sprites blocked, so no
+  Nintendo art) and a "Getting your save" section; its button picks a save and opens the editor.
+- Dependencies: Dependabot (`.github/dependabot.yml`), weekly, npm grouped by package family;
+  TypeScript majors ignored until typescript-eslint supports TS 7. commitlint skips its commits.
+- Releases: pushing a `v*` tag builds `verity.nds` and publishes a GitHub release
+  (`.github/workflows/release.yml`; the version comes from `git describe`). No tag pushed yet; the
+  repo is still private (it must be public, or the source offered, before a release: GPLv3).
+- Coverage, local only: `npm run coverage` in `web/`, `cargo coverage` (cargo-llvm-cov installed).
+  Locally ~89% of Rust lines; CI runs only ~20%, because the blobs and corpus are absent there
+  (building blobs in CI would bring it to ~71%; the user declined for now).
+- Legality: `verdict::check_edit` judges an edit that breaks a matched origin as illegal (it was
+  "not checked", so legal mode let it through). Used by the web and DS editors.
+- **DS UI tests** (`docs/research/emu-harness.md`): the harness has needles (reference screens,
+  `--update`, exclusions), image taps, save states, ELF symbols, `sd_fresh`, JUnit. The app
+  publishes `verity_test_scene` / `verity_test_busy`. `make emu-test` runs 18 scripts plus retail
+  Platinum loading ui-add's save; `make emu-font` runs the ROM-font scripts against gitignored
+  `needles-local/<rom>`; `make emu-unova` checks needles too. Not converted: `ui-rom-font` and the
+  retail-game scripts. Converted scripts still use fixed waits inside a scene; a check a few frames
+  after a press can catch a redraw (seen once in ui-closest-ivs, fixed with `wait_screen`).
+- Ideas left open by the user: publishing the harness (needs a server mode/pytest client, HTML
+  report) or the core crate; analytics (Cloudflare Web Analytics or GoatCounter suggested);
+  loading sprites from raw.githubusercontent.com instead of jsDelivr (jsDelivr refuses uncached
+  files from the PokeAPI repo, over its 50 MB limit, so a few sprites never load); synthetic saves
+  for CI.
+
 **Next tasks (user, 2026-11-10), in order:**
 
 1. PLAN P12 (the web version), in progress: **make the web app feature complete with the DS
-   app** (user, 2026-11-10). Done 2026-11-11; the deploy waits for the user's Cloudflare secrets. The parity checklist is in PLAN P12. Work through it without
+   app** (user, 2026-11-10). Done 2026-11-11; deployed since 2026-11-11. The parity checklist is in PLAN P12. Work through it without
    stopping between items; stop only for real blockers. The stats hexagon is dropped.
 2. Event data: ship the gift/event blobs unchanged, full cards included (user, 2026-11-10, after
    weighing the legal risk as low). Don't strip card text.
