@@ -83,7 +83,7 @@
 	});
 	const TITLE = 'Verity: Pokémon Gen 4 and 5 save editor';
 	const DESCRIPTION =
-		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. Runs in your browser; your save never leaves your device.';
+		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. A PKHeX alternative that runs in your browser, even offline; your save never leaves your device.';
 	const JSON_LD = JSON.stringify({
 		'@context': 'https://schema.org',
 		'@type': 'WebApplication',
@@ -149,7 +149,10 @@
 			A legality-aware save editor for the Gen 4 and Gen 5 games: Diamond, Pearl, Platinum,
 			HeartGold, SoulSilver, Black, White, Black 2 and White 2.
 		</p>
-		<p>It runs entirely in your browser. Your save file never leaves your device.</p>
+		<p>
+			An alternative to PKHeX that uses the same legality rules and runs entirely in your browser,
+			even offline once it has loaded. Your save file never leaves your device.
+		</p>
 		<div class="flex flex-wrap items-center gap-x-6 gap-y-3">
 			<!-- Picks the save here, then opens the editor with it loaded. -->
 			<OpenSaveButton
