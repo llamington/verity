@@ -143,6 +143,46 @@ struct Lines
     void block() { pending_gap = true; }
 };
 
+// A line of text and badges on tile row `row` of a panel, laid out like a CSS flex row: items
+// queued with text(), shrink() and badge() flow from pixel x; after push_right(), the rest are
+// packed against the panel's right edge (margin-left: auto). Badges land on whole cells. A shrink()
+// item (last on the left; on the right it is plain text) is cut with "..." to the room left;
+// anything else that doesn't fit is a layout fault ("crowded"). draw() lays the row out and draws it.
+//   ui::Row r(top(), row, kX);
+//   r.badge(Badge::Invalid, "ILLEGAL").push_right().text(UI_MUTED "Game-safe").badge(Badge::Legal, "OK");
+//   r.draw();
+class Row
+{
+public:
+    Row(Surface* c, int row, int x) : c_(c), row_(row), x_(x) {}
+    Row& text(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+    Row& shrink(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+    Row& badge(Badge b, const char* text);
+    Row& push_right();
+    void draw();
+
+private:
+    enum Kind : uint8_t
+    {
+        Text,
+        Shrink,
+        BadgeItem
+    };
+    struct Item
+    {
+        Kind kind;
+        Badge badge;
+        bool right;
+        char s[64];
+    };
+    Row& add(Kind kind, Badge b, const char* text);
+    Surface* c_;
+    int row_, x_;
+    bool right_ = false;
+    Item items_[6];
+    int n_ = 0;
+};
+
 // Clears text pixel rows [y0, y1) across the screen.
 void clear_px(Surface* c, int y0, int y1);
 // Width in pixels of text as drawn.

@@ -326,16 +326,16 @@ public:
         l.block();
         // Unsaved edits leave the checksums in memory stale; saving recomputes them, so show the
         // file's state and say they'll be updated.
-        int row = l.grid_row();
-        ui::text(top(), x, row * 8, UI_MUTED "Checksums");
-        int bc = (x + ui::text_width("Checksums") + 9) / 8;
+        ui::Row sums(top(), l.grid_row(), x);
+        sums.text(UI_MUTED "Checksums");
         if (d.dirty && d.file_checksums_ok)
-            ui::badge(top(), bc, row, ui::Badge::Safe, "updated on save");
+            sums.badge(ui::Badge::Safe, "updated on save");
         else if (d.dirty)
-            ui::badge(top(), bc, row, ui::Badge::Invalid, "BAD in file, fixed on save");
+            sums.badge(ui::Badge::Invalid, "BAD in file, fixed on save");
         else
-            ui::badge(top(), bc, row, i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
-                      i.checksums_valid ? "OK" : "BAD");
+            sums.badge(i.checksums_valid ? ui::Badge::Legal : ui::Badge::Invalid,
+                       i.checksums_valid ? "OK" : "BAD");
+        sums.draw();
         if (!message_[0] && d.dirty)
             snprintf(message_, sizeof(message_), "Unsaved changes");
         if (message_[0] || !core::data_available())
@@ -1522,17 +1522,16 @@ private:
         static const char* why[] = {"",        "egg",       "origin game",
                                     "data missing", "Gen 5 save", "hatched",
                                     "event/trade/walker"};
-        int row = l.grid_row();
-        int c;
+        ui::Row line(top(), l.grid_row(), col * 8);
         char rest[48] = "";
         if (r.status == 1)
         {
-            c = ui::badge(top(), col, row, ui::Badge::Legal, "LEGAL");
+            line.badge(ui::Badge::Legal, "LEGAL");
             snprintf(rest, sizeof(rest), col > 2 ? UI_MUTED "%lu ms" : UI_MUTED "checked in %lu ms", (unsigned long)ms);
         }
         else if (r.status == 2)
         {
-            c = ui::badge(top(), col, row, ui::Badge::Invalid, "ILLEGAL");
+            line.badge(ui::Badge::Invalid, "ILLEGAL");
             for (int i = 0; i < r.check_count && strlen(rest) < 30; i++)
             {
                 strcat(rest, i ? " " : "");
@@ -1543,13 +1542,13 @@ private:
         }
         else
         {
-            c = ui::badge(top(), col, row, ui::Badge::Fishy, "NOT CHECKED");
+            line.badge(ui::Badge::Fishy, "NOT CHECKED");
             snprintf(rest, sizeof(rest), "%s", r.unsupported < 7 ? why[r.unsupported] : "?");
         }
         if (!v.checksum_ok)
             strcat(rest, "  ! checksum");
-        ui::fit(rest, 240 - (c * 8 + 4));
-        ui::text(top(), c * 8 + 4, row * 8, "%s", rest);
+        line.shrink("%s", rest);
+        line.draw();
     }
 };
 
@@ -2983,21 +2982,17 @@ private:
             return;
         }
         const verity_legality_report& r = report_;
-        // The verdict badge needs no label (as on the summary). A "Legality" label left too little
-        // room: ILLEGAL's cells ran into "Game-safe", turning its first letter red.
-        int bc = 2;
+        // The verdict (no label, as on the summary), then Game-safe at the panel's right edge.
+        ui::Row verdict(top(), kEdit + 2, kX);
         if (r.status == 1)
-            ui::badge(top(), bc, kEdit + 2, ui::Badge::Legal, "LEGAL");
+            verdict.badge(ui::Badge::Legal, "LEGAL");
         else if (r.status == 2)
-            ui::badge(top(), bc, kEdit + 2, ui::Badge::Invalid, "ILLEGAL");
+            verdict.badge(ui::Badge::Invalid, "ILLEGAL");
         else
-            ui::badge(top(), bc, kEdit + 2, ui::Badge::Fishy, "UNCHECKED");
-        // Game-safe at the panel's right edge (its badge ends at the last content column 30), so the
-        // verdict's width can't push it out.
-        const char* safe = issue_ ? "NO" : "OK";
-        int safe_col = 31 - (1 + (ui::text_width(safe) + 9) / 8);
-        ui::text_right(top(), safe_col * 8 - 4, y, UI_MUTED "Game-safe");
-        ui::badge(top(), safe_col, kEdit + 2, issue_ ? ui::Badge::Invalid : ui::Badge::Legal, safe);
+            verdict.badge(ui::Badge::Fishy, "UNCHECKED");
+        verdict.push_right().text(UI_MUTED "Game-safe");
+        verdict.badge(issue_ ? ui::Badge::Invalid : ui::Badge::Legal, issue_ ? "NO" : "OK");
+        verdict.draw();
         ui::text(top(), kX, y + 14, UI_MUTED "%s", status);
         char why[48] = "";
         if (issue_)
