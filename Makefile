@@ -53,14 +53,17 @@ emu-unova: emu-harness nds
 	mkdir -p build/emu/unova-sd/saves
 	cp corpus/real/pkhex-avalonia/gen5_white2.sav "corpus/real/pkmds-blazor/Black - Full Completion.sav" build/emu/unova-sd/saves/
 	target/release/examples/keys_receive corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/unova-sd/saves/partner.sav partner
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-unova.json --out build/emu/ui-unova
-	python3 tools/emu-harness/check_unova.py corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/unova-sd/saves/gen5_white2.sav
+	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-unova.json --out build/emu/ui-unova \
+	  $(if $(UPDATE),--update)
+	python3 tools/emu-harness/check_unova.py corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/ui-unova/sd/saves/gen5_white2.sav
 
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
 # the harness clock is fixed, so a reused image would not sync rewritten files back).
 # ROM font and icons (M8): first boot builds the caches from a ROM on the SD card. Runs once with
 # a Gen 5 ROM and once with a Gen 4 ROM (stand-ins holding only what verity reads, standin_rom.py).
+# Their needles show ROM fonts and icons, so they live in the gitignored needles-local/<rom>.
+EMU_FONT_TESTS := ui-keyboard-jp ui-moves ui-moves5 ui-items ui-items5 ui-ribbons
 emu-font: emu-harness nds
 	for g in black2 platinum; do \
 	  rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx && mkdir -p build/emu && \
@@ -69,49 +72,28 @@ emu-font: emu-harness nds
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-rom-font.json --out build/emu/ui-rom-font-$$g && \
 	  test -s build/emu/sd/_nds/verity/font.vfnt && test -s build/emu/sd/_nds/verity/icons.vicn && \
 	  ls build/emu/sd/_nds/verity/items?.vitm >/dev/null && test -s build/emu/sd/_nds/verity/ribbons.vrib || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-keyboard-jp.json --out build/emu/ui-keyboard-jp-$$g || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves.json --out build/emu/ui-moves-$$g || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-moves5.json --out build/emu/ui-moves5-$$g || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items.json --out build/emu/ui-items-$$g || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items5.json --out build/emu/ui-items5-$$g || exit 1; \
-	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons-$$g || exit 1; \
+	  tools/emu-harness/build/emu-harness $(EMU_FONT_TESTS:%=tools/emu-harness/scripts/%.json) \
+	    --needles tools/emu-harness/needles-local/$$g --out build/emu/font-$$g \
+	    --junit build/emu/font-$$g/junit.xml $(if $(UPDATE),--update) || exit 1; \
 	done
 
 # DS UI tests: scripts that check needles (tools/emu-harness/needles) and wait on the app's
-# verity_test_scene, each on its own copy of the SD card. Report in build/emu/tests/junit.xml.
-# UPDATE=1 rewrites the needles that don't match (review them before committing).
-EMU_TESTS := ui-start ui-edit
+# verity_test_scene, each on its own copy of the SD card (build/emu/tests/<script>/sd). Report in
+# build/emu/tests/junit.xml. UPDATE=1 rewrites needles that don't match (review before
+# committing). With roms/platinum.nds and bios/, retail Platinum then loads ui-add's save.
+EMU_TESTS := ui-start ui-edit ui-boxes ui-touch ui-ribbons ui-add ui-add-hgss ui-add-w2 ui-gifts \
+  ui-gifts-w2 ui-egg ui-pal-park ui-closest-ivs ui-misc-tabs ui-bag ui-leave ui-gen5 ui-transfer
 emu-test: emu-harness nds
 	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
 	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
 	tools/emu-harness/build/emu-harness $(EMU_TESTS:%=tools/emu-harness/scripts/%.json) \
 	  --out build/emu/tests --junit build/emu/tests/junit.xml $(if $(UPDATE),--update)
-
-emu-ui: emu-harness nds
-	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
-	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-start.json --out build/emu/ui-start
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json --out build/emu/ui-boxes
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-touch.json --out build/emu/ui-touch
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add.json --out build/emu/ui-add
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-edit.json --out build/emu/ui-edit
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add-hgss.json --out build/emu/ui-add-hgss
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-gifts.json --out build/emu/ui-gifts
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-egg.json --out build/emu/ui-egg
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-pal-park.json --out build/emu/ui-pal-park
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-closest-ivs.json --out build/emu/ui-closest-ivs
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-misc-tabs.json --out build/emu/ui-misc-tabs
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-bag.json --out build/emu/ui-bag
-	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-leave.json --out build/emu/ui-leave
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-gen5.json --out build/emu/ui-gen5
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-add-w2.json --out build/emu/ui-add-w2
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-gifts-w2.json --out build/emu/ui-gifts-w2
-	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-transfer.json --out build/emu/ui-transfer
 	@if [ -f roms/platinum.nds ] && [ -f bios/bios7.bin ]; then \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/pt-loads-written.json --out build/emu/pt-loads-written; \
 	else echo "skip pt-loads-written: ROM or BIOS missing"; fi
+
+# The old name for the walk-throughs, now the tests above.
+emu-ui: emu-test
 
 emu-tour: emu-harness nds
 	tools/emu-harness/tour.sh

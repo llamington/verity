@@ -35,13 +35,17 @@ finding menu paths before freezing a script. `direct_boot` (default true) skips 
 
 ## Tests: needles, scene waits, save states
 
-`make emu-test` runs the DS UI tests (`EMU_TESTS` in the Makefile: `ui-start`, `ui-edit`) and
-writes `build/emu/tests/junit.xml`; `make emu-test UPDATE=1` rewrites needles that don't match.
-Review rewritten needles before committing them. The step reference is at the top of `src/main.cpp`.
+`make emu-test` runs the DS UI tests (`EMU_TESTS` in the Makefile, 18 scripts; `emu-ui` is an
+alias) and writes `build/emu/tests/junit.xml`; `make emu-test UPDATE=1` rewrites needles that don't
+match. Review rewritten needles before committing them. `make emu-font` runs the six scripts that
+need ROM fonts and icons (`EMU_FONT_TESTS`), once per stand-in ROM, against gitignored needles in
+`needles-local/<rom>` (`--needles`): those screens show Nintendo glyphs and icons. The step reference is at the top of `src/main.cpp`.
 
 - **Needles** (`tools/emu-harness/needles/`, after openQA): a PNG of both screens plus a JSON file
   with tags, match areas and the share of pixels that must match (default 1.0: runs are
-  deterministic). `assert_screen` / `wait_screen` take a tag. A failure writes the actual screens
+  deterministic) and `exclude` rectangles to ignore (the box view's "checked in N ms" timing, so a
+  faster or slower core doesn't fail every box screen). `assert_screen` / `wait_screen` take a
+  tag. A failure writes the actual screens
   and a diff (differences in red, areas outlined) to the run's output; a tag with no needle gets
   one written, and the step fails until rerun. Needles must not show Nintendo art: the test SD
   card (`sd/`) holds no game ROM, so sprites and ROM fonts never appear.
@@ -59,8 +63,10 @@ Review rewritten needles before committing them. The step reference is at the to
 - **Runs**: several scripts per invocation, exit status 0 / 1 (a step failed) / 2 (error), and
   `--junit FILE`. A failed RAM wait logs the value it last read.
 
-Converting the other scripts: replace `{"wait": N}` after scene changes with a scene wait, put
-`assert_screen` next to the screenshots, and switch to `sd_fresh`. Keep a short press away from
+Not converted: `ui-rom-font` (it builds the font caches the font tests copy) and the retail-game
+scripts (`boot-*`, `explore-*`, `memlink`, `pt-loads-written`), whose screens can't be committed.
+Converted scripts still use fixed `{"wait": N}` inside a scene; prefer scene waits and
+`wait_screen` in new steps. Keep a short press away from
 heavy frames (switching boxes runs a legality check that takes over a frame): wait for the result
 with `wait_screen` first, or the press can fall between two key scans.
 

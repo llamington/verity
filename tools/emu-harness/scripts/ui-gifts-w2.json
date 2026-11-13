@@ -2,10 +2,12 @@
 {
   "rom": "../../../nds/verity.nds",
   "sd_dir": "../../../build/emu/sd",
-  "sd_image": "../../../build/emu/sd.img",
+  "sd_fresh": true,
+  "elf": "../../../nds/build/verity.elf",
+  "needles": "../needles",
   "rtc": [2026, 11, 9, 12, 0, 0],
   "steps": [
-    {"wait": 90},
+    {"wait_until": {"ram": {"addr": "verity_test_scene", "text": "files"}}, "timeout": 900},
     {"hold": ["L"], "frames": 40}, {"wait": 2},
     {"press": ["A"], "frames": 2},
     {"wait": 60},
@@ -13,10 +15,10 @@
     {"press": ["Down"], "frames": 2},
     {"press": ["A"], "frames": 2},
     {"wait": 90},
-    {"screenshot": "01-list.png"},
+    {"assert_screen": "ui-gifts-w2-01-list"}, {"screenshot": "01-list.png"},
     {"press": ["A"], "frames": 2},
     {"wait": 30},
-    {"screenshot": "02-delivered.png"},
+    {"assert_screen": "ui-gifts-w2-02-delivered"}, {"screenshot": "02-delivered.png"},
     {"press": ["B"], "frames": 2},
     {"wait": 30},
     {"press": ["Down"], "frames": 2},
@@ -25,6 +27,6 @@
     {"wait": 5},
     {"press": ["A"], "frames": 2},
     {"wait": 240},
-    {"screenshot": "03-saved.png"}
+    {"assert_screen": "ui-gifts-w2-03-saved"}, {"screenshot": "03-saved.png"}
   ]
 }

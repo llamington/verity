@@ -2,7 +2,7 @@
 {
  "rom": "../../../nds/verity.nds",
  "sd_dir": "../../../build/emu/sd",
- "sd_image": "../../../build/emu/sd.img",
+ "sd_fresh": true, "elf": "../../../nds/build/verity.elf", "needles": "../needles",
  "rtc": [
   2026,
   11,
@@ -11,10 +11,7 @@
   0,
   0
  ],
- "steps": [
-  {
-   "wait": 90
-  },
+ "steps": [{"wait_until": {"ram": {"addr": "verity_test_scene", "text": "files"}}, "timeout": 900},
   {
    "hold": [
     "L"
@@ -141,7 +138,7 @@
   {
    "wait": 200
   },
-  {
+  {"assert_screen": "ui-transfer-01-transferred"}, {
    "screenshot": "01-transferred.png"
   }
  ]
