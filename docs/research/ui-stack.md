@@ -96,3 +96,18 @@ then every screen was converted. The rules (`ui.h`, `Lines`, `spaced_list`):
 Text drawn with `ui::text` doesn't clear; screens clear by pixel rows (`ui::clear_px`). `at()`
 remains for the keyboard's key grid, whose keys are tiles. Mixing `at()` with pixel text on the
 same rows caused bugs during the conversion (it clears the rest of its 8 px row).
+
+## Display (2026-11-13)
+
+Drawing used to write straight into VRAM, palettes and OAM while the screen was being scanned out,
+so on hardware a slow redraw showed as a horizontal tear on the bottom screen. Now only
+`nds/source/display.cpp` writes them after start-up. The UI draws into RAM copies (text tiles,
+frame maps, palettes, sprite graphics) and marks what changed, by text row for the text layer.
+The scene loop calls `display::commit()` right after VBlank: it copies the OAM, palettes, maps and
+sprite graphics, then the changed text rows top down, so a frame is shown whole or not at all. A
+scene change commits while the screen is black, so it takes no extra frame. Code that draws a
+message before blocking work calls `ui::present()` to show it.
+
+Drawing reaches the screen at the next VBlank. Emulator tests that captured a screen a fixed few
+frames after input were sometimes capturing half-drawn frames; such checks should use
+`wait_screen` (with a timeout) rather than `wait` and `assert_screen`.

@@ -32,10 +32,12 @@ int main(int argc, char **argv)
     {
         ui::at(ui::top(), 0, 0, "Verity: no SD card / flashcart");
         ui::at(ui::top(), 0, 2, "(FAT init failed)");
+        ui::present();
         while (1)
             swiWaitForVBlank();
     }
     ui::at(ui::top(), 0, 0, "Verity: reading font and icons...");
+    ui::present();
     core::rom_assets_init();
     ui::push(scenes::file_picker());
     ui::run();
