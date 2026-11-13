@@ -41,8 +41,9 @@ jobs:
           FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
           TO: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          # A new branch has no "before": check just its last commit.
-          if [ "$FROM" = 0000000000000000000000000000000000000000 ]; then
+          # A new branch has no "before", and after a force push it isn't in the history: check
+          # just the last commit then.
+          if ! git merge-base --is-ancestor "$FROM" "$TO" 2>/dev/null; then
             npx commitlint --last --verbose
           else
             npx commitlint --from "$FROM" --to "$TO" --verbose
