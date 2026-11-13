@@ -39,6 +39,8 @@ public:
     virtual void enter() = 0;
     // One frame. Returns false to pop this scene.
     virtual bool update(const Input& in) = 0;
+    // A short name for tests (the emulator harness reads it as verity_test_scene).
+    virtual const char* name() const = 0;
 };
 
 // Push takes ownership. The new scene is entered behind a fade.

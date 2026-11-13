@@ -171,6 +171,7 @@ static int scan_saves(char (*files)[kPathLen], int count, const char* dir, int d
 class FilePicker : public ui::Scene
 {
 public:
+    const char* name() const override { return "files"; }
     void enter() override
     {
         if (!scanned_)
@@ -300,6 +301,7 @@ private:
 class Overview : public ui::Scene
 {
 public:
+    const char* name() const override { return "overview"; }
     void enter() override
     {
         const auto& d = core::doc();
@@ -439,6 +441,7 @@ private:
 class Gifts : public ui::Scene
 {
 public:
+    const char* name() const override { return "gifts"; }
     void enter() override
     {
         ui::clear(bottom());
@@ -651,6 +654,7 @@ private:
 class Bag : public ui::Scene
 {
 public:
+    const char* name() const override { return "bag"; }
     void enter() override
     {
         if (!core::data_available())
@@ -987,6 +991,7 @@ private:
 class UnovaLink : public ui::Scene
 {
 public:
+    const char* name() const override { return "link"; }
     ~UnovaLink() override { free(other_); }
 
     void enter() override
@@ -1226,10 +1231,14 @@ static bool show_pokemon(const verity_pkm_view& v, int x, int y, bool ball = tru
 class BoxView : public ui::Scene
 {
 public:
+    const char* name() const override { return "boxes"; }
     void enter() override
     {
+        // Drawn now, behind the fade: waiting for the first update let the fade-in show the
+        // previous scene's top screen for a few frames.
         ui::clear(bottom());
-        dirty_ = true;
+        draw();
+        dirty_ = false;
     }
 
     bool update(const ui::Input& in) override
@@ -1545,6 +1554,7 @@ private:
 class AddWizard : public ui::Scene
 {
 public:
+    const char* name() const override { return "add"; }
     AddWizard(uint8_t box_index, uint8_t slot) : box_(box_index), slot_(slot) {}
 
     void enter() override
@@ -2042,6 +2052,7 @@ private:
 class Editor : public ui::Scene
 {
 public:
+    const char* name() const override { return "editor"; }
     Editor(uint8_t box_index, uint8_t slot) : box_(box_index), slot_(slot) {}
 
     void enter() override
