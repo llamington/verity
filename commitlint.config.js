@@ -21,8 +21,7 @@ export default {
 				'harness', // tools/emu-harness and tools/emu
 				'oracle', // tools/pkhex-oracle and scripts/
 				'ci',
-				'deps',
-				'plan' // PLAN.md
+				'deps'
 			]
 		]
 	}

@@ -31,7 +31,7 @@ Not covered yet: SoulSilver, White, Black 2 (real), Korean saves.
 `scripts/build-data.sh` runs `pkhex-oracle export-data` and `datagen build`, writing
 `data/blobs/` (gitignored): one game blob per save layout (`dp`, `pt`, `hgss`, `bw`, `b2w2`; 57–106 KB),
 `moves4.bin`/`moves5.bin`, and `strings_<lang>.bin` for ja/en/fr/it/de/es/ko (738 KB total).
-PLAN.md named blobs per concern (`g4_personal.bin`, …); grouping per game lets the DS load a single
+The original plan named blobs per concern (`g4_personal.bin`, …); grouping per game lets the DS load a single
 blob for the open save.
 
 Encounters (`pkhex-oracle export-encounters`, read by reflection from PKHeX's internal

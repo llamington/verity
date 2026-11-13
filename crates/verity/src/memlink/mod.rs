@@ -1,5 +1,6 @@
 //! B2W2 Memory Link: reads what a Black or White save contributes and merges it into a B2W2 save,
-//! as the game does over DS Download Play. Findings and evidence: `docs/memlink-findings.md`.
+//! as the game does over DS Download Play.
+//! Findings and evidence: `docs/research/memlink-findings.md`.
 //!
 //! The region sits outside the checksummed save blocks, so writing it changes nothing else.
 
