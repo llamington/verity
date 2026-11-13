@@ -29,13 +29,15 @@ void write_png(const Image& img, const std::string& path);
 // Both DS screens stacked (top above bottom), 256x384, from melonDS framebuffers (0x??RRGGBB).
 Image stack_screens(const uint32_t* top, const uint32_t* bottom);
 
-// The share of pixels in `areas` that are equal in both images (1.0 = identical). The images must
-// have the same size; areas are clipped to it.
-double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas);
+// The share of pixels in `areas`, outside `exclude`, that are equal in both images (1.0 =
+// identical). The images must have the same size; areas are clipped to it.
+double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas,
+                  const std::vector<Rect>& exclude = {});
 
-// `actual` dimmed, with the pixels that differ from `want` inside `areas` in red and the areas
-// outlined in yellow, for failure reports.
-Image diff(const Image& actual, const Image& want, const std::vector<Rect>& areas);
+// `actual` dimmed, with the pixels that differ from `want` inside `areas` (outside `exclude`) in
+// red, the areas outlined in yellow and the excluded areas in blue, for failure reports.
+Image diff(const Image& actual, const Image& want, const std::vector<Rect>& areas,
+           const std::vector<Rect>& exclude = {});
 
 // The top-left corner of the first exact match of `tmpl` inside `within` of `img`, scanning rows
 // top to bottom. Template pixels with alpha 0 match anything.

@@ -29,6 +29,14 @@ Rect clip(Rect r, int w, int h)
     return {x0, y0, std::max(x1 - x0, 0), std::max(y1 - y0, 0)};
 }
 
+bool inside(int x, int y, const std::vector<Rect>& rects)
+{
+    for (auto& r : rects)
+        if (x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h)
+            return true;
+    return false;
+}
+
 }  // namespace
 
 Image read_png(const std::string& path)
@@ -117,7 +125,8 @@ Image stack_screens(const uint32_t* top, const uint32_t* bottom)
     return img;
 }
 
-double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas)
+double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas,
+                  const std::vector<Rect>& exclude)
 {
     if (a.w != b.w || a.h != b.h)
         return 0.0;
@@ -128,6 +137,8 @@ double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas
         for (int y = r.y; y < r.y + r.h; y++)
             for (int x = r.x; x < r.x + r.w; x++)
             {
+                if (inside(x, y, exclude))
+                    continue;
                 total++;
                 same += (a.at(x, y) & 0xFFFFFF) == (b.at(x, y) & 0xFFFFFF);
             }
@@ -135,7 +146,8 @@ double similarity(const Image& a, const Image& b, const std::vector<Rect>& areas
     return total ? (double)same / total : 1.0;
 }
 
-Image diff(const Image& actual, const Image& want, const std::vector<Rect>& areas)
+Image diff(const Image& actual, const Image& want, const std::vector<Rect>& areas,
+           const std::vector<Rect>& exclude)
 {
     Image out = actual;
     for (auto& p : out.px)
@@ -150,6 +162,11 @@ Image diff(const Image& actual, const Image& want, const std::vector<Rect>& area
         for (int y = r.y; y < r.y + r.h; y++)
             for (int x = r.x; x < r.x + r.w; x++)
             {
+                if (inside(x, y, exclude))
+                {
+                    out.px[(size_t)y * out.w + x] |= 0xFF000080u;
+                    continue;
+                }
                 bool edge = x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1;
                 bool differs = !comparable
                                || (actual.at(x, y) & 0xFFFFFF) != (want.at(x, y) & 0xFFFFFF);
