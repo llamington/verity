@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// P9.1 scenes, first slice: file picker, save overview, box view with party panel.
+// Scenes: file picker, save overview, box view with party panel.
 #include "scenes.h"
 
 #include <dirent.h>

@@ -1,4 +1,4 @@
-//! P6 request API for D/P/Pt wild encounters: `GenRequest` → generate (Method J) → build the
+//! Request API for D/P/Pt wild encounters: `GenRequest` → generate (Method J) → build the
 //! PK4 → the legality gate ([`analyze4`] must be valid) → insert into a save slot with the
 //! capture side effects (party stats, Pokédex).
 //!
@@ -36,7 +36,7 @@ pub enum IvRequest {
     Random,
     /// Exactly these IVs (HP, Atk, Def, Spe, SpA, SpD), or an error.
     Exact([u8; 6]),
-    /// The closest legal spread to these IVs (PLAN P4.6). The result reports the change.
+    /// The closest legal spread to these IVs. The result reports the change.
     Nearest([u8; 6]),
 }
 
@@ -91,7 +91,7 @@ pub enum Error {
     PartyGap,
     /// Inserting into a party needs a party-format Pokémon (an internal error).
     WrongFormat,
-    /// The game-safe validator (P7) rejected the write.
+    /// The game-safe validator rejected the write.
     Unsafe(crate::safety::WriteError),
     /// The operation needs a Pokémon that matched a Gen 4 wild slot.
     NotWild,
@@ -436,7 +436,7 @@ pub fn rules4<'a>(ctx: &Context4<'a>, kind: SaveKind) -> Option<crate::safety::R
 }
 
 /// Writes a Pokémon into `slot` as the game would on capture: party slots get computed stats
-/// (PKHeX `ResetPartyStats`) and must stay contiguous, the write goes through the P7 validator,
+/// (PKHeX `ResetPartyStats`) and must stay contiguous, the write goes through the game-safe validator,
 /// and the Pokédex records it (`apply_capture_side_effects`). Call [`Save::finalize`] before
 /// writing the save out.
 pub fn insert(ctx: &Context4, save: &mut Save, slot: Slot, pk: &Pkm) -> Result<(), Error> {

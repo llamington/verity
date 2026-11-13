@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 // The Memory Link journey end to end: open a White 2 save → Memory Link → link a Black save →
 // save → reopen and link again (nothing new). The rules are tested lower down
-// (crates/verity/tests/p10_link.rs, crates/verity-wasm/tests/editor.rs, the UnovaLink stories).
+// (crates/verity/tests/link.rs, crates/verity-wasm/tests/editor.rs, the UnovaLink stories).
 // Real saves are gitignored (corpus/); this skips without them.
 const corpus = new URL('../../../../corpus/real/pkhex-avalonia/', import.meta.url).pathname;
 

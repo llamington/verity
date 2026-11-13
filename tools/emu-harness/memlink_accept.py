@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""P10 acceptance: genuine Memory Links for varied saves, for tests/p10_memlink.rs to compare.
+"""Memory Link acceptance: genuine Memory Links for varied saves, for tests/memlink.rs to compare.
 
 Each case gets build/emu/memlink-accept/<name>/ with bw.sav, b2-before.sav and inst0/b2-after.sav.
 A case the game won't link leaves no b2-after.sav and is reported as refused.

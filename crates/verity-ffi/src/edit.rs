@@ -1,5 +1,5 @@
 //! Write-side FFI for the DS front end: wild encounter lists, legal generation + insertion
-//! (P6 `generate::api4`), save finalisation and the game-safe validator (P7). Gen 4 D/P/Pt only.
+//! (`generate::api4`), save finalisation and the game-safe validator. Gen 4 D/P/Pt only.
 
 use core::slice;
 
@@ -229,7 +229,7 @@ pub struct VeritySaveCheck {
     pub slot: u8,
 }
 
-/// C ABI: runs the P7 game-safe validator over the whole save (Gen 4).
+/// C ABI: runs the game-safe validator over the whole save (Gen 4).
 ///
 /// # Safety
 ///

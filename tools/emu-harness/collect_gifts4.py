@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P8 acceptance: injects Gen 4 gifts, collects each from the deliveryman in a retail game under
+"""Mystery Gift acceptance: injects Gen 4 gifts, collects each from the deliveryman in a retail game under
 the headless harness, saves in-game, and asks PKHeX whether the result is right.
 
 Needs owner ROMs and BIOS (roms/, bios/), real saves (corpus/real/), data blobs and the oracle.

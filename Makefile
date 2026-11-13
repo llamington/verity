@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-test emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font emu-tour
+.PHONY: all nds test clean emu-harness emu-accept emu-test emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-ingame emu-font emu-tour
 
 all: nds
 
@@ -16,7 +16,7 @@ emu-harness:
 	cmake -S tools/emu-harness -B tools/emu-harness/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 	ninja -C tools/emu-harness/build emu-harness
 
-# Phase H acceptance (needs owner-dumped roms/ and bios/; skips otherwise).
+# Boot acceptance (needs owner-dumped roms/ and bios/; skips otherwise).
 emu-accept: emu-harness
 	@for g in pt b2; do \
 	  if [ -f bios/bios7.bin ] && [ -f roms/$$( [ $$g = pt ] && echo platinum || echo black2 ).nds ]; then \
@@ -24,29 +24,29 @@ emu-accept: emu-harness
 	  else echo "skip boot-$$g: ROM or BIOS missing"; fi; \
 	done
 
-# Two consoles over local wireless: a genuine Memory Link (Phase H acceptance, P10 go/no-go).
+# Two consoles over local wireless: a genuine Memory Link.
 emu-link: emu-harness
 	rm -rf build/emu/memlink
 	tools/emu-harness/build/emu-harness tools/emu-harness/scripts/memlink.json --out build/emu/memlink
 	python3 tools/emu-harness/check_memlink.py corpus/real/pkhex-avalonia/gen5_white2.sav build/emu/memlink/inst0/b2-after.sav
 
-# P10: retail Black 2 plays a flashback from a save linked by memlink::apply (needs roms/, bios/).
+# Retail Black 2 plays a flashback from a save linked by memlink::apply (needs roms/, bios/).
 emu-flashback: emu-harness
 	python3 tools/emu-harness/memlink_flashback.py
 
-# P10: retail Black 2's Key System settings on a save that received keys (needs roms/, bios/).
+# Retail Black 2's Key System settings on a save that received keys (needs roms/, bios/).
 emu-keys: emu-harness
 	python3 tools/emu-harness/key_system_check.py
 
-# P11: in-game acceptance on every game with a ROM in roms/; the report goes to corpus/reports/p11.
-emu-p11: emu-harness nds
-	python3 tools/emu-harness/p11_suite.py
+# In-game acceptance on every game with a ROM in roms/; the report goes to corpus/reports/ingame.
+emu-ingame: emu-harness nds
+	python3 tools/emu-harness/ingame_suite.py
 
-# P10: "Enable all keys" on a new game's first save, then Challenge Mode in retail Black 2.
+# "Enable all keys" on a new game's first save, then Challenge Mode in retail Black 2.
 emu-keys-all: emu-harness nds
 	python3 tools/emu-harness/key_enable_all_check.py
 
-# P10: the DS screen links a save and writes it to the SD card (needs corpus/real).
+# The DS screen links a save and writes it to the SD card (needs corpus/real).
 emu-unova: emu-harness nds
 	cargo build -q --release -p verity --example keys_receive
 	rm -rf build/emu/unova-sd build/emu/unova-sd.img build/emu/unova-sd.img.idx build/emu/ui-unova
@@ -60,7 +60,7 @@ emu-unova: emu-harness nds
 # Front-end walk-throughs (screenshots in build/emu/<script>), on a fresh copy of sd/ in
 # build/emu/sd so runs never touch sd/ (melonDS folder sync also compares timestamps, and
 # the harness clock is fixed, so a reused image would not sync rewritten files back).
-# ROM font and icons (M8): first boot builds the caches from a ROM on the SD card. Runs once with
+# ROM font and icons: first boot builds the caches from a ROM on the SD card. Runs once with
 # a Gen 5 ROM and once with a Gen 4 ROM (stand-ins holding only what verity reads, standin_rom.py).
 # Their needles show ROM fonts and icons, so they live in the gitignored needles-local/<rom>.
 EMU_FONT_TESTS := ui-keyboard-jp ui-moves ui-moves5 ui-items ui-items5 ui-ribbons

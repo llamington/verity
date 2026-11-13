@@ -1,4 +1,4 @@
-//! Unova Link FFI for the DS front end (P10): Memory Link from a Black or White save, receiving
+//! Unova Link FFI for the DS front end: Memory Link from a Black or White save, receiving
 //! keys from another Black 2 or White 2 save, and enabling every key (`verity::memlink::link`).
 
 use core::slice;

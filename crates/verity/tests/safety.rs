@@ -1,4 +1,4 @@
-//! P7: the game-safe validator accepts every real save and rejects the curated crash classes.
+//! The game-safe validator accepts every real save and rejects the curated crash classes.
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -491,7 +491,7 @@ fn emptied_white2(keep_one: bool) -> Option<Vec<u8>> {
 }
 
 #[test]
-fn p7_empty_party_is_only_safe_before_the_first_pokemon() {
+fn empty_party_is_only_safe_before_the_first_pokemon() {
     // Needs the data blobs and the corpus, which CI doesn't have.
     if !ready() {
         return;

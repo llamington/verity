@@ -52,7 +52,7 @@ fn hex(b: &[u8]) -> String {
 }
 
 #[test]
-fn p8_gen5_delivery_read_back_by_pkhex() {
+fn gen5_delivery_read_back_by_pkhex() {
     let (Some(g), Some(e)) = (blob("gifts5.bin"), blob("events5.bin")) else {
         return;
     };

@@ -1,6 +1,6 @@
 # Gen 4 event availability and delivery (R3, R4)
 
-Answers PLAN research tasks R3 and R4 for Gen 4 and Gen 5.
+How Verity finds each event's region and language, and how Mystery Gift is unlocked, for Gen 4 and Gen 5.
 
 ## R3: which events belong on which save
 
@@ -76,7 +76,7 @@ wide, so `4` could not be stored. verity follows the decompilation for Platinum 
 ## Why no direct "add event Pokémon" path
 
 The deliveryman generates random-PID gifts (PID, IVs, shiny lock) himself at collection, using the
-trainer's own IDs. PLAN §P8's generation step only applies to a path that writes the Pokémon
+trainer's own IDs. Generating them ourselves would only apply to a path that writes the Pokémon
 straight to a box, which the preferred delivery route does not need, so it was not built.
 
 ## In-game acceptance

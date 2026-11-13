@@ -1,5 +1,5 @@
 // Copies the data blobs the web build fetches at runtime into static/data.
-// The WASM module holds code only (PLAN P12); each game's blob is fetched on demand.
+// The WASM module holds code only; each game's blob is fetched on demand.
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 

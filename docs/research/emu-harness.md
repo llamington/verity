@@ -1,4 +1,4 @@
-# Emulator harness (Phase H)
+# Emulator harness
 
 `tools/emu-harness`: a headless C++ program linking the melonDS 1.1 core (tag `1.1`; set `MELONDS_DIR` to a
 local checkout, or CMake fetches it; no Qt front end, no OpenGL, interpreter only). Script format, step types and
@@ -6,13 +6,13 @@ outputs are documented at the top of `src/main.cpp`.
 
 ```sh
 make emu-harness                       # configure + build (tools/emu-harness/build)
-make emu-accept                        # Phase H boot acceptance (skips without roms/ and bios/)
+make emu-accept                        # boot acceptance (skips without roms/ and bios/)
 tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-boxes.json [--out DIR]
 ```
 
 ## Status (2026-11-01)
 
-| Requirement (PLAN §7) | Status |
+| Requirement | Status |
 |---|---|
 | Headless, links the core only | done |
 | Determinism: fixed RTC, fixed firmware, JIT off | done; two runs of a script give identical frame counts, screen hashes and PNGs |
@@ -73,7 +73,7 @@ with `wait_screen` first, or the press can fall between two key scans.
 ## Linked runs
 
 Each console runs its steps on its own thread through melonDS's `LocalMP`, because its receive calls
-block on semaphores. PLAN §7's single-threaded lockstep can't work with that. Linked runs aren't
+block on semaphores. The planned single-threaded lockstep can't work with that. Linked runs aren't
 deterministic, so scripts need generous waits (pressing A before the host appears does nothing).
 Linked runs raise LocalMP's receive timeout to 150 ms, because 25 ms drops links under load.
 An instance more than 8 frames ahead pauses for at most 2 ms. An unbounded pause stalls the link:

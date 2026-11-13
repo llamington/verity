@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// verity DS front end (P9.1). C++ over the Rust core's FFI; see docs/research/ui-stack.md.
+// verity DS front end. C++ over the Rust core's FFI; see docs/research/ui-stack.md.
 
 #include <stdio.h>
 

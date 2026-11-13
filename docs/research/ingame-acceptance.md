@@ -1,9 +1,9 @@
-# P11 in-game acceptance
+# In-game acceptance
 
-`make emu-p11` runs `tools/emu-harness/p11_suite.py`. The report goes to
-`corpus/reports/p11/<date>.json`. `--games-only` leaves out the gift, Memory Link and key checks.
+`make emu-ingame` runs `tools/emu-harness/ingame_suite.py`. The report goes to
+`corpus/reports/ingame/<date>.json`. `--games-only` leaves out the gift, Memory Link and key checks.
 
-For each game, the DS build's wizard adds a Pokémon and saves to SD. `p11_place` then moves it to the
+For each game, the DS build's wizard adds a Pokémon and saves to SD. `ingame_place` then moves it to the
 first slot of its box, opens the PC on that box and puts the player by a PC. The retail game boots,
 opens the PC, the box and the summary, then saves in-game.
 
@@ -25,5 +25,5 @@ Not covered: Diamond, Pearl, SoulSilver, Black and White 2 have no ROM here and 
 Nothing schedules the suite; the plan's nightly run would need a timer on a machine with the ROMs.
 
 The wizard scripts count Down presses to reach "Save to SD card", so a new row on the save menu breaks
-them. A run that doesn't reach it still exits 0, which `make emu-ui` won't catch; P11 does, because it
+them. A run that doesn't reach it still exits 0, which `make emu-ui` won't catch; `make emu-ingame` does, because it
 compares the save.

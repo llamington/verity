@@ -1,4 +1,4 @@
-# ROM text: move descriptions (M8, 2026-11-10)
+# ROM text: move descriptions (2026-11-10)
 
 The move cache (`moves4.vmov` / `moves5.vmov`, version 2) carries each move's description from the
 ROM's message bank, next to category, power and accuracy. Format in `moves::CachedMoves`; decoding

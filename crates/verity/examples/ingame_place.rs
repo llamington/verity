@@ -1,10 +1,10 @@
-//! Harness helper (not shipped): prepares a save edited on the DS for P11. Finds the box slot the
-//! wizard wrote, moves it to the first slot of its box, opens the PC on that box and moves the
-//! player next to a PC. Prints `<box> <pid>`.
+//! Harness helper (not shipped): prepares a save edited on the DS for the in-game suite. Finds
+//! the box slot the wizard wrote, moves it to the first slot of its box, opens the PC on that box
+//! and moves the player next to a PC. Prints `<box> <pid>`.
 //!
-//! `p11_place <before.sav> <edited.sav> <out.sav> <map> <x> <z>`
-//! `p11_place clear <in.sav> <out.sav> <box> <slot>` empties a slot for the wizard first.
-//! `p11_place check <placed.sav> <after.sav> <box> <pid>` checks the save the game wrote.
+//! `ingame_place <before.sav> <edited.sav> <out.sav> <map> <x> <z>`
+//! `ingame_place clear <in.sav> <out.sav> <box> <slot>` empties a slot for the wizard first.
+//! `ingame_place check <placed.sav> <after.sav> <box> <pid>` checks the save the game wrote.
 use std::fs;
 
 use verity::save::{BOX_SLOTS, Save, SaveKind, Slot};

@@ -1,4 +1,4 @@
-//! Game-safe validator (PLAN P7): "this cannot crash or corrupt the game". Separate from
+//! Game-safe validator: "this cannot crash or corrupt the game". Separate from
 //! legality: an illegal-but-valid Pokémon (IVs not matching the PID, say) passes; values the
 //! game cannot hold (unknown IDs, broken strings, bad checksums, wrong party stats) do not.
 //!
@@ -7,7 +7,7 @@
 //! ID limits are PKHeX `Legal.MaxSpeciesID_4` etc.; held items are the save type's
 //! `HeldItems` list (exported into the game blob); location ranges are the Gen 4/5 location
 //! tables PKHeX ships (`Resources/text/locations`). Ranges the games tolerate beyond these are
-//! unknown until the emulator harness (Phase H) can probe them, so the validator stays at what a
+//! unknown until the emulator harness can probe them, so the validator stays at what a
 //! legitimately obtained Pokémon can carry.
 
 use crate::data::{GameData, MoveData};

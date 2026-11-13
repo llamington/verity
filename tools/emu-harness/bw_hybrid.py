@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Copy save blocks between BW saves, keeping checksums valid (P10 differential runs).
+"""Copy save blocks between BW saves, keeping checksums valid (Memory Link differential runs).
 
 bw_hybrid.py <base.sav> <donor.sav> <out.sav> all | <block containing this offset>...
 """

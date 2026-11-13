@@ -1096,7 +1096,7 @@ public static class Program
         return 0;
     }
 
-    /// M6: `gen-gift4 <count> <seed> <out-dir>`: PKHeX-generated legal Gen 4 gift PK4s (random
+    /// `gen-gift4 <count> <seed> <out-dir>`: PKHeX-generated legal Gen 4 gift PK4s (random
     /// Wonder Cards from `MGDB_G4`, plus Ranger Manaphy eggs) via `ConvertToPKM`.
     /// My Pokémon Ranch gifts on Diamond, in each language with a trainer name.
     private static int HandleGenRanch4(string[] args)
@@ -1460,7 +1460,7 @@ public static class Program
         return 0;
     }
 
-    /// M6: PKHeX's Gen 4 event database (`EncounterEvent.MGDB_G4`, wc4.pkl) as raw PCD records
+    /// PKHeX's Gen 4 event database (`EncounterEvent.MGDB_G4`, wc4.pkl) as raw PCD records
     /// with the inner PK4 decrypted, plus parsed fields for cross-checking.
     private static int HandleExportGifts4(string[] args)
     {

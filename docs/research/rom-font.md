@@ -1,4 +1,4 @@
-# ROM fonts (M8, 2026-11-10)
+# ROM fonts (2026-11-10)
 
 Checked on the owner's ROMs before building `crates/verity-rom` (the question was whether an English
 ROM's font covers Japanese and Korean names).
