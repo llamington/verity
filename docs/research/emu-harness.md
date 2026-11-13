@@ -33,6 +33,37 @@ Owner files (gitignored): `roms/platinum.nds` (CPUE), `roms/black2.nds` (IREO),
 Exploration step `{"every": N, "frames": M, "prefix": "p"}` screenshots every N frames, for
 finding menu paths before freezing a script. `direct_boot` (default true) skips the DS menu.
 
+## Tests: needles, scene waits, save states
+
+`make emu-test` runs the DS UI tests (`EMU_TESTS` in the Makefile: `ui-start`, `ui-edit`) and
+writes `build/emu/tests/junit.xml`; `make emu-test UPDATE=1` rewrites needles that don't match.
+Review rewritten needles before committing them. The step reference is at the top of `src/main.cpp`.
+
+- **Needles** (`tools/emu-harness/needles/`, after openQA): a PNG of both screens plus a JSON file
+  with tags, match areas and the share of pixels that must match (default 1.0: runs are
+  deterministic). `assert_screen` / `wait_screen` take a tag. A failure writes the actual screens
+  and a diff (differences in red, areas outlined) to the run's output; a tag with no needle gets
+  one written, and the step fails until rerun. Needles must not show Nintendo art: the test SD
+  card (`sd/`) holds no game ROM, so sprites and ROM fonts never appear.
+- **Scene waits**: the DS app publishes the top scene's name in `verity_test_scene` and sets
+  `verity_test_busy` during transitions (`nds/source/ui.cpp`). Scripts name them through the ELF
+  (`"elf"`): `{"wait_until": {"ram": {"addr": "verity_test_scene", "text": "editor"}}}`. Prefer
+  these and `wait_screen` to fixed frame counts.
+- **Template taps**: `tap_image` finds a small PNG (`tools/emu-harness/templates/`) on the bottom
+  screen and touches its centre, so a script picks "gen4_platinum.sav" by name, not by position.
+- **Isolation**: `"sd_fresh": true` gives each run its own copy of `sd_dir`, so scripts can't see
+  each other's writes (the picker remembers the last opened save) and the source never changes.
+- **Save states**: `save_state` writes the console, cartridge, displayed screens and frame number;
+  a script with `"state"` continues exactly where that run was (same frames, same screens). The
+  SD card image isn't part of a state.
+- **Runs**: several scripts per invocation, exit status 0 / 1 (a step failed) / 2 (error), and
+  `--junit FILE`. A failed RAM wait logs the value it last read.
+
+Converting the other scripts: replace `{"wait": N}` after scene changes with a scene wait, put
+`assert_screen` next to the screenshots, and switch to `sd_fresh`. Keep a short press away from
+heavy frames (switching boxes runs a legality check that takes over a frame): wait for the result
+with `wait_screen` first, or the press can fall between two key scans.
+
 ## Linked runs
 
 Each console runs its steps on its own thread through melonDS's `LocalMP`, because its receive calls

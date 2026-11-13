@@ -1,4 +1,4 @@
-.PHONY: all nds test clean emu-harness emu-accept emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font emu-tour
+.PHONY: all nds test clean emu-harness emu-accept emu-test emu-ui emu-link emu-flashback emu-keys emu-unova emu-keys-all emu-p11 emu-font emu-tour
 
 all: nds
 
@@ -76,6 +76,16 @@ emu-font: emu-harness nds
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-items5.json --out build/emu/ui-items5-$$g || exit 1; \
 	  tools/emu-harness/build/emu-harness tools/emu-harness/scripts/ui-ribbons.json --out build/emu/ui-ribbons-$$g || exit 1; \
 	done
+
+# DS UI tests: scripts that check needles (tools/emu-harness/needles) and wait on the app's
+# verity_test_scene, each on its own copy of the SD card. Report in build/emu/tests/junit.xml.
+# UPDATE=1 rewrites the needles that don't match (review them before committing).
+EMU_TESTS := ui-start ui-edit
+emu-test: emu-harness nds
+	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx
+	mkdir -p build/emu && cp -r sd build/emu/sd && rm -rf build/emu/sd/_nds
+	tools/emu-harness/build/emu-harness $(EMU_TESTS:%=tools/emu-harness/scripts/%.json) \
+	  --out build/emu/tests --junit build/emu/tests/junit.xml $(if $(UPDATE),--update)
 
 emu-ui: emu-harness nds
 	rm -rf build/emu/sd build/emu/sd.img build/emu/sd.img.idx

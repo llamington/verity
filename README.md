@@ -60,6 +60,9 @@ Coverage is local only: `npm run coverage` in `web/` (unit and component tests; 
 `rustup component add llvm-tools-preview` and `cargo install cargo-llvm-cov`). Build the data blobs
 and keep the corpus saves in place first, or the tests that need them skip.
 
+DS UI tests: `make emu-test` runs the headless emulator harness (`tools/emu-harness`) against
+reference screens; see `docs/research/emu-harness.md`.
+
 Releases: pushing a `v*` tag builds `verity.nds` and publishes it as a GitHub release
 (`.github/workflows/release.yml`).
 

@@ -4,18 +4,26 @@
 {
   "rom": "../../../nds/verity.nds",
   "sd_dir": "../../../build/emu/sd",
-  "sd_image": "../../../build/emu/sd.img",
+  "sd_fresh": true,
   "rtc": [2026, 11, 2, 12, 0, 0],
+  "elf": "../../../nds/build/verity.elf",
+  "needles": "../needles",
   "steps": [
-    {"wait": 90},
+    {"wait_until": {"ram": {"addr": "verity_test_scene", "text": "files"}}, "timeout": 900},
+    {"assert_screen": "start"},
     {"screenshot": "00-start.png"},
     {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2}, {"press": ["Down"], "frames": 2}, {"wait": 2},
-    {"press": ["A"], "frames": 2}, {"wait": 30},
+    {"press": ["A"], "frames": 2},
+    {"wait_screen": "start-error", "timeout": 120},
     {"screenshot": "01-error.png"},
     {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2}, {"press": ["Up"], "frames": 2}, {"wait": 2},
-    {"press": ["A"], "frames": 2}, {"wait": 90},
+    {"press": ["A"], "frames": 2},
+    {"wait_until": {"ram": {"addr": "verity_test_scene", "text": "overview"}}, "timeout": 900},
+    {"assert_screen": "start-opened"},
     {"screenshot": "02-opened.png"},
-    {"press": ["B"], "frames": 2}, {"wait": 60},
+    {"press": ["B"], "frames": 2},
+    {"wait_until": {"ram": {"addr": "verity_test_scene", "text": "files"}}, "timeout": 900},
+    {"assert_screen": "start-back"},
     {"screenshot": "03-back.png"}
   ]
 }
