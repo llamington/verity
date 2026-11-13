@@ -250,7 +250,6 @@ name = "verity-wasm"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde-wasm-bindgen",
  "tsify",
  "verity",
  "wasm-bindgen",
