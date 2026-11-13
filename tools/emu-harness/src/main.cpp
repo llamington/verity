@@ -312,12 +312,11 @@ u32 read_ram(Ctx& c, const json::Value& r)
     }
 }
 
-// The zero-terminated string at r["addr"] (at most 64 bytes).
-std::string read_text(Ctx& c, const json::Value& r)
+// The zero-terminated string at addr (at most `cap` bytes).
+std::string read_string(Ctx& c, u32 addr, u32 cap = 64)
 {
-    u32 addr = address(c, r["addr"]);
     std::string out;
-    for (u32 i = 0; i < 64; i++)
+    for (u32 i = 0; i < cap; i++)
     {
         char ch = (char)c.nds->ARM9Read8(addr + i);
         if (!ch)
@@ -326,6 +325,9 @@ std::string read_text(Ctx& c, const json::Value& r)
     }
     return out;
 }
+
+// The zero-terminated string at r["addr"] (at most 64 bytes).
+std::string read_text(Ctx& c, const json::Value& r) { return read_string(c, address(c, r["addr"])); }
 
 bool ram_matches(Ctx& c, const json::Value& r)
 {
@@ -840,8 +842,26 @@ void setup(Ctx& c, const json::Value& cfg)
 void run_steps(Ctx& c, const json::Value& cfg)
 {
     auto& steps = cfg["steps"].a;
+    // A DS build that reports layout faults (verity_test_layout in ui.cpp): a step that adds one
+    // fails, naming the text.
+    bool layout = c.symbols.count("verity_test_layout") && c.symbols.count("verity_test_layout_text");
+    u32 faults = 0;
     for (size_t i = 0; i < steps.size(); i++)
+    {
         run_step(c, i, steps[i]);
+        if (!layout)
+            continue;
+        u32 now = c.nds->ARM9Read32(c.symbols["verity_test_layout"].addr);
+        if (now != faults)
+        {
+            std::string latest = read_string(c, c.symbols["verity_test_layout_text"].addr, 96);
+            std::string shot = c.out + "/step" + std::to_string(i) + "-layout.png";
+            image::write_png(screens(c), shot);
+            log_step(c, i, "layout", ",\"faults\":" + std::to_string(now - faults) + ",\"latest\":\"" +
+                                         esc(latest) + "\",\"actual\":\"" + esc(shot) + "\"", false);
+            faults = now;
+        }
+    }
 }
 
 // The outcome of one script, for the summary and the JUnit report.
