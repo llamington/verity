@@ -2458,6 +2458,8 @@ private:
         snprintf(n, sizeof(n), "%d/%d", name_len_, max_name());
         ui::title_right(bottom(), n);
         ui::panel(bottom(), 1, 2, 30, 3);
+        // Text is drawn over what's there: clear the field, or erasing leaves the old characters.
+        ui::clear_px(bottom(), 16, 40);
         ui::Lines l(2);
         ui::text(bottom(), ui::kInsetTop, l.line(), "%s_", text);
         ui::text(bottom(), ui::kInsetTop, l.line(), UI_MUTED "%s", layout() == 1 ? "Japanese (Y: next page)"
