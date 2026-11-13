@@ -13,7 +13,6 @@ GAME_ICON	:= icon.gif
 
 SOURCEDIRS	:= source
 INCLUDEDIRS	:= include
-GFXDIRS		:= graphics
 NITROFSDIR	:= nitrofiles
 
 RUST_LIB	:= ../target/armv5te-none-eabi/release/libverity_ffi.a
