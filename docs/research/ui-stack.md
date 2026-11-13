@@ -111,3 +111,25 @@ message before blocking work calls `ui::present()` to show it.
 Drawing reaches the screen at the next VBlank. Emulator tests that captured a screen a fixed few
 frames after input were sometimes capturing half-drawn frames; such checks should use
 `wait_screen` (with a timeout) rather than `wait` and `assert_screen`.
+
+## Text bounds and layout faults (2026-11-13)
+
+Every text draw in `nds/source/ui.cpp` is bounded. By default the bounds are the region the text
+starts on, read from the frame layer: the panel (with the badges and pills on it), the bar, or
+the run of backdrop. Text never leaves its panel, and it stays off the panel's edge pixels.
+`text_in(x, x_end, ...)` gives an explicit right edge for a column with a neighbour on its right;
+draw the neighbour first (`text_right` returns where it starts). Badges and pills stop at their
+panel's edge.
+
+Text that doesn't fit is cut with "...". Unless the caller chose the width (`text_in`, `fit`, the
+last line of `wrap`), a cut is a layout fault. So are pixels clipped above or below the region
+(text too low in its panel) and ink drawn over other text. Faults are counted in
+`verity_test_layout`, with the latest in `verity_test_layout_text` (the string, its screen,
+position and how many pixels it was over). The emulator harness fails any step that adds one and
+saves `step<N>-layout.png`, so every walkthrough in `make emu-test` and `make emu-font` is also a
+layout check, in every language and font they cover.
+
+Glyphs are drawn a row at a time (one masked write per tile row), and the text hot path runs as ARM
+code from ITCM with its state in DTCM: bounds checking made each string about 40% slower, enough
+for a list redraw to overrun its frame and drop a quick key press, and these bring it to about 25%
+faster than before the checks.

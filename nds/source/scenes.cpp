@@ -613,9 +613,8 @@ private:
         ui::panel(top(), 1, 2, 30, 12);
         ui::Lines l(2);
         ui::text(top(), x, l.line(), "%.32s", t);
-        int row = l.grid_row();
-        ui::text(top(), x, row * 8, UI_MUTED "Status");
-        ui::badge(top(), v / 8, row, e.status ? ui::Badge::Fishy : ui::Badge::Legal,
+        // The status on a row of its own: some are long ("12 cards held: discard one in-game").
+        ui::badge(top(), x / 8, l.grid_row(), e.status ? ui::Badge::Fishy : ui::Badge::Legal,
                   verity_event_status_text(e.status));
         l.block();
         auto field = [&](const char* label, const char* fmt, auto... args) {
@@ -889,8 +888,8 @@ private:
         const char* hints = mode_ == kCount              ? "</>:1|Up/Dn:10|A:Set|B:Cancel"
                             : !item                      ? "A:Add|</>:Pouch|B:Back"
                             : items_[list_.selected].locked ? "</>:Pouch|B:Back"
-                            : max_count() > 1            ? "A:Count|X:Remove|</>:Pouch|B:Back"
-                                                         : "X:Remove|</>:Pouch|B:Back";
+                            : max_count() > 1            ? "A:Count|X:Toss|</>:Pouch|B:Back"
+                                                         : "X:Toss|</>:Pouch|B:Back";
         bottom_frame(kPouchNames[pv_[pouch_].kind & 7], hints);
         char n[24];
         snprintf(n, sizeof(n), "%d/%d", pouch_ + 1, pouches_);
@@ -1402,7 +1401,7 @@ private:
             ui::panel(top(), 1, 2, 30, 3);
             ui::Lines l(2);
             ui::text(top(), x, l.line(), "Nothing here.");
-            ui::text(top(), x, l.line(), UI_MUTED "X or A adds a Pokémon to this slot.");
+            ui::text(top(), x, l.line(), UI_MUTED "X or A adds a Pokémon here.");
             return;
         }
         char nick[32], ot[32];
@@ -1478,7 +1477,13 @@ private:
         snprintf(line, sizeof(line), UI_MUTED "Holds" UI_MUTED " %s", v.held_item ? ui::name(items, v.held_item) : "nothing");
         ui::fit(line, 244 - cx);
         ui::text(top(), cx, y + 24, "%s", line);
-        snprintf(line, sizeof(line), UI_MUTED "OT" UI_MUTED " %s  " UI_MUTED "ID" UI_MUTED " %05u", ot, v.tid);
+        // The OT name is what gets cut (a wide ROM font), never the ID.
+        char id[24];
+        snprintf(id, sizeof(id), "  " UI_MUTED "ID" UI_MUTED " %05u", v.tid);
+        char ot_fit[32];
+        snprintf(ot_fit, sizeof(ot_fit), "%s", ot);
+        ui::fit(ot_fit, 244 - cx - ui::text_width(UI_MUTED "OT" UI_MUTED " ") - ui::text_width(id));
+        snprintf(line, sizeof(line), UI_MUTED "OT" UI_MUTED " %s%s", ot_fit, id);
         ui::text(top(), cx, y + 40, "%s", line);
         // The level first, so a long place name is what gets cut.
         snprintf(line, sizeof(line), UI_MUTED "Met" UI_MUTED " Lv %u, %s", v.met_level,
@@ -1990,8 +1995,9 @@ private:
                     snprintf(where, sizeof(where), "%s", ui::location(gen5() ? 5 : 4, e.location));
                     ui::fit(where, 140 - kListX - 4);
                     ui::text(bottom(), kListX, y, "%s", where);
-                    ui::text(bottom(), 140, y, UI_MUTED "%s", gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type));
-                    ui::text_right(bottom(), 244, y, UI_MUTED "Lv " UI_MUTED "%s", lv);
+                    int lv_x = ui::text_right(bottom(), 244, y, UI_MUTED "Lv " UI_MUTED "%s", lv);
+                    ui::text_in(bottom(), 140, lv_x - 6, y, UI_MUTED "%s",
+                                gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type));
                 }
             }
         }
@@ -2292,7 +2298,8 @@ private:
 
     // ---- nickname keyboard -----------------------------------------------------------------
 
-    static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 8;
+    // Keys are 3 cells wide from column kKeyLeft: ten of them centred in the 32 columns.
+    static constexpr int kKeyRows = 4, kKeyCols = 10, kKeyTop = 8, kKeyLeft = 1;
     static constexpr char16_t kDakuten = 0x309B, kHandakuten = 0x309C;
 
     // Four rows of ten keys per page; 0 is no key. Japanese and Korean follow the games'
@@ -2390,7 +2397,7 @@ private:
         if (in.tapped)
         {
             int r = (in.tap_y / 8 - kKeyTop) / 2;
-            int c = (in.tap_x - 16) / 24;
+            int c = (in.tap_x - kKeyLeft * 8) / 24;
             if (in.tap_y / 8 >= kKeyTop && r < kKeyRows && c >= 0 && c < kKeyCols)
             {
                 key_row_ = r;
@@ -2475,7 +2482,7 @@ private:
             const char16_t* keys = page_row(layout(), key_page_, r);
             for (int c = 0; c < kKeyCols; c++)
             {
-                int x = 2 + c * 3;
+                int x = kKeyLeft + c * 3;
                 char16_t k = key_ok(keys[c]) ? keys[c] : u' ';
                 // Gen 4 fonts have no standalone voicing marks.
                 if ((k == kDakuten || k == kHandakuten) && !ui::has_glyph(k))
@@ -2813,7 +2820,7 @@ private:
         if (!m.from_rom)
         {
             ui::text(top(), kX, y + 20, UI_MUTED "A Gen %u ROM on the SD card adds", gen);
-            ui::text(top(), kX, y + 32, UI_MUTED "power, accuracy and a description.");
+            ui::text(top(), kX, y + 32, UI_MUTED "power, accuracy and description.");
             return;
         }
         static const char* kCat[3] = {"Physical", "Special", "Status"};
@@ -2843,8 +2850,8 @@ private:
         char buf[24];
         snprintf(buf, sizeof(buf), UI_MUTED "Power" UI_MUTED " %s", power);
         ui::text(top(), x, y + 16, "%s", buf);
-        x += ui::text_width(buf) + 12;
-        ui::text(top(), x, y + 16, UI_MUTED "Acc" UI_MUTED " %s", acc);
+        // Accuracy at the panel's right edge ("sure hit" is wide).
+        ui::text_right(top(), 244, y + 16, UI_MUTED "Acc" UI_MUTED " %s", acc);
         char desc[192];
         if (core::move_description(gen, mv, desc, sizeof(desc)))
             // 12 px below the stats row (1.5x the line pitch); four lines end at the panel's edge.
@@ -2879,7 +2886,7 @@ private:
         ui::text(top(), x, ty, "%s", ui::name(gen4_ ? VERITY_NAME_ITEMS4 : VERITY_NAME_ITEMS5, item));
         ui::text(top(), x, ty + 14, UI_MUTED "Item %u", item);
         if (!icon)
-            ui::text(top(), kX, ty + 28, UI_MUTED "A Gen %u ROM on the SD card adds its icon.", gen4_ ? 4 : 5);
+            ui::text(top(), kX, ty + 28, UI_MUTED "A Gen %u ROM on SD adds icons.", gen4_ ? 4 : 5);
     }
 
     void draw_picker()
@@ -2956,16 +2963,17 @@ private:
     // that carry a badge or pill sit on the 8 px grid 16 px apart, plain text uses a 12 px pitch.
     static constexpr int kX = 16;      // text x on top-screen panels
     static constexpr int kDetail = 2;  // first content row of the details panel
-    static constexpr int kEdit = 15;   // first content row of the edit panel (rows 15-20)
+    static constexpr int kEdit = 15;   // first content row of the edit panel (rows 15-21)
 
     // The edit panel: mode, verdict if applied now, status, and what is wrong.
     void show_preview()
     {
-        ui::panel(top(), 1, kEdit, 30, 6);
-        ui::clear_px(top(), kEdit * 8, (kEdit + 6) * 8);
+        // Seven rows: the badges, then status and what is wrong on two 12 px lines.
+        ui::panel(top(), 1, kEdit, 30, 7);
+        ui::clear_px(top(), kEdit * 8, (kEdit + 7) * 8);
         int c = ui::badge(top(), 2, kEdit, legal_mode_ ? ui::Badge::Legal : ui::Badge::Safe,
                           legal_mode_ ? "Legal mode" : "Game-safe mode");
-        ui::text(top(), c * 8 + 8, kEdit * 8, UI_MUTED "SELECT switches");
+        ui::text(top(), c * 8 + 8, kEdit * 8, UI_MUTED "SEL switches");
         int y = (kEdit + 2) * 8;
         const char* status = status_[0] ? status_ : e_.mask ? "* Edited, not applied yet." : "No changes yet.";
         if (!preview_ok_)
@@ -2982,13 +2990,17 @@ private:
         };
         int bc = label(kX, "Legality");
         if (r.status == 1)
-            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Legal, "LEGAL");
+            ui::badge(top(), bc, kEdit + 2, ui::Badge::Legal, "LEGAL");
         else if (r.status == 2)
-            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Invalid, "ILLEGAL");
+            ui::badge(top(), bc, kEdit + 2, ui::Badge::Invalid, "ILLEGAL");
         else
-            bc = ui::badge(top(), bc, kEdit + 2, ui::Badge::Fishy, "NOT CHECKED");
-        bc = label((bc + 1) * 8, "Game-safe");
-        ui::badge(top(), bc, kEdit + 2, issue_ ? ui::Badge::Invalid : ui::Badge::Legal, issue_ ? "NO" : "OK");
+            ui::badge(top(), bc, kEdit + 2, ui::Badge::Fishy, "UNCHECKED");
+        // Game-safe at the panel's right edge (its badge ends at the last content column 30), so the
+        // verdict's width can't push it out.
+        const char* safe = issue_ ? "NO" : "OK";
+        int safe_col = 31 - (1 + (ui::text_width(safe) + 9) / 8);
+        ui::text_right(top(), safe_col * 8 - 4, y, UI_MUTED "Game-safe");
+        ui::badge(top(), safe_col, kEdit + 2, issue_ ? ui::Badge::Invalid : ui::Badge::Legal, safe);
         ui::text(top(), kX, y + 14, UI_MUTED "%s", status);
         char why[48] = "";
         if (issue_)
