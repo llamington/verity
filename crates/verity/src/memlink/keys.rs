@@ -1,5 +1,5 @@
 //! B2W2 Key System: receives keys from another B2W2 save, under the rules of the game's Unova Link
-//! exchange. Findings: `docs/memlink-findings.md`.
+//! exchange. Findings: `docs/research/memlink-findings.md`.
 //!
 //! A key is *unlocked* when that save earned it and *enabled* when its setting can be used.
 //! Receiving only enables: a received key can't be passed on, and the sender's save doesn't change.

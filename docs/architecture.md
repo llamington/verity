@@ -37,6 +37,31 @@ select the generations. The main modules:
 
 Logic shared by both front ends lives in the core, never in a front end.
 
+The DS sets limits on the core: no floating point (the DS has no FPU), no `core::fmt` in the DS
+build (errors are enums or codes, `panic = "abort"`), and a peak heap of about 1.5 MB in the worst
+case (a Gen 5 save open with its encounter tables and a legality analysis), since a DS has 4 MB of
+main RAM.
+
+## Design rules
+
+- **Two modes, no raw mode.** Legal mode produces only Pokémon that PKHeX calls Legal. Game-safe
+  mode allows illegal but valid values, such as IVs that don't match the PID. Nothing can produce
+  invalid IDs, Bad Eggs or other crash risks, so there is no hex editing.
+- **Every write is checked.** Writes in both modes go through `safety`, and a failing write is
+  refused with a reason.
+- **Illegal Pokémon already in a save** are flagged in the UI, never changed or blocked.
+- **Impossible requests fail with a reason.** Generation returns an error that names the
+  constraint, never an illegal Pokémon. Impossible manual IVs in Gen 4 resolve to the closest
+  legal spread, which the user sees as a diff before it's applied.
+- **Shinies come from RNG inversion**, built directly, not from brute-force search.
+- **Mystery Gifts follow the game's own path.** Only events from the save's region and language
+  are offered. A gift is injected into the pending-gift slots as if received over the air, and the
+  player collects it in-game, so the game sets its own event flags. Story flags are not set
+  directly. Gifts the game would refuse as duplicates are refused too.
+- **Memory Link data comes from a real Black or White save**, never from canned data.
+- **The UI works with buttons alone and with touch alone.** Text is never scaled, labels that
+  don't fit are ellipsized, and keyboards only offer characters the game can encode.
+
 ## Data blobs
 
 The core needs game tables (personal data, learnsets, encounters, Mystery Gift records). They
@@ -82,3 +107,15 @@ the PokeAPI sprites repository, pinned to a commit.
 - DS: the emulator harness.
 
 Tests that need the blobs or the real-save corpus skip when the files are absent.
+
+## References
+
+- [PKHeX](https://github.com/kwsch/PKHeX): the source of truth for formats and legality.
+- [BW_tool](https://github.com/suloku/BW_tool) (GPL-3.0): `Editors/MemoryLink.cs`, the starting
+  point for Memory Link.
+- [PKSM](https://github.com/FlagBrew/PKSM): a C++ save editor for the 3DS.
+- [PokeLib](https://github.com/Chase-san/PokeLib) and [PPSE-DS](https://github.com/projectpokemon/PPSE-DS):
+  Gen 4 DS editors. They have no licence, so read them but don't copy them.
+- [pret](https://github.com/pret) decompilations: where Gen 4 data and graphics live in the ROM.
+- [EventsGallery](https://github.com/projectpokemon/EventsGallery): event region and language.
+- [Memory Link on Bulbapedia](https://bulbapedia.bulbagarden.net/wiki/Memory_Link).

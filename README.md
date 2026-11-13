@@ -63,8 +63,8 @@ Verity is a Rust core with two front ends:
 - **`tools/emu-harness/`**: headless melonDS runner for automated DS checks
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, building, tests and commit messages.
-[docs/architecture.md](docs/architecture.md) explains how the parts fit together, and
-[PLAN.md](PLAN.md) holds the original specification and milestones.
+[docs/architecture.md](docs/architecture.md) explains how the parts fit together and the design
+rules they follow.
 
 ## Credits & Licensing
 
