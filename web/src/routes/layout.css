@@ -4,12 +4,6 @@
 @import '@fontsource-variable/nunito';
 @import '@fontsource/pixelify-sans/500.css';
 @import '@fontsource/pixelify-sans/700.css';
-/* Japanese and Korean names: each face is split by unicode-range, so a browser downloads only the
-   pieces for characters on the page (nothing for a save without them). */
-@import '@fontsource/noto-sans-jp/400.css';
-@import '@fontsource/noto-sans-jp/600.css';
-@import '@fontsource/noto-sans-kr/400.css';
-@import '@fontsource/noto-sans-kr/600.css';
 
 @custom-variant dark (@media (prefers-color-scheme: dark));
 

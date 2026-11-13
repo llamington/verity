@@ -1,0 +1,7 @@
+/* Japanese and Korean names, for the editor only: the landing page has none, and these
+   @font-face lists are most of the stylesheet. Each face is split by unicode-range, so a browser
+   downloads only the pieces for characters on the page (nothing for a save without them). */
+@import '@fontsource/noto-sans-jp/400.css';
+@import '@fontsource/noto-sans-jp/600.css';
+@import '@fontsource/noto-sans-kr/400.css';
+@import '@fontsource/noto-sans-kr/600.css';

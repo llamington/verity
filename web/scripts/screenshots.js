@@ -5,6 +5,7 @@
 //
 // Sprites and item icons are blocked, so the images hold no Nintendo art (the app shows its
 // placeholder instead): the repo ships none.
+import { writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const BASE = 'http://localhost:4173';
@@ -31,8 +32,7 @@ async function settled(page) {
 async function shoot(page, el, name, height, pad = 0) {
 	const box = await el.boundingBox();
 	if (box === null) throw new Error(`${name}: element not visible`);
-	await page.screenshot({
-		path: `${OUT}${name}.png`,
+	const png = await page.screenshot({
 		clip: {
 			x: box.x - pad,
 			y: box.y - pad,
@@ -40,6 +40,36 @@ async function shoot(page, el, name, height, pad = 0) {
 			height: Math.min(box.height, height) + 2 * pad
 		}
 	});
+	await writeFile(`${OUT}${name}.webp`, await webp(page, png, 1));
+	await writeFile(`${OUT}${name}-1x.webp`, await webp(page, png, 0.5));
+	return png;
+}
+
+/**
+ * Re-encodes a PNG as WebP at `scale` of its size, using the browser's encoder (the repo has
+ * no image library).
+ * @param {import('playwright').Page} page
+ * @param {Buffer} png
+ * @param {number} scale
+ */
+async function webp(page, png, scale) {
+	const b64 = await page.evaluate(
+		async ([src, s]) => {
+			const img = new Image();
+			img.src = src;
+			await img.decode();
+			const canvas = document.createElement('canvas');
+			canvas.width = Math.round(img.naturalWidth * s);
+			canvas.height = Math.round(img.naturalHeight * s);
+			const ctx = canvas.getContext('2d');
+			if (ctx === null) throw new Error('no 2d context');
+			ctx.imageSmoothingQuality = 'high';
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			return canvas.toDataURL('image/webp', 0.9).replace(/^data:[^,]*,/, '');
+		},
+		/** @type {[string, number]} */ ([`data:image/png;base64,${png.toString('base64')}`, scale])
+	);
+	return Buffer.from(b64, 'base64');
 }
 
 const browser = await chromium.launch();
@@ -75,6 +105,7 @@ await page.getByRole('link', { name: 'Mystery Gifts' }).click();
 const gifts = page.getByTestId('gifts');
 await gifts.waitFor();
 await settled(page);
-await shoot(page, gifts, 'gifts', 420, 16);
+// Link previews (og:image) want a PNG; the gift list is the widest shot.
+await writeFile(`${OUT}social.png`, await shoot(page, gifts, 'gifts', 420, 16));
 
 await browser.close();
