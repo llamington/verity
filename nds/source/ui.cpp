@@ -54,6 +54,13 @@ void Input::poll()
 
 // ---- scenes --------------------------------------------------------------------------------
 
+// Read by the emulator harness by symbol (tools/emu-harness), so scripts wait for a scene instead
+// of counting frames: the top scene's name, and 1 while scenes change (fades, enter()).
+extern "C" {
+volatile char verity_test_scene[16] = "";
+volatile u32 verity_test_busy = 1;
+}
+
 namespace {
 std::vector<Scene*> g_stack;
 Scene* g_pending = nullptr;
@@ -69,6 +76,17 @@ void fade(bool out)
 }
 }  // namespace
 
+namespace {
+void publish_top()
+{
+    const char* n = g_stack.empty() ? "" : g_stack.back()->name();
+    size_t i = 0;
+    for (; n[i] && i + 1 < sizeof(verity_test_scene); i++)
+        verity_test_scene[i] = n[i];
+    verity_test_scene[i] = 0;
+}
+}  // namespace
+
 void push(Scene* s) { g_pending = s; }
 
 void run()
@@ -78,6 +96,7 @@ void run()
     {
         if (g_pending)
         {
+            verity_test_busy = 1;
             if (!g_stack.empty())
                 fade(true);
             g_stack.push_back(g_pending);
@@ -88,6 +107,11 @@ void run()
             g_stack.back()->enter();
             sprites_commit();
             fade(false);
+            // The fades don't scan keys, so the last scan may still hold the key that started the
+            // change; scan now, or a quick press right after the change would be no new press.
+            scanKeys();
+            publish_top();
+            verity_test_busy = 0;
         }
         if (g_stack.empty())
             break;
@@ -95,6 +119,7 @@ void run()
         in.poll();
         if (!g_stack.back()->update(in))
         {
+            verity_test_busy = 1;
             fade(true);
             delete g_stack.back();
             g_stack.pop_back();
@@ -106,6 +131,11 @@ void run()
             g_stack.back()->enter();
             sprites_commit();
             fade(false);
+            // The fades don't scan keys, so the last scan may still hold the key that started the
+            // change; scan now, or a quick press right after the change would be no new press.
+            scanKeys();
+            publish_top();
+            verity_test_busy = 0;
             continue;
         }
         sprites_commit();
