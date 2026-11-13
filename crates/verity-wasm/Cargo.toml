@@ -14,7 +14,6 @@ crate-type = ["cdylib", "rlib"]
 verity = { path = "../verity", features = ["std", "gen4", "gen5"] }
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
-serde-wasm-bindgen = "0.6"
 tsify = { version = "0.5", default-features = false, features = ["js"] }
 
 [package.metadata.wasm-pack.profile.release]

@@ -64,7 +64,7 @@ need ROM fonts and icons (`EMU_FONT_TESTS`), once per stand-in ROM, against giti
   `--junit FILE`. A failed RAM wait logs the value it last read.
 
 Not converted: `ui-rom-font` (it builds the font caches the font tests copy) and the retail-game
-scripts (`boot-*`, `explore-*`, `memlink`, `pt-loads-written`), whose screens can't be committed.
+scripts (`boot-*`, `memlink`, `pt-loads-written`), whose screens can't be committed.
 Converted scripts still use fixed `{"wait": N}` inside a scene; prefer scene waits and
 `wait_screen` in new steps. Keep a short press away from
 heavy frames (switching boxes runs a legality check that takes over a frame): wait for the result
