@@ -474,6 +474,7 @@ bool write_file(void* ctx, const uint8_t* buf, uint32_t len)
 void build_sprites(int g, FILE* rom, const char* file)
 {
     ui::at(ui::top(), 0, 2 + 2 * g, "Copying Gen %d sprites (once)...", 4 + g);
+    ui::present();
     ensure_config_dir();
     FILE* out = fopen(file, "wb");
     if (!out)

@@ -50,10 +50,13 @@ void run();
 
 // ---- text ----------------------------------------------------------------------------------
 
-// A screen's text layer: proportional text drawn into its own tiles.
+// A screen's text layer: proportional text drawn into its own tiles (the RAM copy in display.h;
+// set a row's bit in *dirty when changing it).
 struct Surface
 {
     uint16_t* tiles = nullptr;
+    uint32_t* dirty = nullptr;
+    int screen = 0;
 };
 
 Surface* top();
@@ -167,7 +170,9 @@ const char* location(uint8_t generation, uint16_t id);
 
 void sprites_init();
 void sprites_hide_all();
-void sprites_commit();
+// Waits for VBlank and shows what has been drawn: for a message before blocking work (the scene
+// loop shows each frame by itself).
+void present();
 // Placeholder Pokémon icon (original art), coloured by type; egg and shiny variants.
 void icon(int oam_id, int x, int y, uint8_t type, bool egg, bool shiny);
 // ROM icon palettes (16 BGR555 colours each, at most 4).

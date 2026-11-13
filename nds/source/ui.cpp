@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ui.h"
+#include "display.h"
 #include "logo.h"
 
 #include <stdarg.h>
@@ -87,6 +88,14 @@ void publish_top()
 }
 }  // namespace
 
+// Shows a scene's first frame. The screens go black first (the fade in starts there), so the copy
+// can't be seen mid-frame and needs no VBlank wait: the change takes no extra frame.
+static void show_entered()
+{
+    setBrightness(3, -16);
+    display::commit();
+}
+
 void push(Scene* s) { g_pending = s; }
 
 void run()
@@ -105,7 +114,7 @@ void run()
             frame_clear(top());
             frame_clear(bottom());
             g_stack.back()->enter();
-            sprites_commit();
+            show_entered();
             fade(false);
             // The fades don't scan keys, so the last scan may still hold the key that started the
             // change; scan now, or a quick press right after the change would be no new press.
@@ -115,7 +124,9 @@ void run()
         }
         if (g_stack.empty())
             break;
+        // Show the last frame's drawing while the display is between frames, then draw the next.
         swiWaitForVBlank();
+        display::commit();
         in.poll();
         if (!g_stack.back()->update(in))
         {
@@ -129,7 +140,7 @@ void run()
             frame_clear(top());
             frame_clear(bottom());
             g_stack.back()->enter();
-            sprites_commit();
+            show_entered();
             fade(false);
             // The fades don't scan keys, so the last scan may still hold the key that started the
             // change; scan now, or a quick press right after the change would be no new press.
@@ -138,9 +149,10 @@ void run()
             verity_test_busy = 0;
             continue;
         }
-        sprites_commit();
     }
 }
+
+void present() { display::present(); }
 
 // ---- text ----------------------------------------------------------------------------------
 
@@ -197,6 +209,7 @@ void plot(Surface* c, int x, int y)
     if (x < 0 || x >= 254 || y < 0 || y >= 192)
         return;
     int tile = (y / 8) * 32 + x / 8;
+    *c->dirty |= 1u << (y / 8);
     uint16_t* word = c->tiles + tile * 16 + (y % 8) * 2 + (x % 8) / 4;
     int shift = ((x % 8) % 4) * 4;
     *word = (uint16_t)((*word & ~(0xF << shift)) | (g_ink << shift));
@@ -496,6 +509,14 @@ void set_cell(Surface* c, int col, int row, uint16_t tile, uint8_t kind)
     int s = screen_of(c);
     g_fmap[s][row * 32 + col] = tile;
     g_kind[s][row * 32 + col] = kind;
+    display::touch_frame_map(s);
+}
+
+// Clears text rows [row0, row1) of a surface.
+void clear_text_rows(Surface* c, int row0, int row1)
+{
+    memset(c->tiles + row0 * 32 * 16, 0, (size_t)(row1 - row0) * 32 * 32);
+    display::touch_text_rows(c->screen, row0, row1);
 }
 
 // Draws text at a pixel position without clearing; inks follow the frame. Returns the end x.
@@ -536,7 +557,7 @@ int draw_text(Surface* c, int x, int y, const char* text)
 Surface* top() { return &g_top; }
 Surface* bottom() { return &g_bottom; }
 
-void clear(Surface* c) { memset(c->tiles, 0, kTiles * 32); }
+void clear(Surface* c) { clear_text_rows(c, 0, 24); }
 
 void at(Surface* c, int col, int row, const char* fmt, ...)
 {
@@ -548,6 +569,7 @@ void at(Surface* c, int col, int row, const char* fmt, ...)
     if (row < 0 || row >= 24 || col < 0 || col >= 32)
         return;
     memset(c->tiles + (row * 32 + col) * 16, 0, (size_t)(32 - col) * 32);
+    display::touch_text_rows(c->screen, row, row + 1);
     int x = col * 8, y = row * 8;
     int chars = 0;  // characters so far (table gaps line up by character, not byte)
     for (int i = 0; text[i];)
@@ -663,7 +685,7 @@ void frame_clear_rows(Surface* c, int row0, int row1)
     {
         for (int col = 0; col < 32; col++)
             set_cell(c, col, row, T_BACK, K_BACK);
-        memset(c->tiles + row * 32 * 16, 0, 32 * 32);
+        clear_text_rows(c, row, row + 1);
     }
 }
 
@@ -678,7 +700,8 @@ int pill(Surface* c, int col, int row, uint16_t color, const char* text)
     {
         bank = ++g_pills[s];
         g_pill[s][bank] = color;
-        uint16_t* pal = (s ? BG_PALETTE_SUB : BG_PALETTE) + 16 * bank;
+        uint16_t* pal = display::bg_palette(s) + 16 * bank;
+        display::touch_bg_palette(s);
         for (int i = 0; i < 16; i++)
             pal[i] = kTheme[i];
         int r = color & 31, g = color >> 5 & 31, b = color >> 10 & 31;
@@ -707,7 +730,7 @@ void title(Surface* c, const char* fmt, ...)
     va_end(ap);
     for (int col = 0; col < 32; col++)
         set_cell(c, col, 0, T_BAR, K_BAR);
-    memset(c->tiles, 0, 32 * 32);
+    clear_text_rows(c, 0, 1);
     draw_text(c, 4, 0, text);
 }
 
@@ -722,7 +745,7 @@ void hints(Surface* c, const char* spec)
     const int row = 23;
     for (int col = 0; col < 32; col++)
         set_cell(c, col, row, T_BAR, K_BAR);
-    memset(c->tiles + row * 32 * 16, 0, 32 * 32);
+    clear_text_rows(c, row, row + 1);
     // spec: "A:Open|B:Back|L/R:Box"; each key gets a chip, then its label.
     int col = 0;
     char buf[96];
@@ -751,7 +774,7 @@ void tabs(Surface* c, const char* const* names, int n, int active)
 {
     for (int col = 0; col < 32; col++)
         set_cell(c, col, 0, T_BAR, K_BAR);
-    memset(c->tiles, 0, 32 * 32);
+    clear_text_rows(c, 0, 1);
     // n equal segments (taps map by segment); the active tab is a cream chip.
     for (int t = 0; t < n; t++)
     {
@@ -894,6 +917,7 @@ void clear_px(Surface* c, int y0, int y1)
         {
             uint16_t* row = c->tiles + ((y / 8) * 32 + col) * 16 + (y % 8) * 2;
             row[0] = row[1] = 0;
+            *c->dirty |= 1u << (y / 8);
         }
 }
 
@@ -1114,25 +1138,25 @@ void sprites_init()
     int sub_frame = bgInitSub(1, BgType_Text4bpp, BgSize_T_256x256, 30, 3);
     make_frame_tiles(bgGetGfxPtr(main_frame));
     make_frame_tiles(bgGetGfxPtr(sub_frame));
-    g_fmap[0] = bgGetMapPtr(main_frame);
-    g_fmap[1] = bgGetMapPtr(sub_frame);
     bgSetPriority(main_frame, 3);
     bgSetPriority(sub_frame, 3);
     for (int s = 0; s < 2; s++)
     {
         Surface* c = s ? &g_bottom : &g_top;
-        c->tiles = bgGetGfxPtr(s ? sub_bg : main_bg);
+        // The text layer's map is fixed (one tile per cell), so it is written once here.
         uint16_t* map = bgGetMapPtr(s ? sub_bg : main_bg);
         for (int i = 0; i < 32 * 32; i++)
             map[i] = i < kTiles ? (uint16_t)i : 0;
+        display::init(s, bgGetGfxPtr(s ? sub_bg : main_bg), bgGetMapPtr(s ? sub_frame : main_frame));
+        c->tiles = display::text_tiles(s);
+        c->dirty = display::text_dirty(s);
+        c->screen = s;
+        g_fmap[s] = display::frame_map(s);
         clear(c);
-        memset(g_fmap[s], 0, 32 * 32 * 2);
         frame_clear(c);
-    }
-    for (int i = 0; i < 16; i++)
-    {
-        BG_PALETTE[i] = kTheme[i];
-        BG_PALETTE_SUB[i] = kTheme[i];
+        uint16_t* pal = display::bg_palette(s);
+        for (int i = 0; i < 16; i++)
+            pal[i] = kTheme[i];
     }
     bgSetPriority(main_bg, 0);
     bgSetPriority(sub_bg, 0);
@@ -1143,8 +1167,8 @@ void sprites_init()
 
     oamInit(&oamMain, SpriteMapping_1D_64, false);
     oamInit(&oamSub, SpriteMapping_1D_64, false);
-    palette(SPRITE_PALETTE);
-    palette(SPRITE_PALETTE_SUB);
+    palette(display::sprite_palette(0));
+    palette(display::sprite_palette(1));
 
     static uint8_t buf[64 * 32];
     for (int t = 0; t < kTypes; t++)
@@ -1198,18 +1222,14 @@ void sprites_init()
                     put8(buf, 64, x, y, !on ? 7 : (y == 0 || y == h - 1) ? 9 : 8);
             copy16(g_bars[k][on], buf, 64 * 32);
         }
+    // Show the cleared screens (main() may draw a message before the scene loop starts).
+    display::present();
 }
 
 void sprites_hide_all()
 {
     oamClear(&oamSub, 0, 128);
     oamClear(&oamMain, 0, 128);
-}
-
-void sprites_commit()
-{
-    oamUpdate(&oamMain);
-    oamUpdate(&oamSub);
 }
 
 void icon(int id, int x, int y, uint8_t type, bool egg, bool shiny)
@@ -1223,14 +1243,33 @@ void icon(int id, int x, int y, uint8_t type, bool egg, bool shiny)
 
 namespace {
 constexpr int kRomPalBase = 64;  // ROM icon palettes take 64.. of the 256-colour sprite palette
-uint16_t* g_rom_slot[128];       // one 8bpp 32x32 graphic per OAM id that shows a ROM icon
+display::SpriteGfx* g_rom_slot[128];  // one 8bpp 32x32 graphic per OAM id that shows a ROM icon
+
+// Sets colours [first, first + 15] of a screen's sprite palette from colours 1..15 of `colors`.
+void sprite_colors(int screen, int first, const uint16_t* colors)
+{
+    uint16_t* pal = display::sprite_palette(screen) + first;
+    for (int i = 1; i < 16; i++)
+        pal[i] = colors[i];
+    display::touch_sprite_palette(screen);
+}
+
+// 4 bpp (low nibble first) tiles to 8 bpp on palette colours base + 1.., same 1D tile order.
+void to_8bpp(display::SpriteGfx* g, const uint8_t* tiles, int base)
+{
+    for (int i = 0; i < 512; i++)
+    {
+        uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
+        g->ram[i] = (uint16_t)((lo ? base + lo : 0) | (hi ? base + hi : 0) << 8);
+    }
+    display::touch(g);
+}
 }  // namespace
 
 void set_icon_palettes(const uint16_t (*pal)[16], int count)
 {
     for (int p = 0; p < count; p++)
-        for (int i = 1; i < 16; i++)
-            SPRITE_PALETTE_SUB[kRomPalBase + 16 * p + i] = pal[p][i];
+        sprite_colors(1, kRomPalBase + 16 * p, pal[p]);
 }
 
 void icon_rom(int id, int x, int y, const uint8_t* tiles, uint8_t palette, bool shiny)
@@ -1238,16 +1277,12 @@ void icon_rom(int id, int x, int y, const uint8_t* tiles, uint8_t palette, bool 
     if (id < 0 || id >= 128)
         return;
     if (!g_rom_slot[id])
-        g_rom_slot[id] = oamAllocateGfx(&oamSub, SpriteSize_32x32, SpriteColorFormat_256Color);
-    // 4 bpp (low nibble first) to 8 bpp, same 1D tile order.
-    uint16_t* dst = g_rom_slot[id];
-    int base = kRomPalBase + 16 * (palette & 3);
-    for (int i = 0; i < 512; i++)
-    {
-        uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
-        dst[i] = (uint16_t)((lo ? base + lo : 0) | (hi ? base + hi : 0) << 8);
-    }
-    oamSet(&oamSub, id, x, y, 2, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
+        g_rom_slot[id] = display::sprite_gfx(&oamSub, SpriteSize_32x32, SpriteColorFormat_256Color);
+    display::SpriteGfx* g = g_rom_slot[id];
+    if (!g)
+        return;
+    to_8bpp(g, tiles, kRomPalBase + 16 * (palette & 3));
+    oamSet(&oamSub, id, x, y, 2, 0, SpriteSize_32x32, SpriteColorFormat_256Color, g->vram, -1, false,
            false, false, false, false);
     oamSet(&oamSub, id + 1, x + 23, y + 1, 1, 0, SpriteSize_8x8, SpriteColorFormat_256Color,
            g_star, -1, false, !shiny, false, false, false);
@@ -1257,26 +1292,22 @@ void item_icon(bool top, int x, int y, const uint8_t* tiles, const uint16_t* col
 {
     // The last OAM entry of each screen and colours 128..143 of its sprite palette.
     constexpr int kId = 127, kBase = 128;
-    static uint16_t* gfx[2];
+    static display::SpriteGfx* gfx[2];
     OamState* oam = top ? &oamMain : &oamSub;
     if (!tiles)
     {
         oamClear(oam, kId, 1);
         return;
     }
-    uint16_t*& dst = gfx[top ? 0 : 1];
-    if (!dst)
-        dst = oamAllocateGfx(oam, SpriteSize_32x32, SpriteColorFormat_256Color);
-    uint16_t* pal = top ? SPRITE_PALETTE : SPRITE_PALETTE_SUB;
-    for (int i = 1; i < 16; i++)
-        pal[kBase + i] = colors[i];
-    for (int i = 0; i < 512; i++)
-    {
-        uint8_t lo = tiles[i] & 15, hi = tiles[i] >> 4;
-        dst[i] = (uint16_t)((lo ? kBase + lo : 0) | (hi ? kBase + hi : 0) << 8);
-    }
+    display::SpriteGfx*& g = gfx[top ? 0 : 1];
+    if (!g)
+        g = display::sprite_gfx(oam, SpriteSize_32x32, SpriteColorFormat_256Color);
+    if (!g)
+        return;
+    sprite_colors(top ? 0 : 1, kBase, colors);
+    to_8bpp(g, tiles, kBase);
     // Priority 0: above the row highlight bar, which crosses the icon on the Item row.
-    oamSet(oam, kId, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, dst, -1, false,
+    oamSet(oam, kId, x, y, 0, 0, SpriteSize_32x32, SpriteColorFormat_256Color, g->vram, -1, false,
            false, false, false, false);
 }
 
@@ -1296,45 +1327,49 @@ void pokemon_sprite(int x, int y, const uint8_t* tiles, const uint16_t* colors)
 {
     static const SpriteSize size[4] = {SpriteSize_64x64, SpriteSize_32x64, SpriteSize_64x32, SpriteSize_32x32};
     static const int dx[4] = {0, 64, 0, 64}, dy[4] = {0, 0, 64, 64}, bytes[4] = {2048, 1024, 1024, 512};
-    static uint16_t* gfx[4];
+    static display::SpriteGfx* gfx[4];
     if (!tiles)
     {
         oamClear(&oamMain, kSpriteId, 4);
         return;
     }
-    for (int i = 1; i < 16; i++)
-        SPRITE_PALETTE[16 * kSpriteBank + i] = colors[i];
+    sprite_colors(0, 16 * kSpriteBank, colors);
     int off = 0;
     for (int b = 0; b < 4; b++)
     {
         if (!gfx[b])
-            gfx[b] = oamAllocateGfx(&oamMain, size[b], SpriteColorFormat_16Color);
-        copy16(gfx[b], tiles + off, bytes[b]);
+            gfx[b] = display::sprite_gfx(&oamMain, size[b], SpriteColorFormat_16Color);
+        if (!gfx[b])
+            return;
+        copy16(gfx[b]->ram, tiles + off, bytes[b]);
+        display::touch(gfx[b]);
         off += bytes[b];
         oamSet(&oamMain, kSpriteId + b, x + dx[b], y + dy[b], 2, kSpriteBank, size[b], SpriteColorFormat_16Color,
-               gfx[b], -1, false, false, false, false, false);
+               gfx[b]->vram, -1, false, false, false, false, false);
     }
 }
 
 void logo(int x, int y)
 {
-    static uint16_t* gfx;
+    static display::SpriteGfx* gfx;
     if (!gfx)
     {
-        gfx = oamAllocateGfx(&oamMain, SpriteSize_64x64, SpriteColorFormat_16Color);
-        copy16(gfx, kLogoTiles, (int)sizeof(kLogoTiles));
+        gfx = display::sprite_gfx(&oamMain, SpriteSize_64x64, SpriteColorFormat_16Color);
+        if (!gfx)
+            return;
+        copy16(gfx->ram, kLogoTiles, (int)sizeof(kLogoTiles));
+        display::touch(gfx);
     }
-    for (int i = 1; i < 16; i++)
-        SPRITE_PALETTE[16 * kSpriteBank + i] = kLogoColors[i];
+    sprite_colors(0, 16 * kSpriteBank, kLogoColors);
     // The Pokémon sprite's four blocks share this slot; only the first is the logo.
     oamClear(&oamMain, kSpriteId + 1, 3);
-    oamSet(&oamMain, kSpriteId, x, y, 2, kSpriteBank, SpriteSize_64x64, SpriteColorFormat_16Color, gfx, -1,
-           false, false, false, false, false);
+    oamSet(&oamMain, kSpriteId, x, y, 2, kSpriteBank, SpriteSize_64x64, SpriteColorFormat_16Color, gfx->vram,
+           -1, false, false, false, false, false);
 }
 
 void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* colors)
 {
-    static uint16_t* gfx[kSmallIcons];
+    static display::SpriteGfx* gfx[kSmallIcons];
     if (slot < 0 || slot >= kSmallIcons)
         return;
     if (!tiles)
@@ -1343,12 +1378,14 @@ void small_icon(int slot, int x, int y, const uint8_t* tiles, const uint16_t* co
         return;
     }
     if (!gfx[slot])
-        gfx[slot] = oamAllocateGfx(&oamMain, SpriteSize_32x16, SpriteColorFormat_16Color);
-    for (int i = 1; i < 16; i++)
-        SPRITE_PALETTE[16 * (kSmallBank + slot) + i] = colors[i];
-    copy16(gfx[slot], tiles, 256);
+        gfx[slot] = display::sprite_gfx(&oamMain, SpriteSize_32x16, SpriteColorFormat_16Color);
+    if (!gfx[slot])
+        return;
+    sprite_colors(0, 16 * (kSmallBank + slot), colors);
+    copy16(gfx[slot]->ram, tiles, 256);
+    display::touch(gfx[slot]);
     oamSet(&oamMain, kSmallId + slot, x, y, 1, kSmallBank + slot, SpriteSize_32x16, SpriteColorFormat_16Color,
-           gfx[slot], -1, false, false, false, false, false);
+           gfx[slot]->vram, -1, false, false, false, false, false);
 }
 
 void top_art_hide()

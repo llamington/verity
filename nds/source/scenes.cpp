@@ -2630,6 +2630,7 @@ private:
     {
         ui::clear_px(top(), (kEdit + 2) * 8 + 14, (kEdit + 2) * 8 + 24);
         ui::text(top(), kX, (kEdit + 2) * 8 + 14, "Searching for legal IVs...");
+        ui::present();
         uint8_t code = verity_closest_ivs(core::doc().buf, core::doc().len, verity_loc{box_, slot_},
                                           e_.ivs, &fix_);
         ui::clear_px(top(), (kEdit + 2) * 8 + 14, (kEdit + 2) * 8 + 24);
