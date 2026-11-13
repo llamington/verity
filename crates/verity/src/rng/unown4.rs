@@ -4,9 +4,6 @@
 use super::lcrng::{advance_seed, next15};
 use super::reversal::{MAX_SEEDS_PID, seeds};
 
-/// Met location of the Solaceon Ruins.
-pub const SOLACEON_RUINS: u16 = 53;
-
 /// Unown forms available in every Dead End room.
 const UNOWN0: [u8; 20] = [
     0, 1, 2, 6, 7, 9, 10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25,

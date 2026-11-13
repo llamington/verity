@@ -19,11 +19,6 @@ roms/*.bin
 tools/pkhex-oracle/bin/
 tools/pkhex-oracle/obj/
 
-# Local configurations
-*.local.toml
-verity.local.toml
-pkds.local.toml
-
 # Editors & OS
 .vscode/
 .idea/

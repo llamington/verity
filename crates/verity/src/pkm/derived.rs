@@ -94,17 +94,6 @@ pub fn calc_stats(base: &Stats, ivs: &Stats, evs: &Stats, level: u8, nature: u8)
     out
 }
 
-/// Unown letter (0..28) encoded in a Gen 3-style PID.
-pub fn unown_form_from_pid(pid: u32) -> u8 {
-    let v = ((pid >> 24) & 3) << 6 | ((pid >> 16) & 3) << 4 | ((pid >> 8) & 3) << 2 | (pid & 3);
-    (v % 28) as u8
-}
-
-/// Wurmple evolves into Silcoon (0) or Cascoon (1).
-pub fn wurmple_evolution(pid: u32) -> u8 {
-    (((pid >> 16) % 10) >= 5) as u8
-}
-
 impl Pkm {
     pub fn is_shiny(&self) -> bool {
         is_shiny(self.pid(), self.tid(), self.sid())

@@ -559,11 +559,6 @@ fn generate_radar_chain(
     Err(GenError::BudgetExhausted)
 }
 
-/// The IVs a Method 1 frame yields; exposed for tests.
-pub fn method1_ivs(pid_seed: u32) -> u32 {
-    ivs_after_pid(pid_seed)
-}
-
 /// PID from a Method 1 origin seed.
 pub fn method1_pid(mut seed: u32) -> u32 {
     let a = next16(&mut seed) as u32;
