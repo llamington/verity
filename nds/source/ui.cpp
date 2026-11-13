@@ -165,7 +165,11 @@ int g_digit_width = 6;  // digits share one width so numbers line up
 
 const uint8_t* g_font;
 int g_font_first, g_font_count;
-uint8_t g_left[128], g_width[128];  // inked start column and width per ASCII code
+uint8_t g_left[128];  // inked start column per ASCII code
+// Hot text state lives in DTCM (fast data memory): widths and glyph rows already shifted to
+// their first inked column, per ASCII code.
+DTCM_DATA uint8_t g_width[128];
+DTCM_DATA uint8_t g_rows[128][8];
 
 void measure_font()
 {
@@ -199,20 +203,99 @@ void measure_font()
     for (int c = '0'; c <= '9'; c++)
         if (g_width[c] + 2 > g_digit_width)
             g_digit_width = g_width[c] + 2;
+    for (int c = 0; c < 128; c++)
+    {
+        int ix = c - g_font_first;
+        for (int y = 0; y < 8; y++)
+            g_rows[c][y] = ix < 0 || ix >= g_font_count
+                               ? 0
+                               : (uint8_t)((g_font[ix * 8 + y] >> g_left[c]) & ((1u << g_width[c]) - 1));
+    }
 }
 
-uint8_t g_ink = 1;  // palette index plot() writes (see the theme below)
+DTCM_DATA uint8_t g_ink = 1;  // palette index plot() writes (see the theme below)
 
-void plot(Surface* c, int x, int y)
+// Where plot() may draw, in text-layer pixels (the layer is scrolled 2 px right, so its last 2
+// columns would wrap to the left edge). While a text draw tracks, plot() notes pixels it had to
+// drop and ink drawn over ink.
+struct Clip
 {
-    // The text layer is scrolled 2 px right, so its last 2 columns would wrap to the left edge.
-    if (x < 0 || x >= 254 || y < 0 || y >= 192)
+    int x0, y0, x1, y1;
+};
+constexpr Clip kScreen = {0, 0, 254, 192};
+DTCM_DATA Clip g_clip = kScreen;
+DTCM_DATA bool g_track = false;
+DTCM_DATA bool g_clipped = false;
+DTCM_DATA bool g_overlap = false;
+
+ARM_CODE ITCM_CODE void plot(Surface* c, int x, int y)
+{
+    if (x < g_clip.x0 || x >= g_clip.x1 || y < g_clip.y0 || y >= g_clip.y1)
+    {
+        g_clipped = true;
         return;
+    }
     int tile = (y / 8) * 32 + x / 8;
     *c->dirty |= 1u << (y / 8);
     uint16_t* word = c->tiles + tile * 16 + (y % 8) * 2 + (x % 8) / 4;
     int shift = ((x % 8) % 4) * 4;
+    if (g_track && ((*word >> shift) & 0xF))
+        g_overlap = true;
     *word = (uint16_t)((*word & ~(0xF << shift)) | (g_ink << shift));
+}
+
+// Draws one row of a glyph: bit i of `bits` is the pixel at x + i. The same as plot() for each set
+// bit, but each tile's row (8 pixels, one 32-bit word) is read and written once.
+ARM_CODE ITCM_CODE void blit_row(Surface* c, int x, int y, uint32_t bits)
+{
+    const Clip clip = g_clip;
+    if (y < clip.y0 || y >= clip.y1)
+    {
+        g_clipped = true;
+        return;
+    }
+    // Drop the pixels left and right of the clip.
+    if (x < clip.x0)
+    {
+        int n = clip.x0 - x;
+        uint32_t keep = n >= 32 ? 0 : ~((1u << n) - 1);
+        g_clipped = g_clipped || (bits & ~keep);
+        bits &= keep;
+    }
+    if (clip.x1 - x < 32)
+    {
+        int n = clip.x1 - x;  // pixels that fit
+        uint32_t keep = n <= 0 ? 0 : (1u << n) - 1;
+        g_clipped = g_clipped || (bits & ~keep);
+        bits &= keep;
+    }
+    if (!bits)
+        return;
+    *c->dirty |= 1u << (y / 8);
+    uint16_t* row = c->tiles + (y / 8) * 32 * 16 + (y % 8) * 2;
+    const uint32_t ink = g_ink & 0xF;
+    bool overlap = false;
+    // One tile at a time: shift the row so bit 0 is the tile's first pixel.
+    int tile = x >> 3;
+    uint64_t rest = (uint64_t)bits << (x & 7);
+    for (; rest; rest >>= 8, tile++)
+    {
+        uint32_t span = (uint32_t)rest & 0xFF;
+        if (!span)
+            continue;
+        uint32_t mask = 0;
+        for (int p = 0; p < 8; p++)
+            if (span & (1u << p))
+                mask |= 0xFu << (p * 4);
+        uint16_t* w = row + tile * 16;
+        uint32_t old = (uint32_t)w[0] | (uint32_t)w[1] << 16;
+        overlap = overlap || (old & mask);
+        old = (old & ~mask) | (mask & (ink * 0x11111111u));
+        w[0] = (uint16_t)old;
+        w[1] = (uint16_t)(old >> 16);
+    }
+    if (g_track && overlap)
+        g_overlap = true;
 }
 
 const uint8_t* g_rom_font = nullptr;  // font cache from the user's ROM (verity_font_*)
@@ -226,7 +309,7 @@ bool rom_glyph(uint16_t cp, verity_glyph* g)
 // Draws one glyph (or only measures it when c is null); returns the x after it, with one pixel of
 // spacing. ASCII comes from the console font, anything else from the ROM font when there is one,
 // otherwise '?'.
-int glyph(Surface* c, int x, int y, uint32_t cp)
+ARM_CODE ITCM_CODE int glyph(Surface* c, int x, int y, uint32_t cp)
 {
     if (cp >= 128)
     {
@@ -235,10 +318,8 @@ int glyph(Surface* c, int x, int y, uint32_t cp)
             cp = '?';
         else
         {
-            for (int row = 0; c && row < g.height; row++)
-                for (int col = 0; col < g.width; col++)
-                    if (g.rows[row] & (1u << col))
-                        plot(c, x + col, y + row);
+            for (int row = 0; c && row < g.height && row < 16; row++)
+                blit_row(c, x, y + row, g.rows[row] & ((1u << g.width) - 1));
             return x + (g.width ? g.width + 1 : kSpaceWidth);
         }
     }
@@ -248,12 +329,7 @@ int glyph(Surface* c, int x, int y, uint32_t cp)
         return x + kSpaceWidth;
     int digit_pad = (ch >= '0' && ch <= '9') ? (g_digit_width - 1 - g_width[ch]) / 2 : 0;
     for (int row = 0; c && row < 8; row++)
-    {
-        uint8_t bits = g_font[ix * 8 + row];
-        for (int col = 0; col < g_width[ch]; col++)
-            if (bits & (1 << (col + g_left[ch])))
-                plot(c, x + digit_pad + col, y + row);
-    }
+        blit_row(c, x + digit_pad, y + row, g_rows[ch][row]);
     if (ch >= '0' && ch <= '9')
         return x + g_digit_width;
     return x + g_width[ch] + 1;
@@ -342,12 +418,12 @@ enum : uint16_t
 
 uint16_t* g_fmap[2];
 uint8_t g_kind[2][kTiles];
-bool g_muted = false;
-uint8_t g_tint = 0;  // a text colour on panels (UI_BLUE, UI_RED), 0 for none
+DTCM_DATA bool g_muted = false;
+DTCM_DATA uint8_t g_tint = 0;  // a text colour on panels (UI_BLUE, UI_RED), 0 for none
 
 int screen_of(Surface* c) { return c == &g_bottom ? 1 : 0; }
 
-uint8_t ink_for(Surface* c, int x, int y)
+ARM_CODE ITCM_CODE uint8_t ink_for(Surface* c, int x, int y)
 {
     int col = x / 8, row = y / 8;
     uint8_t k = (col >= 0 && col < 32 && row >= 0 && row < 24) ? g_kind[screen_of(c)][row * 32 + col]
@@ -519,9 +595,16 @@ void clear_text_rows(Surface* c, int row0, int row1)
     display::touch_text_rows(c->screen, row0, row1);
 }
 
-// Draws text at a pixel position without clearing; inks follow the frame. Returns the end x.
-int draw_text(Surface* c, int x, int y, const char* text)
+// Lays text out from (x, y), drawing it (or only measuring when c is null), and returns the x after
+// it. grid_col >= 0 lines runs of two or more spaces up with the cell grid counted from that column
+// (at()'s table gaps). Stops before a glyph whose ink would pass stop_x and draws `suffix` there.
+// Leaves the muted and tint state as the text left it. ink_end (when set) gets the x just past the
+// last glyph's ink (trailing spaces draw nothing).
+ARM_CODE ITCM_CODE int layout(Surface* c, int x, int y, const char* text, int grid_col, int stop_x, const char* suffix,
+                              int* ink_end = nullptr)
 {
+    constexpr int kNoStop = 1 << 30;
+    int chars = 0;  // characters so far (table gaps line up by character, not byte)
     for (int i = 0; text[i];)
     {
         if (text[i] == '\x01')
@@ -539,18 +622,167 @@ int draw_text(Surface* c, int x, int y, const char* text)
         }
         if (text[i] == ' ')
         {
+            int run = 1;
+            while (grid_col >= 0 && text[i + run] == ' ')
+                run++;
             x += kSpaceWidth;
-            i++;
+            chars += run;
+            if (run > 1)
+            {
+                int grid = (grid_col + chars) * 8;
+                x = x > grid ? x : grid;
+            }
+            i += run;
             continue;
         }
         uint32_t cp = next_cp(text, &i);
+        if (stop_x != kNoStop && glyph(nullptr, x, y, cp) - 1 > stop_x)
+        {
+            if (suffix)
+                x = layout(c, x, y, suffix, -1, kScreen.x1, nullptr);
+            return x;
+        }
         if (c)
             g_ink = ink_for(c, x, y);
         x = glyph(c, x, y, cp);
+        if (ink_end)
+            *ink_end = x - 1;
+        chars++;
     }
+    return x;
+}
+
+int measure(const char* text, int grid_col = -1)
+{
+    int w = layout(nullptr, 0, 0, text, grid_col, 1 << 30, nullptr);
+    g_muted = false;
+    g_tint = 0;
+    return w;
+}
+
+// Layout faults, read by the emulator harness (tools/emu-harness fails a step that adds one): text
+// cut short where its caller didn't plan for it, pixels dropped outside its region, or ink drawn
+// over other text. The text holds the latest fault.
+extern "C" {
+volatile u32 verity_test_layout = 0;
+volatile char verity_test_layout_text[96] = "";
+}
+
+void fault(const char* what, Surface* c, int x, int y, const char* text, int over = 0)
+{
+    char buf[sizeof(verity_test_layout_text)];
+    int n = snprintf(buf, sizeof(buf), over ? "%s %s %d,%d +%dpx: " : "%s %s %d,%d: ", what,
+                     screen_of(c) ? "bottom" : "top", x, y, over);
+    for (int i = 0; text[i] && n + 1 < (int)sizeof(buf); i++)
+        if ((unsigned char)text[i] >= ' ')
+            buf[n++] = text[i];
+    buf[n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1] = 0;
+    for (size_t i = 0; i < sizeof(buf); i++)
+        verity_test_layout_text[i] = buf[i];
+    verity_test_layout = verity_test_layout + 1;
+}
+
+// Panels (with what sits on them), bars, slots and the backdrop: text stays in the region it starts
+// on.
+int region_group(uint8_t k)
+{
+    switch (k)
+    {
+    case K_BAR:
+    case K_CHIP: return 1;
+    case K_PANEL:
+    case K_LEGAL:
+    case K_FISHY:
+    case K_INVALID:
+    case K_SAFE:
+    case K_PILL_DARK:
+    case K_PILL_LIGHT: return 2;
+    case K_SLOT: return 3;
+    default: return 0;
+    }
+}
+
+// The region around the cell where text drawn at (x, y) starts, in text-layer pixels: the run of
+// cells of its group along that row and down that column. Text stays off a panel's edge pixels.
+Clip region_at(Surface* c, int x, int y)
+{
+    const uint8_t* kind = g_kind[screen_of(c)];
+    int col = (x + 2) / 8, row = y / 8;
+    col = col < 0 ? 0 : col > 31 ? 31 : col;
+    row = row < 0 ? 0 : row > 23 ? 23 : row;
+    int g = region_group(kind[row * 32 + col]);
+    int l = col, r = col + 1, t = row, b = row + 1;
+    while (l > 0 && region_group(kind[row * 32 + l - 1]) == g)
+        l--;
+    while (r < 32 && region_group(kind[row * 32 + r]) == g)
+        r++;
+    while (t > 0 && region_group(kind[(t - 1) * 32 + col]) == g)
+        t--;
+    while (b < 24 && region_group(kind[b * 32 + col]) == g)
+        b++;
+    int pad = g == 2 ? 1 : 0;
+    Clip clip = {l * 8 - 2 + pad, t * 8, r * 8 - 2 - pad, b * 8};
+    clip.x0 = clip.x0 < 0 ? 0 : clip.x0;
+    clip.x1 = clip.x1 > kScreen.x1 ? kScreen.x1 : clip.x1;
+    return clip;
+}
+
+// The x of text's first glyph (after leading spaces and colour toggles).
+int first_glyph_x(int x, const char* text, int grid_col)
+{
+    x = layout(nullptr, x, 0, text, grid_col, -(1 << 30), nullptr);
     g_muted = false;
     g_tint = 0;
     return x;
+}
+
+// Cells from (col, row) to the right edge of the region that cell is in (at least 1).
+int region_cells(Surface* c, int col, int row)
+{
+    if (col < 0 || col >= 32 || row < 0 || row >= 24)
+        return 1;
+    const uint8_t* kind = g_kind[screen_of(c)] + row * 32;
+    int g = region_group(kind[col]), r = col + 1;
+    while (r < 32 && region_group(kind[r]) == g)
+        r++;
+    return r - col;
+}
+
+// Draws text inside `clip`, cut with "..." when it doesn't fit; a cut is a fault unless `planned`.
+// Returns the end x.
+int draw_in(Surface* c, int x, int y, const char* text, int grid_col, Clip clip, bool planned)
+{
+    int ink_end = x;
+    layout(nullptr, x, y, text, grid_col, 1 << 30, nullptr, &ink_end);
+    g_muted = false;
+    g_tint = 0;
+    bool cut = ink_end > clip.x1;
+    int end;
+    int stop = cut ? clip.x1 - measure("...") - 1 : 1 << 30;
+    g_clip = clip;
+    g_track = true;
+    g_clipped = g_overlap = false;
+    end = layout(c, x, y, text, grid_col, stop, cut ? "..." : nullptr);
+    g_clip = kScreen;
+    g_track = false;
+    g_muted = false;
+    g_tint = 0;
+    if (cut && !planned)
+        fault("cut", c, x, y, text, ink_end - clip.x1);
+    if (g_clipped)
+        fault("clipped", c, x, y, text);
+    if (g_overlap)
+        fault("overlap", c, x, y, text);
+    return end;
+}
+
+// Draws text at a pixel position without clearing, within the region it starts on (inks follow
+// the frame), or measures it when c is null. Returns the end x.
+int draw_text(Surface* c, int x, int y, const char* text)
+{
+    if (!c)
+        return x + measure(text);
+    return draw_in(c, x, y, text, -1, region_at(c, first_glyph_x(x, text, -1), y), false);
 }
 }  // namespace
 
@@ -570,46 +802,7 @@ void at(Surface* c, int col, int row, const char* fmt, ...)
         return;
     memset(c->tiles + (row * 32 + col) * 16, 0, (size_t)(32 - col) * 32);
     display::touch_text_rows(c->screen, row, row + 1);
-    int x = col * 8, y = row * 8;
-    int chars = 0;  // characters so far (table gaps line up by character, not byte)
-    for (int i = 0; text[i];)
-    {
-        if (text[i] == '\x01')
-        {
-            g_muted = !g_muted;
-            i++;
-            continue;
-        }
-        if (text[i] == '\x02' || text[i] == '\x03')
-        {
-            uint8_t t = text[i] == '\x02' ? C_LEGAL : C_INVALID;
-            g_tint = g_tint == t ? 0 : t;
-            i++;
-            continue;
-        }
-        if (text[i] != ' ')
-        {
-            uint32_t cp = next_cp(text, &i);
-            g_ink = ink_for(c, x, y);
-            x = glyph(c, x, y, cp);
-            chars++;
-            continue;
-        }
-        int run = 1;
-        while (text[i + run] == ' ')
-            run++;
-        x += kSpaceWidth;
-        chars += run;
-        // Two or more spaces mean a table column: line up with the character grid.
-        if (run > 1)
-        {
-            int grid = (col + chars) * 8;
-            x = x > grid ? x : grid;
-        }
-        i += run;
-    }
-    g_muted = false;
-    g_tint = 0;
+    draw_in(c, col * 8, row * 8, text, col, region_at(c, first_glyph_x(col * 8, text, col), row * 8), false);
 }
 
 void utf16_to_text(const uint16_t* s, char* out, int cap)
@@ -713,6 +906,8 @@ int pill(Surface* c, int col, int row, uint16_t color, const char* text)
     uint8_t kind = bank && (r * 3 + g * 6 + b) / 10 < 18 ? K_PILL_LIGHT : K_PILL_DARK;
     int w = draw_text(nullptr, 0, 0, text);
     int cells = (w + 8 + 7) / 8;
+    int room = region_cells(c, col, row);  // a long pill stops at its panel's edge (its text is cut)
+    cells = cells < room ? cells : room;
     uint16_t pb = (uint16_t)(bank << 12);
     for (int k = 0; k < cells; k++)
         set_cell(c, col + k, row,
@@ -740,34 +935,48 @@ void title_right(Surface* c, const char* text)
     draw_text(c, 250 - w, 0, text);
 }
 
+namespace {
+// Lays out button hints on row 23 with at least `gap` px before each chip after the first; draws
+// them when c is set. Returns the x after the last label.
+int hint_layout(Surface* c, const char* spec, int gap)
+{
+    const int row = 23;
+    int col = 0, x = 0;
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%s", spec);
+    char* save = nullptr;
+    for (char* item = strtok_r(buf, "|", &save); item && col < 31; item = strtok_r(nullptr, "|", &save))
+    {
+        char* label = strchr(item, ':');
+        if (label)
+            *label++ = 0;
+        int kw = measure(item);
+        int cells = kw <= 6 ? 1 : (kw + 9) / 8;
+        if (c && cells == 1)
+            set_cell(c, col, row, T_CHIP + 3, K_CHIP);
+        else if (c)
+            for (int k = 0; k < cells; k++)
+                set_cell(c, col + k, row, T_CHIP + (k == 0 ? 0 : k == cells - 1 ? 2 : 1), K_CHIP);
+        if (c)
+            draw_text(c, col * 8 + (cells * 8 - kw) / 2 - 1, row * 8, item);
+        x = col * 8 + cells * 8 + 2;
+        if (label)
+            x = c ? draw_text(c, x, row * 8, label) : x + measure(label);
+        col = (x + gap + 7) / 8;
+    }
+    return x;
+}
+}  // namespace
+
 void hints(Surface* c, const char* spec)
 {
     const int row = 23;
     for (int col = 0; col < 32; col++)
         set_cell(c, col, row, T_BAR, K_BAR);
     clear_text_rows(c, row, row + 1);
-    // spec: "A:Open|B:Back|L/R:Box"; each key gets a chip, then its label.
-    int col = 0;
-    char buf[96];
-    snprintf(buf, sizeof(buf), "%s", spec);
-    for (char* item = strtok(buf, "|"); item && col < 31; item = strtok(nullptr, "|"))
-    {
-        char* label = strchr(item, ':');
-        if (label)
-            *label++ = 0;
-        int kw = draw_text(nullptr, 0, 0, item);
-        int cells = kw <= 6 ? 1 : (kw + 9) / 8;
-        if (cells == 1)
-            set_cell(c, col, row, T_CHIP + 3, K_CHIP);
-        else
-            for (int k = 0; k < cells; k++)
-                set_cell(c, col + k, row, T_CHIP + (k == 0 ? 0 : k == cells - 1 ? 2 : 1), K_CHIP);
-        draw_text(c, col * 8 + (cells * 8 - kw) / 2 - 1, row * 8, item);
-        int x = col * 8 + cells * 8 + 2;
-        if (label)
-            x = draw_text(c, x, row * 8, label);
-        col = (x + 12) / 8;  // at least 4 px before the next chip
-    }
+    // spec: "A:Open|B:Back|L/R:Box"; each key gets a chip, then its label, at least 5 px apart, or
+    // 1 px when that doesn't fit the bar.
+    hint_layout(c, spec, hint_layout(nullptr, spec, 5) - 1 > kScreen.x1 ? 1 : 5);
 }
 
 void tabs(Surface* c, const char* const* names, int n, int active)
@@ -834,6 +1043,8 @@ int badge(Surface* c, int col, int row, Badge b, const char* text)
 {
     static const uint8_t kinds[4] = {K_LEGAL, K_FISHY, K_INVALID, K_SAFE};
     int cells = 1 + (draw_text(nullptr, 0, 0, text) + 9) / 8;
+    int room = region_cells(c, col, row);  // a long badge stops at its panel's edge (its text is cut)
+    cells = cells < room ? cells : room;
     set_cell(c, col, row, T_BADGE + (int)b * 3, K_PANEL);
     for (int k = 1; k < cells; k++)
         set_cell(c, col + k, row, T_PANEL + 2 * 5 + 2, kinds[(int)b]);
@@ -880,14 +1091,28 @@ void fit(char* text, int width)
     strcpy(text + n, "...");
 }
 
-void text_right(Surface* c, int x_end, int y, const char* fmt, ...)
+int text_right(Surface* c, int x_end, int y, const char* fmt, ...)
 {
     char buf[128];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    draw_text(c, x_end - draw_text(nullptr, 0, 0, buf), y, buf);
+    int x = x_end - measure(buf);
+    draw_text(c, x, y, buf);
+    return x;
+}
+
+void text_in(Surface* c, int x, int x_end, int y, const char* fmt, ...)
+{
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    Clip clip = region_at(c, first_glyph_x(x, buf, -1), y);
+    clip.x1 = x_end < clip.x1 ? x_end : clip.x1;
+    draw_in(c, x, y, buf, -1, clip, true);
 }
 
 int Lines::line()

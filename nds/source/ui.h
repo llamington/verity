@@ -117,8 +117,11 @@ uint16_t type_color(int type);
 void text(Surface* c, int x, int y, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
 // Shortens UTF-8 text in place to fit `width` px, ending it with "..." when cut.
 void fit(char* text, int width);
-// Text ending at pixel x_end.
-void text_right(Surface* c, int x_end, int y, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// Text ending at pixel x_end; returns where it starts.
+int text_right(Surface* c, int x_end, int y, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
+// Text from x that ends before x_end, cut with "..." when longer: for a column with a neighbour
+// on its right (draw the neighbour first, e.g. with text_right). The cut is expected, not a fault.
+void text_in(Surface* c, int x, int x_end, int y, const char* fmt, ...) __attribute__((format(printf, 5, 6)));
 
 // Spacing rules for text in panels (see docs/research/ui-stack.md, Spacing): plain lines on a
 // 12 px pitch (1.5x the 8 px font), lines that carry a badge or pill on the 8 px tile grid 16 px
