@@ -393,10 +393,6 @@ enum Kind : uint8_t
     K_BAR,
     K_PANEL,
     K_CHIP,
-    K_LEGAL,
-    K_FISHY,
-    K_INVALID,
-    K_SAFE,
     K_SLOT,
     K_PILL_DARK,   // a coloured pill under dark text
     K_PILL_LIGHT,  // a coloured pill under white text
@@ -428,13 +424,6 @@ ARM_CODE ITCM_CODE uint8_t ink_for(Surface* c, int x, int y)
     int col = x / 8, row = y / 8;
     uint8_t k = (col >= 0 && col < 32 && row >= 0 && row < 24) ? g_kind[screen_of(c)][row * 32 + col]
                                                                : K_BACK;
-    // Verdict words are coloured text on cream (amber is too light for text: burnt orange).
-    if (k == K_LEGAL)
-        return C_LEGAL;
-    if (k == K_INVALID)
-        return C_INVALID;
-    if (k == K_FISHY || k == K_SAFE)
-        return C_SAFE;
     if (k == K_PILL_DARK)
         return C_INK;
     if (k == K_PILL_LIGHT)
@@ -691,10 +680,6 @@ int region_group(uint8_t k)
     case K_BAR:
     case K_CHIP: return 1;
     case K_PANEL:
-    case K_LEGAL:
-    case K_FISHY:
-    case K_INVALID:
-    case K_SAFE:
     case K_PILL_DARK:
     case K_PILL_LIGHT: return 2;
     case K_SLOT: return 3;
@@ -749,8 +734,8 @@ int region_cells(Surface* c, int col, int row)
 }
 
 // Draws text inside `clip`, cut with "..." when it doesn't fit; a cut is a fault unless `planned`.
-// Returns the end x.
-int draw_in(Surface* c, int x, int y, const char* text, int grid_col, Clip clip, bool planned)
+// Returns the end x. `tint` colours the text (on panels), as a UI_RED or UI_BLUE run would.
+int draw_in(Surface* c, int x, int y, const char* text, int grid_col, Clip clip, bool planned, uint8_t tint = 0)
 {
     int ink_end = x;
     layout(nullptr, x, y, text, grid_col, 1 << 30, nullptr, &ink_end);
@@ -762,6 +747,7 @@ int draw_in(Surface* c, int x, int y, const char* text, int grid_col, Clip clip,
     g_clip = clip;
     g_track = true;
     g_clipped = g_overlap = false;
+    g_tint = tint;
     end = layout(c, x, y, text, grid_col, stop, cut ? "..." : nullptr);
     g_clip = kScreen;
     g_track = false;
@@ -1041,14 +1027,16 @@ void panel(Surface* c, int col, int row, int w, int h)
 
 int badge(Surface* c, int col, int row, Badge b, const char* text)
 {
-    static const uint8_t kinds[4] = {K_LEGAL, K_FISHY, K_INVALID, K_SAFE};
+    // The word takes its verdict's colour (amber is too light for text: burnt orange).
+    static const uint8_t inks[4] = {C_LEGAL, C_SAFE, C_INVALID, C_SAFE};
     int cells = 1 + (draw_text(nullptr, 0, 0, text) + 9) / 8;
     int room = region_cells(c, col, row);  // a long badge stops at its panel's edge (its text is cut)
     cells = cells < room ? cells : room;
     set_cell(c, col, row, T_BADGE + (int)b * 3, K_PANEL);
     for (int k = 1; k < cells; k++)
-        set_cell(c, col + k, row, T_PANEL + 2 * 5 + 2, kinds[(int)b]);
-    draw_text(c, (col + 1) * 8, row * 8, text);
+        set_cell(c, col + k, row, T_PANEL + 2 * 5 + 2, K_PANEL);
+    int x = (col + 1) * 8, y = row * 8;
+    draw_in(c, x, y, text, -1, region_at(c, x, y), false, inks[(int)b]);
     return col + cells;
 }
 
