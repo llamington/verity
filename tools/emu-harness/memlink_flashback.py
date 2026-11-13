@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""P10's in-game check: does retail Black 2 honour a save linked by `memlink::apply`?
+"""In-game check: does retail Black 2 honour a save linked by `memlink::apply`?
 
 Walks from Nuvema Town onto Route 1 on a linked save and on an unlinked control. The flashback is
 armed by the map's own script on entering the zone, so only the linked run may start it. Also opens

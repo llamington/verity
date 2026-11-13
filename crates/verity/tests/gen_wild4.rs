@@ -160,7 +160,7 @@ fn generated_pt_grass_is_legal() {
     run(300);
 }
 
-/// PLAN P4 acceptance: 10^4 per method. `cargo test --release -- --ignored`.
+/// Scale run: 10^4 per method. `cargo test --release -- --ignored`.
 #[test]
 #[ignore]
 fn generated_pt_grass_is_legal_1e4() {

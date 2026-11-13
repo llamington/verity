@@ -1,4 +1,4 @@
-//! P10 Key System: reading keys from real saves and the game's exchange rules.
+//! Key System: reading keys from real saves and the game's exchange rules.
 use std::fs;
 use std::path::PathBuf;
 
@@ -46,7 +46,7 @@ fn all_unlocked(save: &[u8], version: u8) -> Vec<u8> {
 }
 
 #[test]
-fn p10_keys_read_real_saves() {
+fn keys_read_real_saves() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };
@@ -56,7 +56,7 @@ fn p10_keys_read_real_saves() {
 }
 
 #[test]
-fn p10_keys_city_needs_the_other_version() {
+fn keys_city_needs_the_other_version() {
     let partner = state([true; 5], [false; 5], BLACK2);
     let same = state([false; 5], [false; 5], BLACK2);
     let other = state([false; 5], [false; 5], WHITE2);
@@ -66,7 +66,7 @@ fn p10_keys_city_needs_the_other_version() {
 }
 
 #[test]
-fn p10_keys_only_unlocked_keys_pass_and_enabled_ones_are_skipped() {
+fn keys_only_unlocked_keys_pass_and_enabled_ones_are_skipped() {
     let partner = state(
         [true, false, false, false, true],
         [false, true, true, true, false],
@@ -80,7 +80,7 @@ fn p10_keys_only_unlocked_keys_pass_and_enabled_ones_are_skipped() {
 }
 
 #[test]
-fn p10_keys_receive_enables_without_unlocking() {
+fn keys_receive_enables_without_unlocking() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };
@@ -97,7 +97,7 @@ fn p10_keys_receive_enables_without_unlocking() {
 }
 
 #[test]
-fn p10_keys_received_keys_cannot_be_passed_on() {
+fn keys_received_keys_cannot_be_passed_on() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };
@@ -108,7 +108,7 @@ fn p10_keys_received_keys_cannot_be_passed_on() {
 }
 
 #[test]
-fn p10_keys_refuse_other_games_and_corrupt_saves() {
+fn keys_refuse_other_games_and_corrupt_saves() {
     let (Some(b2w2), Some(bw)) = (
         real("pkhex-avalonia/gen5_white2.sav"),
         real("pkhex-avalonia/gen5_black.sav"),
@@ -127,7 +127,7 @@ fn p10_keys_refuse_other_games_and_corrupt_saves() {
 }
 
 #[test]
-fn p10_keys_enable_all_needs_no_partner_and_marks_nothing_earned() {
+fn keys_enable_all_needs_no_partner_and_marks_nothing_earned() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };
@@ -143,7 +143,7 @@ fn p10_keys_enable_all_needs_no_partner_and_marks_nothing_earned() {
 }
 
 #[test]
-fn p10_keys_enable_all_only_adds_what_is_missing() {
+fn keys_enable_all_only_adds_what_is_missing() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };
@@ -159,7 +159,7 @@ fn p10_keys_enable_all_only_adds_what_is_missing() {
 }
 
 #[test]
-fn p10_keys_enable_all_refuses_a_corrupt_save() {
+fn keys_enable_all_refuses_a_corrupt_save() {
     let Some(save) = real("pkhex-avalonia/gen5_white2.sav") else {
         return;
     };

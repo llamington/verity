@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# Headless melonDS harness (PLAN §7). Links the melonDS emulation core (no Qt front end).
+# Headless melonDS harness. Links the melonDS emulation core (no Qt front end).
 #
 #   cmake -S tools/emu-harness -B tools/emu-harness/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   ninja -C tools/emu-harness/build

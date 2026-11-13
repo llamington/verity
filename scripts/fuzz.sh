@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P2 acceptance: run each fuzz target (default 600 s each, in parallel). Needs cargo-fuzz.
+# Run each fuzz target (default 600 s each, in parallel). Needs cargo-fuzz.
 set -euo pipefail
 cd "$(dirname "$0")/../fuzz"
 SECS="${1:-600}"

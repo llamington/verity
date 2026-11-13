@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! Browser bindings for the verity core (PLAN P12).
+//! Browser bindings for the verity core.
 //!
 //! The WASM module holds code only. The page fetches the data blobs it needs
 //! (`data/<name>.bin`) and hands them over with [`attach`]; they stay attached for the page's

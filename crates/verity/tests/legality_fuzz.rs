@@ -1,4 +1,4 @@
-//! P5 fuzz driver: legal generated PK4s built by PKHeX, mutated, re-checked by PKHeX.
+//! Legality fuzz driver: legal generated PK4s built by PKHeX, mutated, re-checked by PKHeX.
 fn root_for_g3() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -362,7 +362,7 @@ fn parity_with(
     parity_with_muts(n, seed, mutations_per, build, &MUTATIONS)
 }
 
-/// M6: PKHeX-generated legal Gen 4 gift PK4s (Wonder Cards and Ranger Manaphy eggs).
+/// PKHeX-generated legal Gen 4 gift PK4s (Wonder Cards and Ranger Manaphy eggs).
 fn build_legal_gifts(n: usize, dir: &Path, seed: u64) {
     oracle(&[
         "gen-gift4".as_ref(),
@@ -560,12 +560,12 @@ fn check_origin3(build: fn(usize, &Path, u64), n: usize, seed: u64, muts: u32) {
 }
 
 #[test]
-fn p5_parity_fuzz_static3() {
+fn parity_fuzz_static3() {
     check_origin3(build_legal_static3, 300, 311, 3);
 }
 
 #[test]
-fn p5_parity_fuzz_trade3() {
+fn parity_fuzz_trade3() {
     check_origin3(build_legal_trade3, 300, 321, 3);
 }
 
@@ -855,7 +855,7 @@ const MUTATIONS_TRANSFER: [&str; 10] = [
 
 #[test]
 #[ignore]
-fn p9_transfer_1e4() {
+fn transfer_1e4() {
     parity_transfer4("wild", build_legal, 10_000, 401, 3);
     parity_transfer4("hgss", build_legal_hgss, 10_000, 402, 3);
     parity_transfer4("gift", build_legal_gifts, 10_000, 403, 3);
@@ -868,47 +868,47 @@ fn p9_transfer_1e4() {
 }
 
 #[test]
-fn p9_transfer3_slot() {
+fn transfer3_slot() {
     parity_transfer4("slot3", build_legal_slot3, 1200, 311, 3);
 }
 
 #[test]
-fn p9_transfer3_static() {
+fn transfer3_static() {
     parity_transfer4("static3", build_legal_static3, 800, 312, 3);
 }
 
 #[test]
-fn p9_transfer3_trade() {
+fn transfer3_trade() {
     parity_transfer4("trade3", build_legal_trade3, 600, 313, 3);
 }
 
 #[test]
-fn p9_transfer3_egg() {
+fn transfer3_egg() {
     parity_transfer4("egg3", build_legal_egg3, 800, 314, 3);
 }
 
 #[test]
-fn p9_transfer3_gift() {
+fn transfer3_gift() {
     parity_transfer4("gift3", build_legal_gift3, 800, 315, 3);
 }
 
 #[test]
-fn p9_transfer4_wild() {
+fn transfer4_wild() {
     parity_transfer4("wild", build_legal, 1200, 301, 3);
 }
 
 #[test]
-fn p9_transfer4_hgss() {
+fn transfer4_hgss() {
     parity_transfer4("hgss", build_legal_hgss, 1200, 302, 3);
 }
 
 #[test]
-fn p9_transfer4_gift() {
+fn transfer4_gift() {
     parity_transfer4("gift", build_legal_gifts, 800, 303, 3);
 }
 
 #[test]
-fn p9_transfer4_egg() {
+fn transfer4_egg() {
     parity_transfer4("egg", build_legal_eggs, 800, 304, 3);
 }
 
@@ -973,7 +973,7 @@ fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
 }
 
 /// Random Gen 5 wild requests: every Pokémon built must be PKHeX-legal.
-fn gen5_wild_legal(n: usize, seed: u64) -> usize {
+fn build_gen5_wild_legal(n: usize, seed: u64) -> usize {
     use verity::generate::build4::Trainer4;
     use verity::generate::wild5::{Request5, generate};
     let ctx = Box::leak(Box::new(context5()));
@@ -1041,20 +1041,20 @@ fn gen5_wild_legal(n: usize, seed: u64) -> usize {
 }
 
 #[test]
-fn p6_gen5_wild_legal() {
+fn gen5_wild_legal() {
     if root().join("data/blobs/names5.bin").exists() {
-        eprintln!("built {}", gen5_wild_legal(400, 77));
+        eprintln!("built {}", build_gen5_wild_legal(400, 77));
     }
 }
 
 #[test]
 #[ignore]
-fn p6_gen5_wild_legal_1e4() {
-    eprintln!("built {}", gen5_wild_legal(10_000, 78));
+fn gen5_wild_legal_1e4() {
+    eprintln!("built {}", build_gen5_wild_legal(10_000, 78));
 }
 
 #[test]
-fn p5_parity_fuzz_gen5() {
+fn parity_fuzz_gen5() {
     for (i, mode) in [
         "slot",
         "static",
@@ -1075,7 +1075,7 @@ fn p5_parity_fuzz_gen5() {
 
 #[test]
 #[ignore]
-fn p5_parity_gen5_1e4() {
+fn parity_gen5_1e4() {
     for (i, mode) in [
         "slot",
         "static",
@@ -1095,7 +1095,7 @@ fn p5_parity_gen5_1e4() {
 }
 
 #[test]
-fn p9_transfer_corpus() {
+fn transfer_corpus() {
     if !root().join("data/blobs/names5.bin").exists() {
         return;
     }
@@ -1139,7 +1139,7 @@ fn p9_transfer_corpus() {
 }
 
 #[test]
-fn p5_parity_corpus_gen5() {
+fn parity_corpus_gen5() {
     if !root().join("data/blobs/names5.bin").exists() {
         return;
     }
@@ -1180,7 +1180,7 @@ fn p5_parity_corpus_gen5() {
 }
 
 #[test]
-fn p6_closest_ivs_legal() {
+fn closest_ivs_legal() {
     if !root().join("data/blobs/enc_dppt.bin").exists() {
         return;
     }
@@ -1191,7 +1191,7 @@ fn p6_closest_ivs_legal() {
 }
 
 #[test]
-fn p5_parity_fuzz_contest() {
+fn parity_fuzz_contest() {
     for (i, b) in CONTEST_BUILDERS.iter().enumerate() {
         check_contest(*b, 200, 500 + i as u64);
     }
@@ -1199,25 +1199,25 @@ fn p5_parity_fuzz_contest() {
 
 #[test]
 #[ignore]
-fn p5_parity_contest_1e4() {
+fn parity_contest_1e4() {
     for (i, b) in CONTEST_BUILDERS.iter().enumerate() {
         check_contest(*b, 10_000, 5000 + i as u64);
     }
 }
 
 #[test]
-fn p5_parity_fuzz_gift3() {
+fn parity_fuzz_gift3() {
     check_origin3(build_legal_gift3, 300, 341, 3);
 }
 
 #[test]
-fn p5_parity_fuzz_egg3() {
+fn parity_fuzz_egg3() {
     check_origin3(build_legal_egg3, 300, 331, 3);
 }
 
 #[test]
 #[ignore]
-fn p5_parity_origin3_1e4() {
+fn parity_origin3_1e4() {
     for (b, seed) in [
         (build_legal_slot3 as fn(usize, &Path, u64), 3001),
         (build_legal_static3, 3002),
@@ -1229,7 +1229,7 @@ fn p5_parity_origin3_1e4() {
 }
 
 #[test]
-fn p5_parity_fuzz_slot3() {
+fn parity_fuzz_slot3() {
     if !root().join("data/blobs/g3_origin.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1247,7 +1247,7 @@ fn p5_parity_fuzz_slot3() {
 
 #[test]
 #[ignore]
-fn p5_parity_report() {
+fn parity_report() {
     let (checked, bad, per_id) = parity(600, 21, 2);
     for b in bad.iter().take(12) {
         eprintln!("{b}");
@@ -1259,7 +1259,7 @@ fn p5_parity_report() {
 }
 
 #[test]
-fn p5_parity_fuzz() {
+fn parity_fuzz() {
     if !root().join("data/blobs/enc_dppt.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1276,7 +1276,7 @@ fn p5_parity_fuzz() {
 }
 
 #[test]
-fn p5_parity_fuzz_hgss() {
+fn parity_fuzz_hgss() {
     if !root().join("data/blobs/enc_hgss.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1313,7 +1313,7 @@ fn build_legal_ranch(n: usize, dir: &Path, seed: u64) {
 }
 
 #[test]
-fn p5_parity_fuzz_ranch() {
+fn parity_fuzz_ranch() {
     if !root().join("data/blobs/gifts4.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1333,7 +1333,7 @@ fn p5_parity_fuzz_ranch() {
 
 #[test]
 #[ignore]
-fn p5_parity_ranch_1e4() {
+fn parity_ranch_1e4() {
     let (checked, bad, per_id) =
         parity_with_muts(10_000, 8181, 4, build_legal_ranch, &GIFT_MUTATIONS);
     for b in bad.iter().take(10) {
@@ -1348,7 +1348,7 @@ fn p5_parity_ranch_1e4() {
 }
 
 #[test]
-fn p5_parity_fuzz_unhatched_eggs() {
+fn parity_fuzz_unhatched_eggs() {
     if !root().join("data/blobs/gifts4.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1366,10 +1366,10 @@ fn p5_parity_fuzz_unhatched_eggs() {
     );
 }
 
-/// M4 scale run: `cargo test --release -- --ignored p5_parity_eggs_1e4`.
+/// Scale run: `cargo test --release -- --ignored parity_eggs_1e4`.
 #[test]
 #[ignore]
-fn p5_parity_eggs_1e4() {
+fn parity_eggs_1e4() {
     let (checked, bad, per_id) =
         parity_with_muts(10_000, 7171, 4, build_legal_eggs, &GIFT_MUTATIONS);
     for b in bad.iter().take(10) {
@@ -1384,7 +1384,7 @@ fn p5_parity_eggs_1e4() {
 }
 
 #[test]
-fn p5_parity_fuzz_gifts() {
+fn parity_fuzz_gifts() {
     if !root().join("data/blobs/gifts4.bin").exists() {
         eprintln!("skipping: build data blobs first");
         return;
@@ -1402,10 +1402,10 @@ fn p5_parity_fuzz_gifts() {
     );
 }
 
-/// M6 scale run: `cargo test --release -- --ignored p5_parity_gifts_1e4`.
+/// Scale run: `cargo test --release -- --ignored parity_gifts_1e4`.
 #[test]
 #[ignore]
-fn p5_parity_gifts_1e4() {
+fn parity_gifts_1e4() {
     let (checked, bad, per_id) =
         parity_with_muts(10_000, 6161, 4, build_legal_gifts, &GIFT_MUTATIONS);
     for b in bad.iter().take(10) {
@@ -1421,7 +1421,7 @@ fn p5_parity_gifts_1e4() {
 
 #[test]
 #[ignore]
-fn p5_parity_hgss_1e4() {
+fn parity_hgss_1e4() {
     let (checked, bad, per_id) = parity_with(10_000, 4242, 4, build_legal_hgss);
     for b in bad.iter().take(10) {
         eprintln!("{b}");
@@ -1434,10 +1434,10 @@ fn p5_parity_hgss_1e4() {
     );
 }
 
-/// PLAN P5 acceptance scale: >= 10^5 fuzzed. `cargo test --release -- --ignored p5_parity_1e5`.
+/// Scale run: >= 10^5 fuzzed. `cargo test --release -- --ignored parity_1e5`.
 #[test]
 #[ignore]
-fn p5_parity_1e5() {
+fn parity_1e5() {
     let mut total = 0;
     for seed in 0..10u64 {
         let (checked, bad, per_id) = parity(10_000, 1000 + seed, 4);
@@ -1455,7 +1455,7 @@ fn p5_parity_1e5() {
 }
 
 #[test]
-fn p5_parity_corpus() {
+fn parity_corpus() {
     if !root().join("data/blobs/enc_dppt.bin").exists() {
         return;
     }
@@ -1557,7 +1557,7 @@ fn p5_parity_corpus() {
     assert!(bad.is_empty(), "{} of {checked} mismatched", bad.len());
 }
 
-/// P6: Pokémon built entirely by verity (generator + builder) are legal per verity and PKHeX.
+/// Pokémon built entirely by verity (generator + builder) are legal per verity and PKHeX.
 fn built_legal(n: usize, seed: u64) -> (usize, usize) {
     use verity::generate::build4::{BuildData, Trainer4, build_wild4};
     let ctx = Box::leak(Box::new(context()));
@@ -1670,7 +1670,7 @@ fn built_legal(n: usize, seed: u64) -> (usize, usize) {
 }
 
 #[test]
-fn p6_built_mons_legal() {
+fn built_mons_legal() {
     if !root().join("data/blobs/enc_dppt.bin").exists() {
         return;
     }
@@ -1680,7 +1680,7 @@ fn p6_built_mons_legal() {
 
 #[test]
 #[ignore]
-fn p6_built_mons_legal_1e4() {
+fn built_mons_legal_1e4() {
     let (n, pkhex) = built_legal(10_000, 4);
     assert_eq!(pkhex, n);
 }

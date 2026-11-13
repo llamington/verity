@@ -1,4 +1,4 @@
-//! P6 acceptance for the D/P/Pt wild request API: random requests (all three games, Unown
+//! The D/P/Pt wild request API: random requests (all three games, Unown
 //! forms, constraint mixes) either fail with a specific error or give a Pokémon that PKHeX
 //! finds legal; generated Pokémon inserted into real saves dump as legal with valid checksums
 //! and correct party stats.
@@ -260,7 +260,7 @@ fn random_requests(n: usize, seed: u64) -> (usize, usize, Vec<(Error, u32)>) {
 }
 
 #[test]
-fn p6_api_random_requests() {
+fn generate_api_random_requests() {
     if !ready() {
         return;
     }
@@ -272,14 +272,14 @@ fn p6_api_random_requests() {
 
 #[test]
 #[ignore]
-fn p6_api_random_requests_1e4() {
+fn generate_api_random_requests_1e4() {
     let (made, unown, errors) = random_requests(16_000, 12);
     eprintln!("made {made}, unown {unown}, errors {errors:?}");
     assert!(made >= 10_000);
 }
 
 #[test]
-fn p6_api_specific_errors() {
+fn generate_api_specific_errors() {
     if !ready() {
         return;
     }
@@ -393,7 +393,7 @@ fn p6_api_specific_errors() {
 
 /// Inserts generated Pokémon into real D/P and Pt saves and checks PKHeX's view of the result.
 #[test]
-fn p6_api_insert_into_saves() {
+fn generate_api_insert_into_saves() {
     if !ready() {
         return;
     }

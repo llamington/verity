@@ -623,7 +623,7 @@ pub fn build_names4(j: &Value) -> Vec<u8> {
     w.finish()
 }
 
-/// M6: the Gen 4 event database (`gifts4.json`, PKHeX `MGDB_G4`) as table 1 of fixed-size
+/// The Gen 4 event database (`gifts4.json`, PKHeX `MGDB_G4`) as table 1 of fixed-size
 /// records: u16 MGDB index, u16 reserved, then the 0x358-byte PCD with its PK4 decrypted.
 /// Only Pokémon gifts are kept (items and other card types cannot match an entity).
 pub fn build_gifts4(j: &Value, manifest: &str, entity: bool) -> Vec<u8> {

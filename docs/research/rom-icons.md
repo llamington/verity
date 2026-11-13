@@ -1,4 +1,4 @@
-# ROM box icons (M8, 2026-11-10)
+# ROM box icons (2026-11-10)
 
 `verity-rom::icons` extracts every box icon from the user's ROM into `/_nds/verity/icons.vicn`
 (about 280 KB for Gen 4, 370 KB for Gen 5; format in `CachedIcons`). The DS keeps the head

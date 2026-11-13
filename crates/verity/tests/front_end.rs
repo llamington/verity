@@ -1,6 +1,6 @@
 //! The entry points both front ends (DS and web) call: `legality::verdict`, `edit` and
 //! `generate::wizard`, on real saves. The generators and the legality analysis themselves are
-//! checked against PKHeX elsewhere (`p5_fuzz`, `p6_*`, `oracle_*`); these tests cover the glue.
+//! checked against PKHeX elsewhere (`legality_fuzz`, `generate_api`, `eggs`, `oracle_*`); these tests cover the glue.
 //! Each test skips without the data blobs (`data/blobs`) or the corpus saves.
 
 use std::fs;

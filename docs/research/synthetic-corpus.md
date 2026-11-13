@@ -26,7 +26,7 @@ Public test saves from other open-source editors' repositories, fetched 2026-10-
 
 Not covered yet: SoulSilver, White, Black 2 (real), Korean saves.
 
-# Data blobs (P3)
+# Data blobs
 
 `scripts/build-data.sh` runs `pkhex-oracle export-data` and `datagen build`, writing
 `data/blobs/` (gitignored): one game blob per save layout (`dp`, `pt`, `hgss`, `bw`, `b2w2`; 57–106 KB),
@@ -41,5 +41,5 @@ Encounters (`pkhex-oracle export-encounters`, read by reflection from PKHeX's in
 gifts and trades use 68-byte templates. Evolutions are in each game blob. Total for all
 blobs: 1.66 MB; one Gen 4 game needs about 260–400 KB (game + moves + encounters + one language).
 
-Deferred: Gen 3 origin data for Pal Park (`g3_origin`, with M4) and the mystery gift database
-(`export-events`, with P8).
+Added later: Gen 3 origin data for Pal Park (`g3_origin`) and the Mystery Gift databases (see
+`events-region.md`).

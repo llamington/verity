@@ -1,7 +1,7 @@
-# UI stack decision (P9.0)
+# UI stack decision
 
-**Decision: C++ front end over the Rust core's C FFI** (the PLAN default). An all-Rust UI is
-rejected under the P9.0 decision rule because the spike hit an unresolved toolchain blocker.
+**Decision: C++ front end over the Rust core's C FFI** (the planned default). An all-Rust UI is
+rejected under the spike's decision rule (Rust only with no unresolved toolchain blockers) because the spike hit an unresolved toolchain blocker.
 
 ## Rust (bindgen over libnds)
 
@@ -17,7 +17,7 @@ Probe (2026-11-01): `bindgen` 0.70 with libclang 14 over `<nds.h>` (BlocksDS 1.2
 
 That shim layer is a maintained second copy of libnds's inline API: an unresolved toolchain
 blocker, so the rule selects C++. Extern (non-inline) functions do bind (`oamSet`, `scanKeys`,
-`touchRead`, `swiWaitForVBlank`), so Rust stays the core and the boundary is the FFI of PLAN P9.2.
+`touchRead`, `swiWaitForVBlank`), so Rust stays the core and the boundary is the C FFI.
 
 ## Libraries
 
@@ -29,7 +29,7 @@ Installed with `wf-pacman -S blocksds-nflib blocksds-ulibrary blocksds-libdsf`.
   NitroFS in its own formats. Useful later for asset loading; the spike uses libnds directly,
   which covers sprites/backgrounds/OAM with no extra layer.
 - **libdsf** renders BMFont fonts into buffers or 3D. Candidate for the proportional fonts of
-  P9.1 (needs an original or OFL-licensed font converted to BMFont format).
+  the front end (needs an original or OFL-licensed font converted to BMFont format).
 
 ## Spike (nds/source/main.cpp)
 
@@ -53,7 +53,7 @@ melonDS runs under X11 (`flatpak run --nosocket=wayland --env=QT_QPA_PLATFORM=xc
 can capture its window and XTest can send keys and touch. `melon.py launch|shot|key|hold|tap|
 drag|quit`; keyboard mapping is melonDS's default (set in the melonDS config). Window at 1x,
 vertical layout. For scripted, headless and deterministic checks use `tools/emu-harness`
-(the spike walk-through was replaced by `scripts/ui-boxes.json` once P9.1 began).
+(the spike walk-through was replaced by `scripts/ui-boxes.json` once front-end work began).
 
 ### melonDS setup for SD access
 

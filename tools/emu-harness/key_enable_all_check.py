@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""P10: "Enable all keys" on a save that has just started.
+"""Checks "Enable all keys" on a save that has just started.
 
 Starts a new game in retail Black 2 and saves in the player's room, enables every key on the DS
 build of verity, then boots the written save in retail Black 2 and picks Challenge Mode. An

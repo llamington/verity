@@ -1,4 +1,4 @@
-//! P8 acceptance for Gen 4 Mystery Gift delivery: every event available to a game is written to
+//! Gen 4 Mystery Gift delivery: every event available to a game is written to
 //! the slots PKHeX reads it from, and duplicates are refused.
 use std::fs;
 use std::path::PathBuf;
@@ -159,13 +159,13 @@ fn verify_against_pkhex(step: usize) {
 }
 
 #[test]
-fn p8_inject_sample_matches_pkhex() {
+fn inject_sample_matches_pkhex() {
     verify_against_pkhex(40);
 }
 
 #[test]
 #[ignore = "runs PKHeX once per event (minutes)"]
-fn p8_inject_every_event_matches_pkhex() {
+fn inject_every_event_matches_pkhex() {
     verify_against_pkhex(1);
 }
 
@@ -188,7 +188,7 @@ fn pick(all: &[Gift4<'static>], kind: SaveKind, n: usize) -> Vec<Gift4<'static>>
 }
 
 #[test]
-fn p8_duplicates_and_full_slots_are_refused() {
+fn duplicates_and_full_slots_are_refused() {
     if !ready() {
         eprintln!("skipping: needs blobs, oracle and corpus");
         return;
@@ -229,7 +229,7 @@ fn p8_duplicates_and_full_slots_are_refused() {
 }
 
 #[test]
-fn p8_pending_slots_full_is_refused() {
+fn pending_slots_full_is_refused() {
     if !ready() {
         eprintln!("skipping: needs blobs, oracle and corpus");
         return;
@@ -246,7 +246,7 @@ fn p8_pending_slots_full_is_refused() {
 }
 
 #[test]
-fn p8_discarded_card_slot_is_reused_but_stays_received() {
+fn discarded_card_slot_is_reused_but_stays_received() {
     if !ready() {
         eprintln!("skipping: needs blobs, oracle and corpus");
         return;
@@ -269,7 +269,7 @@ fn p8_discarded_card_slot_is_reused_but_stays_received() {
 }
 
 #[test]
-fn p8_every_card_stores_a_pending_gift() {
+fn every_card_stores_a_pending_gift() {
     if !ready() {
         eprintln!("skipping: needs blobs, oracle and corpus");
         return;
@@ -284,7 +284,7 @@ fn p8_every_card_stores_a_pending_gift() {
 }
 
 #[test]
-fn p8_received_flags_on_a_genuine_save_block_redelivery() {
+fn received_flags_on_a_genuine_save_block_redelivery() {
     let path = root().join("corpus/real/pkmds-blazor/Pokemon Platinum.sav");
     if !ready() || !path.exists() {
         eprintln!("skipping: needs blobs, oracle and the real save");
@@ -300,7 +300,7 @@ fn p8_received_flags_on_a_genuine_save_block_redelivery() {
 }
 
 #[test]
-fn p8_filter_matches_game_and_language() {
+fn filter_matches_game_and_language() {
     if !ready() {
         eprintln!("skipping: needs blobs, oracle and corpus");
         return;

@@ -1,4 +1,4 @@
-//! P6 acceptance for bred eggs: random requests in every Gen 4 game either fail with a specific
+//! Bred eggs: random requests in every Gen 4 game either fail with a specific
 //! error or give an egg PKHeX finds legal, hatched or not.
 fn root_for_g3() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -201,7 +201,7 @@ fn random_requests(n: usize, seed: u64) -> (usize, usize) {
 }
 
 #[test]
-fn p6_eggs_random_requests() {
+fn eggs_random_requests() {
     if !ready() {
         return;
     }
@@ -212,13 +212,13 @@ fn p6_eggs_random_requests() {
 
 #[test]
 #[ignore]
-fn p6_eggs_random_requests_1e4() {
+fn eggs_random_requests_1e4() {
     let (made, _) = random_requests(30_000, 22);
     assert!(made >= 10_000, "only {made} made");
 }
 
 #[test]
-fn p6_eggs_refuse_what_cannot_be_bred() {
+fn eggs_refuse_what_cannot_be_bred() {
     if !ready() {
         return;
     }
@@ -277,7 +277,7 @@ fn p6_eggs_refuse_what_cannot_be_bred() {
 }
 
 #[test]
-fn p6_eggs_insert_into_real_saves() {
+fn eggs_insert_into_real_saves() {
     let path = root().join("corpus/real/pkmds-blazor/Pokemon Platinum.sav");
     if !ready() || !path.exists() {
         return;

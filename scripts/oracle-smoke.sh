@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P1 acceptance: run sav-info, sav-roundtrip, sav-dump and legality-batch over the corpus.
+# Run sav-info, sav-roundtrip, sav-dump and legality-batch over the corpus.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

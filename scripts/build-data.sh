@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P3: export data from PKHeX and build the blobs the core reads (data/blobs/*.bin).
+# Export data from PKHeX and build the blobs the core reads (data/blobs/*.bin).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"

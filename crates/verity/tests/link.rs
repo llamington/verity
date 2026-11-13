@@ -1,5 +1,5 @@
 //! `memlink::link`, the "Memory Link and keys" screen's entry points (DS and web), on real saves.
-//! The link itself is checked against the games in `p10_memlink` / `p10_keys` and the emulator
+//! The link itself is checked against the games in `memlink` / `keys` and the emulator
 //! runs; these tests cover the glue. Skips without the corpus saves.
 
 use std::fs;

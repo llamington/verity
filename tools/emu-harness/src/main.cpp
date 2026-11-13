@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// verity emu-harness: runs melonDS headless from JSON scripts (PLAN §7). Each script is a test.
+// verity emu-harness: runs melonDS headless from JSON scripts. Each script is a test.
 //
 //   emu-harness script.json [more.json ...] [--out DIR] [--update] [--junit FILE]
 //               [--needles DIR] [--verbose]

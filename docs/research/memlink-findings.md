@@ -1,8 +1,8 @@
-# Memory Link findings (P10)
+# Memory Link findings
 
 `verity::memlink` reproduces the game's Memory Link byte for byte. `memlink_accept.py` records
 genuine links in the harness (Black 2 IREO hosting, White IRAO receiving over DS Download Play), and
-`tests/p10_memlink.rs` compares the whole save: 17 of 17 match. Random seeds are taken from the
+`tests/memlink.rs` compares the whole save: 17 of 17 match. Random seeds are taken from the
 genuine result, since they can't be reproduced.
 
 The 17 cases are 2 real saves, 14 single edits of them (each event flag group, the unlock word, event

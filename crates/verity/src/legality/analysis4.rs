@@ -1,4 +1,4 @@
-//! `LegalityAnalysis` for PK4 in the Gen 4 format, D/P/Pt wild-slot scope (M2). Ported from
+//! `LegalityAnalysis` for PK4 in the Gen 4 format, D/P/Pt wild-slot scope. Ported from
 //! PKHeX `LegalityAnalysis.cs`, `Encounters/Generator/EncounterFinder.cs`,
 //! `Encounters/Verifiers/EncounterVerifier.cs`, `Verifiers/EvolutionVerifier.cs`,
 //! `Restrictions/EvolutionRestrictions.cs` and the verifiers named on each check below.

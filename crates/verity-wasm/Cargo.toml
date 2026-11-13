@@ -1,6 +1,6 @@
 [package]
 name = "verity-wasm"
-description = "Browser bindings for the verity core (P12 web version)"
+description = "Browser bindings for the verity core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

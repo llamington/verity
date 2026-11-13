@@ -212,7 +212,7 @@ mod tests {
         }
     }
 
-    /// PLAN P4 acceptance: 10^6 random inputs. Run with `--release -- --ignored`.
+    /// Scale run: 10^6 random inputs. Run with `--release -- --ignored`.
     #[test]
     #[ignore]
     fn reversal_matches_brute_force_1e6() {

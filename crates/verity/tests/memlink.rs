@@ -1,4 +1,4 @@
-//! P10: `memlink` against real saves, and byte for byte against genuine links recorded by
+//! `memlink` against real saves, and byte for byte against genuine links recorded by
 //! `tools/emu-harness/memlink_accept.py`. Tests skip when those files are absent.
 
 use std::fs;
@@ -38,7 +38,7 @@ fn crc_ok(block: &[u8]) -> bool {
 }
 
 #[test]
-fn p10_apply_writes_only_the_region_with_valid_blocks() {
+fn apply_writes_only_the_region_with_valid_blocks() {
     let Some((black, _, b2)) = saves() else {
         return;
     };
@@ -55,7 +55,7 @@ fn p10_apply_writes_only_the_region_with_valid_blocks() {
 }
 
 #[test]
-fn p10_another_players_data_needs_replace() {
+fn another_players_data_needs_replace() {
     let Some((black, full, b2)) = saves() else {
         return;
     };
@@ -73,7 +73,7 @@ fn p10_another_players_data_needs_replace() {
 }
 
 #[test]
-fn p10_counts_advance_and_existing_data_is_kept_on_relink() {
+fn counts_advance_and_existing_data_is_kept_on_relink() {
     let Some((black, _, b2)) = saves() else {
         return;
     };
@@ -105,7 +105,7 @@ fn p10_counts_advance_and_existing_data_is_kept_on_relink() {
 }
 
 #[test]
-fn p10_rejects_bad_inputs_without_writing() {
+fn rejects_bad_inputs_without_writing() {
     let Some((black, _, b2)) = saves() else {
         return;
     };
@@ -136,7 +136,7 @@ fn p10_rejects_bad_inputs_without_writing() {
 }
 
 #[test]
-fn p10_matches_genuine_links() {
+fn matches_genuine_links() {
     let Ok(cases) = fs::read_dir(root().join("build/emu/memlink-accept")) else {
         return;
     };

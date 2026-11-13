@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""P10's in-game Key System check: retail Black 2's settings screens, on a save with no keys and on
+"""In-game Key System check: retail Black 2's settings screens, on a save with no keys and on
 one that received all five through `memlink::keys::receive`. Locked options must differ on each
 screen. Output goes to build/emu/keys/{blank,receive}.
 """

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""P11 in-game acceptance: a Pokémon added on the DS build survives the retail game.
+"""In-game acceptance: a Pokémon added on the DS build survives the retail game.
 
 For each game whose ROM is present: add a Pokémon with the wizard, stand next to a PC, open the box,
 open the summary, save in-game and dump the save. The dump must still open in verity and PKHeX, and
-the Pokémon must still be legal. Output goes to build/emu/p11; the report to corpus/reports/p11.
+the Pokémon must still be legal. Output goes to build/emu/ingame; the report to corpus/reports/ingame.
 """
 import datetime
 import glob
@@ -17,11 +17,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-OUT = os.path.join(ROOT, "build/emu/p11")
+OUT = os.path.join(ROOT, "build/emu/ingame")
 HARNESS = os.path.join(HERE, "build/emu-harness")
-PLACE = os.path.join(ROOT, "target/release/examples/p11_place")
+PLACE = os.path.join(ROOT, "target/release/examples/ingame_place")
 ORACLE = os.path.join(ROOT, "tools/pkhex-oracle/bin/Release/net9.0/PkhexOracle")
-REPORT = os.path.join(ROOT, "corpus/reports/p11")
+REPORT = os.path.join(ROOT, "corpus/reports/ingame")
 ROMS = os.environ.get("PKDS_ROM_DIR", os.path.join(ROOT, "roms"))
 BIOS = os.environ.get("PKDS_BIOS_DIR", os.path.join(ROOT, "bios"))
 CORPUS = "corpus/real/"
@@ -164,7 +164,7 @@ EXTRAS = [
 
 
 def main():
-    subprocess.check_call(["cargo", "build", "-q", "--release", "-p", "verity", "--example", "p11_place"], cwd=ROOT)
+    subprocess.check_call(["cargo", "build", "-q", "--release", "-p", "verity", "--example", "ingame_place"], cwd=ROOT)
     results = {}
     for game, g in GAMES.items():
         if not os.path.exists(os.path.join(ROMS, g["rom"])):

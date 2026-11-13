@@ -1,4 +1,4 @@
-//! Read-only FFI for the DS front end (P9.2, first slice): data blob registry, box names, slot
+//! Read-only FFI for the DS front end: data blob registry, box names, slot
 //! views and name lookups. Calls take the caller's save buffer; nothing is kept between calls
 //! except the attached data blobs (which the caller keeps alive).
 

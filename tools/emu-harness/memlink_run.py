@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Run a genuine Memory Link with a given BW save: memlink_run.py <bw.sav> <out dir> [b2w2.sav]
 
-Writes the linked B2W2 save to <out dir>/inst0/b2-after.sav. Used for P10's differential runs.
+Writes the linked B2W2 save to <out dir>/inst0/b2-after.sav. Used for Memory Link differential runs.
 """
 import json
 import os

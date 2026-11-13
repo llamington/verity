@@ -685,7 +685,7 @@ pub struct IvProposal {
     pub distance: u32,
 }
 
-/// Closest legal IV spread to `target` (PLAN P4.6): ascending L1 distance, then fewest changed
+/// Closest legal IV spread to `target`: ascending L1 distance, then fewest changed
 /// stats. `budget` caps the number of spreads tested.
 pub fn closest_legal_ivs(
     req: &Request,
