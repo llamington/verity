@@ -1425,17 +1425,18 @@ private:
             ui::text(top(), cx, l.line(), UI_MUTED "ID" UI_MUTED "  %05u / %05u", v.tid, v.sid);
             return;
         }
-        if (v.is_nicknamed && strcmp(nick, sp) != 0)
-            ui::title(top(), "%s  " UI_MUTED "%s", nick, sp);
-        else
-            ui::title(top(), "%s", nick);
         char lv[12];
         snprintf(lv, sizeof(lv), "Lv %u", v.level);
+        ui::title(top(), "%s", "");
         ui::title_right(top(), lv);
-        // The box markings in the title bar, set ones bright.
+        // The box markings in the title bar, set ones bright; the name is cut short of them.
         int mx = 250 - ui::text_width(lv) - 10 - 6 * 9;
         for (int k = 0; k < 6; k++)
             ui::shape(top(), mx + 9 * k, 0, k, v.markings >> k & 1 ? 0 : 1);
+        if (v.is_nicknamed && strcmp(nick, sp) != 0)
+            ui::text_in(top(), 4, mx - 6, 0, "%s  " UI_MUTED "%s", nick, sp);
+        else
+            ui::text_in(top(), 4, mx - 6, 0, "%s", nick);
         ui::panel(top(), 1, 2, 30, 20);
         ui::Lines l(2);
         legality_line(l, v, cx / 8);
@@ -2790,10 +2791,12 @@ private:
         }
         verity_move_stats m;
         uint8_t gen = gen4_ ? 4 : 5;
-        const char* name = ui::name(VERITY_NAME_MOVES, mv);
-        ui::text(top(), kX, y, "%s", name);
+        // The name, then PP and the type pill (or PP alone, beside the type icon) at the right.
+        ui::Row head(top(), row, kX);
+        head.text("%s", ui::name(VERITY_NAME_MOVES, mv));
         if (!core::move_info(gen, mv, &m))
         {
+            head.draw();
             ui::text(top(), kX, y + 16, UI_MUTED "Not in Gen %u games.", gen);
             return;
         }
@@ -2804,18 +2807,11 @@ private:
                      core::type_icon(gen, 1, m.category % 3, ct, cc);
         if (m.type_ != 0xFF)
         {
-            char pp[16];
-            snprintf(pp, sizeof(pp), "%u " UI_MUTED "PP", m.pp);
-            if (icons)
-                ui::text_right(top(), 244, y, "%s", pp);
-            else
-            {
-                const char* type = ui::name(VERITY_NAME_TYPES, m.type_);
-                int start = 30 - (ui::text_width(type) + 15) / 8;
-                ui::text(top(), (start - 1) * 8 - ui::text_width(pp), y, "%s", pp);
-                ui::pill(top(), start, row, ui::type_color(m.type_), type);
-            }
+            head.push_right().text("%u " UI_MUTED "PP", m.pp);
+            if (!icons)
+                head.pill(ui::type_color(m.type_), ui::name(VERITY_NAME_TYPES, m.type_));
         }
+        head.draw();
         if (!m.from_rom)
         {
             ui::text(top(), kX, y + 20, UI_MUTED "A Gen %u ROM on the SD card adds", gen);

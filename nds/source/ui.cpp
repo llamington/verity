@@ -394,8 +394,6 @@ enum Kind : uint8_t
     K_PANEL,
     K_CHIP,
     K_SLOT,
-    K_PILL_DARK,   // a coloured pill under dark text
-    K_PILL_LIGHT,  // a coloured pill under white text
 };
 // Tile numbers in the frame layer.
 enum : uint16_t
@@ -424,10 +422,6 @@ ARM_CODE ITCM_CODE uint8_t ink_for(Surface* c, int x, int y)
     int col = x / 8, row = y / 8;
     uint8_t k = (col >= 0 && col < 32 && row >= 0 && row < 24) ? g_kind[screen_of(c)][row * 32 + col]
                                                                : K_BACK;
-    if (k == K_PILL_DARK)
-        return C_INK;
-    if (k == K_PILL_LIGHT)
-        return C_WHITE;
     bool dark = k == K_PANEL || k == K_CHIP || k == K_SLOT;
     if (g_tint && dark)
         return g_tint;
@@ -679,9 +673,7 @@ int region_group(uint8_t k)
     {
     case K_BAR:
     case K_CHIP: return 1;
-    case K_PANEL:
-    case K_PILL_DARK:
-    case K_PILL_LIGHT: return 2;
+    case K_PANEL: return 2;
     case K_SLOT: return 3;
     default: return 0;
     }
@@ -889,7 +881,7 @@ int pill(Surface* c, int col, int row, uint16_t color, const char* text)
     }
     // White text unless the colour is light (luma on a 0..31 scale).
     int r = color & 31, g = color >> 5 & 31, b = color >> 10 & 31;
-    uint8_t kind = bank && (r * 3 + g * 6 + b) / 10 < 18 ? K_PILL_LIGHT : K_PILL_DARK;
+    uint8_t ink = bank && (r * 3 + g * 6 + b) / 10 < 18 ? C_WHITE : C_INK;
     int w = draw_text(nullptr, 0, 0, text);
     int cells = (w + 8 + 7) / 8;
     int room = region_cells(c, col, row);  // a long pill stops at its panel's edge (its text is cut)
@@ -897,8 +889,9 @@ int pill(Surface* c, int col, int row, uint16_t color, const char* text)
     uint16_t pb = (uint16_t)(bank << 12);
     for (int k = 0; k < cells; k++)
         set_cell(c, col + k, row,
-                 pb | (T_PILL + (cells == 1 ? 3 : k == 0 ? 0 : k == cells - 1 ? 2 : 1)), kind);
-    draw_text(c, col * 8 + (cells * 8 - w) / 2 - 2, row * 8, text);
+                 pb | (T_PILL + (cells == 1 ? 3 : k == 0 ? 0 : k == cells - 1 ? 2 : 1)), K_PANEL);
+    int x = col * 8 + (cells * 8 - w) / 2 - 2, y = row * 8;
+    draw_in(c, x, y, text, -1, region_at(c, first_glyph_x(x, text, -1), y), false, ink);
     return col + cells;
 }
 
@@ -1113,6 +1106,7 @@ Row& Row::add(Kind kind, Badge b, const char* text)
     Item& it = items_[n_++];
     it.kind = kind;
     it.badge = b;
+    it.color = 0;
     it.right = right_;
     snprintf(it.s, sizeof(it.s), "%s", text);
     return *this;
@@ -1140,22 +1134,37 @@ Row& Row::shrink(const char* fmt, ...)
 
 Row& Row::badge(Badge b, const char* text) { return add(BadgeItem, b, text); }
 
+Row& Row::pill(uint16_t color, const char* text)
+{
+    add(PillItem, Badge::Legal, text);
+    items_[n_ - 1].color = color;
+    return *this;
+}
+
 Row& Row::push_right()
 {
     right_ = true;
     return *this;
 }
 
-// Spacing (the rules the screens used by hand): a badge starts on the first whole cell at least
-// 2 px past text before it, text starts 4 px past a badge or text before it, text before a badge
-// on the right ends 4 px short of its cell, and right-hand text ends 8 px inside the panel.
+// Spacing (the rules the screens used by hand): a badge or pill starts on the first whole cell at
+// least 2 px past text before it, text starts 4 px past whatever is before it, text before a badge
+// on the right ends 4 px short of its cell (8 px before a pill), a pill on the right stops a cell
+// short of the panel's edge (a badge reaches it), and text ends 4 px inside the panel.
 void Row::draw()
 {
     int y = row_ * 8;
     int col0 = x_ / 8;
     int end_col = col0 + region_cells(c_, col0, row_);
-    int text_end = end_col * 8 - 8;
-    auto cells = [](const char* s) { return 1 + (measure(s) + 9) / 8; };
+    int text_end = end_col * 8 - 4;
+    auto cells = [](const Item& it) {
+        return it.kind == PillItem ? (measure(it.s) + 15) / 8 : 1 + (measure(it.s) + 9) / 8;
+    };
+    auto put = [&](const Item& it, int col) {
+        return it.kind == PillItem ? ui::pill(c_, col, row_, it.color, it.s)
+                                   : ui::badge(c_, col, row_, it.badge, it.s);
+    };
+    int gap_before = 4;  // between right-hand text and the cell item after it
 
     // The right-hand items, from the edge inwards.
     int right_start = end_col * 8;
@@ -1163,15 +1172,18 @@ void Row::draw()
     for (int i = n_ - 1; i >= 0 && items_[i].right; i--)
     {
         Item& it = items_[i];
-        if (it.kind == BadgeItem)
+        if (it.kind == BadgeItem || it.kind == PillItem)
         {
-            int col = (at_edge ? end_col : (right_start - 4) / 8) - cells(it.s);
-            ui::badge(c_, col, row_, it.badge, it.s);
+            int edge = it.kind == PillItem ? end_col - 1 : end_col;
+            int col = (at_edge ? edge : (right_start - 4) / 8) - cells(it);
+            put(it, col);
             right_start = col * 8;
+            gap_before = it.kind == PillItem ? 8 : 4;
         }
         else
         {
-            int x = (at_edge ? text_end : right_start - 4) - measure(it.s);
+            int x = (at_edge ? text_end : right_start - gap_before) - measure(it.s);
+            gap_before = 4;
             draw_text(c_, x, y, it.s);
             right_start = x;
         }
@@ -1187,10 +1199,11 @@ void Row::draw()
     for (int i = 0; i < n_ && !items_[i].right; i++)
     {
         Item& it = items_[i];
-        if (it.kind == BadgeItem)
+        if (it.kind == BadgeItem || it.kind == PillItem)
         {
-            int col = first ? (x + 7) / 8 : prev == BadgeItem ? x / 8 + 1 : (x + 9) / 8;
-            int end = ui::badge(c_, col, row_, it.badge, it.s);
+            bool after_cells = prev == BadgeItem || prev == PillItem;
+            int col = first ? (x + 7) / 8 : after_cells ? x / 8 + 1 : (x + 9) / 8;
+            int end = put(it, col);
             if (any_right && end * 8 > right_start)
                 fault("crowded", c_, col * 8, y, it.s, end * 8 - right_start);
             x = end * 8;
