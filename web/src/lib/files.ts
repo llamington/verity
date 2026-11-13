@@ -1,16 +1,19 @@
 // Opening and writing save files. Chromium browsers get the File System Access API, so a save
 // is written back to the file it came from; elsewhere saving downloads a new file.
 
-/** The parts of the File System Access API used here (not in TypeScript's DOM types yet). */
-interface PickerWindow {
-	showOpenFilePicker?: (options?: {
-		types?: { description: string; accept: Record<string, string[]> }[];
-		excludeAcceptAllOption?: boolean;
-	}) => Promise<FileSystemFileHandle[]>;
-}
-interface PermissionHandle {
-	queryPermission?: (d: { mode: 'readwrite' }) => Promise<PermissionState>;
-	requestPermission?: (d: { mode: 'readwrite' }) => Promise<PermissionState>;
+// The parts of the File System Access API used here (not in TypeScript's DOM types yet). They
+// are optional because only Chromium browsers have them.
+declare global {
+	interface Window {
+		showOpenFilePicker?: (options?: {
+			types?: { description: string; accept: Record<string, string[]> }[];
+			excludeAcceptAllOption?: boolean;
+		}) => Promise<FileSystemFileHandle[]>;
+	}
+	interface FileSystemHandle {
+		queryPermission?: (d: { mode: 'readwrite' }) => Promise<PermissionState>;
+		requestPermission?: (d: { mode: 'readwrite' }) => Promise<PermissionState>;
+	}
 }
 
 export interface OpenedFile {
@@ -21,12 +24,11 @@ export interface OpenedFile {
 }
 
 export const canWriteInPlace = (): boolean =>
-	typeof window !== 'undefined' &&
-	typeof (window as PickerWindow).showOpenFilePicker === 'function';
+	typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function';
 
 /** Asks for a save with the browser's picker. `undefined` when the user cancels. */
 export async function pickSave(): Promise<OpenedFile | undefined> {
-	const picker = (window as PickerWindow).showOpenFilePicker;
+	const picker = window.showOpenFilePicker;
 	if (!picker) throw new Error('This browser has no file picker with write access.');
 	let handles: FileSystemFileHandle[];
 	try {
@@ -56,9 +58,11 @@ const same = (a: Uint8Array, b: Uint8Array) =>
  * read-back differs (the original is still in memory for a backup download).
  */
 export async function writeInPlace(handle: FileSystemFileHandle, bytes: Uint8Array): Promise<void> {
-	const h = handle as FileSystemFileHandle & PermissionHandle;
-	if (h.queryPermission && (await h.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-		if ((await h.requestPermission?.({ mode: 'readwrite' })) !== 'granted')
+	if (
+		handle.queryPermission &&
+		(await handle.queryPermission({ mode: 'readwrite' })) !== 'granted'
+	) {
+		if ((await handle.requestPermission?.({ mode: 'readwrite' })) !== 'granted')
 			throw new Error('Permission to write the file was refused.');
 	}
 	const w = await handle.createWritable();

@@ -3,6 +3,13 @@ import { existsSync, readFileSync } from 'node:fs';
 
 // Saving end to end: download and reopen, write back in place, the unsaved-changes prompt. What
 // finalize() refuses is tested in crates/verity-wasm/tests/editor.rs. Real saves are gitignored; these tests skip without them.
+declare global {
+	interface Window {
+		/** The in-place test's stand-in file contents, set by its init script. */
+		__stored?: () => Uint8Array;
+	}
+}
+
 const corpus = new URL('../../../../corpus/real/pkhex-avalonia/', import.meta.url).pathname;
 const PT = corpus + 'gen4_platinum.sav';
 const W2 = corpus + 'gen5_white2.sav';
@@ -100,10 +107,7 @@ test('writes back in place through the File System Access API', async ({ page })
 		'Saved to white2.sav and read back intact.'
 	);
 	const changed = await page.evaluate(
-		(orig: number[]) =>
-			(window as unknown as { __stored: () => Uint8Array })
-				.__stored()
-				.some((v, i) => v !== orig[i]),
+		(orig: number[]) => (window.__stored?.() ?? new Uint8Array(orig)).some((v, i) => v !== orig[i]),
 		Array.from(readFileSync(W2))
 	);
 	expect(changed).toBe(true);

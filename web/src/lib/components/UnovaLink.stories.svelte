@@ -39,7 +39,8 @@
 	async function pick(input: HTMLElement, f: File) {
 		const dt = new DataTransfer();
 		dt.items.add(f);
-		(input as HTMLInputElement).files = dt.files;
+		if (!(input instanceof HTMLInputElement)) throw new Error('not a file input');
+		input.files = dt.files;
 		await fireEvent.change(input);
 	}
 
