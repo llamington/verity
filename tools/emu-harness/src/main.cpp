@@ -2,8 +2,11 @@
 //
 // verity emu-harness: runs melonDS headless from JSON scripts (PLAN §7). Each script is a test.
 //
-//   emu-harness script.json [more.json ...] [--out DIR] [--update] [--junit FILE] [--verbose]
+//   emu-harness script.json [more.json ...] [--out DIR] [--update] [--junit FILE]
+//               [--needles DIR] [--verbose]
 //
+// --needles uses DIR for every script's needles (screens that differ by setup, such as with ROM
+// fonts, keep their own set).
 // --update rewrites needles that don't match (and writes missing ones) instead of failing.
 // --junit writes a JUnit XML report, one test case per script.
 //
@@ -44,6 +47,7 @@
 // Needles (after openQA): <name>.png, both screens stacked (256x384, like screenshots), and
 // <name>.json: {"tags": ["editor"], "areas": [{"x": 0, "y": 0, "w": 256, "h": 16}], "match": 1.0}.
 // Areas are in the stacked image (the bottom screen starts at y 192) and default to all of it;
+// "exclude" lists rectangles inside them to ignore (a timing, a clock);
 // "match" is the share of area pixels that must be equal (default 1.0: emulation is
 // deterministic, so exact matches hold). Any needle with the tag can satisfy a step. On a
 // mismatch the harness writes the actual screens and a diff (differing pixels in red) next to the
@@ -107,6 +111,7 @@ namespace {
 struct Options
 {
     bool update = false;
+    std::string needles;  // --needles: overrides every script's "needles"
 };
 Options g_opts;
 
@@ -131,6 +136,7 @@ struct Needle
     std::string name;  // file stem in the needles directory
     std::vector<std::string> tags;
     std::vector<image::Rect> areas;
+    std::vector<image::Rect> exclude;  // ignored inside areas (timings, clocks)
     double match = 1.0;
     image::Image img;
 };
@@ -367,6 +373,9 @@ void load_needles(Ctx& c)
                 n.areas.push_back({(int)a["x"].i(), (int)a["y"].i(), (int)a["w"].i(), (int)a["h"].i()});
         if (n.areas.empty())
             n.areas.push_back(full_screens());
+        if (j.has("exclude"))
+            for (auto& a : j["exclude"].a)
+                n.exclude.push_back({(int)a["x"].i(), (int)a["y"].i(), (int)a["w"].i(), (int)a["h"].i()});
         if (j.has("match"))
             n.match = j["match"].n;
         n.img = image::read_png(join(c.needles_dir, n.name + ".png"));
@@ -388,7 +397,7 @@ Match match_tag(Ctx& c, const image::Image& now, const std::string& tag)
     {
         if (std::find(n.tags.begin(), n.tags.end(), tag) == n.tags.end())
             continue;
-        double s = image::similarity(now, n.img, n.areas);
+        double s = image::similarity(now, n.img, n.areas, n.exclude);
         if (!m.best || s > m.score)
         {
             m.best = &n;
@@ -446,7 +455,7 @@ bool settle_needle(Ctx& c, size_t i, const std::string& tag, const image::Image&
     }
     std::string stem = c.out + "/step" + std::to_string(i) + "-" + needle_file_name(tag);
     image::write_png(now, stem + "-actual.png");
-    image::write_png(image::diff(now, m.best->img, m.best->areas), stem + "-diff.png");
+    image::write_png(image::diff(now, m.best->img, m.best->areas, m.best->exclude), stem + "-diff.png");
     extra += ",\"actual\":\"" + esc(stem + "-actual.png") + "\"";
     return false;
 }
@@ -817,9 +826,9 @@ void setup(Ctx& c, const json::Value& cfg)
         load_state(c, join(c.base, cfg["state"].s));
     if (cfg.has("elf"))
         c.symbols = elf::load_symbols(join(c.base, cfg["elf"].s));
-    if (cfg.has("needles"))
+    if (!g_opts.needles.empty() || cfg.has("needles"))
     {
-        c.needles_dir = join(c.base, cfg["needles"].s);
+        c.needles_dir = !g_opts.needles.empty() ? g_opts.needles : join(c.base, cfg["needles"].s);
         load_needles(c);
     }
 
@@ -1003,6 +1012,8 @@ int main(int argc, char** argv)
             out = argv[++i];
         else if (!strcmp(argv[i], "--junit") && i + 1 < argc)
             junit = argv[++i];
+        else if (!strcmp(argv[i], "--needles") && i + 1 < argc)
+            g_opts.needles = argv[++i];
         else if (!strcmp(argv[i], "--update"))
             g_opts.update = true;
         else if (!strcmp(argv[i], "--verbose"))
@@ -1019,7 +1030,7 @@ int main(int argc, char** argv)
     {
         fprintf(stderr,
                 "usage: emu-harness script.json [more.json ...] [--out DIR] [--update] [--junit FILE] "
-                "[--verbose]\n");
+                "[--needles DIR] [--verbose]\n");
         return 2;
     }
 

@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -95,6 +96,14 @@ void Log(LogLevel level, const char* fmt, ...)
 {
     if (!g_verbose && level < LogLevel::Warn)
         return;
+    // Homebrew isn't a retail cartridge: melonDS warns that it isn't in its ROM list, has an odd
+    // size and no encrypted secure area. Expected, so shown only with --verbose.
+    static const char* const kHomebrew[] = {"ROM entry not found", "bad ROM size",
+                                            "Secure area decryption failed"};
+    if (!g_verbose)
+        for (const char* h : kHomebrew)
+            if (strstr(fmt, h))
+                return;
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
