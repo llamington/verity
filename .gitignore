@@ -44,6 +44,9 @@ tools/emu-harness/build/
 nds/nitrofiles/data/
 __pycache__/
 
+# Local working notes (never committed).
+/notes/
+
 # Root Node tooling (commitlint, husky); the web app is a workspace.
 /node_modules/
 

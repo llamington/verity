@@ -14,8 +14,8 @@ one illegal.
 your save never leaves your device. It also runs on the DS itself (see below).
 
 <p>
-  <img src="web/static/screenshots/summary.png" width="300" alt="A Pokémon's summary with its legality verdict, moves and stats">
-  <img src="web/static/screenshots/edit.png" width="300" alt="The editor in Legal mode">
+  <img src="web/static/screenshots/summary.webp" width="300" alt="A Pokémon's summary with its legality verdict, moves and stats">
+  <img src="web/static/screenshots/edit.webp" width="300" alt="The editor in Legal mode">
 </p>
 
 ## Features
@@ -50,21 +50,7 @@ the card, so no Nintendo assets are shipped.
 
 ## Development
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org) (`feat(web): …`,
-`fix(core): …`, `docs(handoff): …`; the allowed scopes are in `commitlint.config.js`). Run
-`npm install` once at the repo root: it installs the web app (the `web/` workspace) and turns on
-the commit-msg hook (husky). CI checks every pushed commit too. Node is pinned in `.node-version`.
-
-Coverage is local only: `npm run coverage` in `web/` (unit and component tests; report in
-`web/coverage/`) and `cargo coverage` (report in `target/llvm-cov/html/`; needs
-`rustup component add llvm-tools-preview` and `cargo install cargo-llvm-cov`). Build the data blobs
-and keep the corpus saves in place first, or the tests that need them skip.
-
-DS UI tests: `make emu-test` runs the headless emulator harness (`tools/emu-harness`) against
-reference screens; see `docs/research/emu-harness.md`.
-
-Releases: pushing a `v*` tag builds `verity.nds` and publishes it as a GitHub release
-(`.github/workflows/release.yml`).
+Verity is a Rust core with two front ends:
 
 - **`crates/verity`**: the core (Rust `#![no_std] + alloc`, no I/O, works on byte buffers)
 - **`crates/verity-ffi`**: C ABI static library for the DS front end
@@ -74,9 +60,11 @@ Releases: pushing a `v*` tag builds `verity.nds` and publishes it as a GitHub re
 - **`nds/`**: the DS front end (BlocksDS, C++)
 - **`web/`**: the web app (SvelteKit)
 - **`tools/pkhex-oracle/`**: reference oracle built on `PKHeX.Core`
-- **`tools/emu-harness/`**: headless melonDS runner for automated checks
+- **`tools/emu-harness/`**: headless melonDS runner for automated DS checks
 
-See [PLAN.md](PLAN.md) for the plan, specifications and milestones.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, building, tests and commit messages.
+[docs/architecture.md](docs/architecture.md) explains how the parts fit together, and
+[PLAN.md](PLAN.md) holds the original specification and milestones.
 
 ## Credits & Licensing
 

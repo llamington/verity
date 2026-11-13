@@ -1,0 +1,30 @@
+name: Bug report
+description: Something went wrong, or Verity and PKHeX disagree on a Pokémon.
+labels: [bug]
+body:
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options: [Web app, DS app]
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and language
+      placeholder: Platinum (English)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. For a legality disagreement, include what PKHeX says.
+    validations:
+      required: true
+  - type: textarea
+    id: save
+    attributes:
+      label: Save or Pokémon file
+      description: Attach the save (zipped) or the .pk4/.pk5 if you can, or say you can share it privately. Keep a copy of your original.

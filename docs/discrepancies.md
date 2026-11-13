@@ -109,7 +109,7 @@ one way: it refuses corrupt outside blocks, which the game clears and starts aga
 
 ## P10: keys without a partner save
 
-PLAN P10 says to unlock keys only under the game's exchange rules. At the user's request
+PLAN P10 says to unlock keys only under the game's exchange rules. As a deliberate addition
 (2026-11-10), the DS screen also offers "Enable all keys", which needs no partner. It sets only the
 enabled state, so nothing is marked as earned.
 

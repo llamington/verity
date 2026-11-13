@@ -4,7 +4,7 @@
 each holding 66 Pokémon (party + 2 boxes) produced by `EncounterMovesetGenerator` and checked
 Legal by `LegalityAnalysis`.
 
-- PKHeX.Core 25.12.21 (source reference: `~/src/PKHeX` at tag `25.12.21`).
+- PKHeX.Core 25.12.21 (source reference: the PKHeX repository at tag `25.12.21`).
 - Gen 5 uses `BlankSaveFile.Get`.
 - Gen 4 blank saves in PKHeX have no exportable buffer (`SAV4(int gSize, int sSize)` allocates
   only the block buffers), so the oracle builds a 0x80000 buffer itself: 0xFF fill, zeroed

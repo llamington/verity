@@ -1,0 +1,11 @@
+name: Feature request
+description: Something Verity should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you'd like
+      description: What you want to do, and in which games. If PKHeX already does it, say how.
+    validations:
+      required: true

@@ -1,7 +1,7 @@
 # Emulator harness (Phase H)
 
-`tools/emu-harness`: a headless C++ program linking the melonDS 1.1 core (tag `1.1`, cloned at
-`~/src/melonDS`; no Qt front end, no OpenGL, interpreter only). Script format, step types and
+`tools/emu-harness`: a headless C++ program linking the melonDS 1.1 core (tag `1.1`; set `MELONDS_DIR` to a
+local checkout, or CMake fetches it; no Qt front end, no OpenGL, interpreter only). Script format, step types and
 outputs are documented at the top of `src/main.cpp`.
 
 ```sh

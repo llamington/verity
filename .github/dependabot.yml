@@ -1,6 +1,6 @@
 # Weekly dependency update PRs. Minor and patch bumps are grouped into one PR per ecosystem;
 # major bumps get their own PR each, except within the npm families below. Commit messages follow commitlint: "build(deps): ...".
-# Not covered: tools/pkhex-oracle's PKHeX.Core (NuGet), which is pinned to match ~/src/PKHeX,
+# Not covered: tools/pkhex-oracle's PKHeX.Core (NuGet), which is pinned to the PKHeX tag the ports follow,
 # rust-toolchain.toml, and TypeScript majors (ignored below).
 version: 2
 

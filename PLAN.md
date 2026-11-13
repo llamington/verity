@@ -545,7 +545,7 @@ A browser build of the core, after the DS loads its font and graphics from the u
   and `generation-v/black-white`) through a CDN. If a sprite fails to load, show the species name and
   a generic icon.
 - **Risk:** sprites depend on that host staying up and on its copy of Nintendo's art.
-- **Goal (user, 2026-11-10): feature parity with the DS build.** Everything the DS app does, the
+- **Goal (decided 2026-11-10): feature parity with the DS build.** Everything the DS app does, the
   web app does, except what only exists because of DS hardware (ROM font and icon caches, the
   NitroFS/SD file handling, the touch keyboard's charset limits where browser input covers it).
   Parity checklist (DS screens and `verity-ffi` entry points):
@@ -570,11 +570,11 @@ A browser build of the core, after the DS loads its font and graphics from the u
     (done 2026-11-11: Noto Sans JP/KR self-hosted, fetched per unicode-range subset).
   - Save: finalize, verify read-back, write via the File System Access API in Chromium, download
     elsewhere (done).
-- **Event data (user, 2026-11-10):** ship the Mystery Gift blobs (`gifts4/5.bin`,
+- **Event data (decided 2026-11-10):** ship the Mystery Gift blobs (`gifts4/5.bin`,
   `events4/5.bin`) as they are, full cards included, fetched only when the gift or legality
   screens need them. The user judged the legal risk acceptable (most likely outcome is a DMCA
   takedown, not a lawsuit); no stripping of card text.
-- **Stack (user, 2026-11-10):** SvelteKit 3 (static adapter), strict TypeScript, Tailwind v4,
+- **Stack (decided 2026-11-10):** SvelteKit 3 (static adapter), strict TypeScript, Tailwind v4,
   shadcn-svelte, Storybook, Vitest, Playwright; `crates/verity-wasm` (wasm-bindgen + tsify) built
   with wasm-pack; hosted on Cloudflare Workers (static assets), deployed from a GitHub Action. Node via mise,
   pinned in `web/.node-version`.

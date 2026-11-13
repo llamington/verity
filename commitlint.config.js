@@ -18,10 +18,10 @@ export default {
 				'datagen', // crates/datagen and data/
 				'ds', // nds/ (the DS front end)
 				'web', // web/
-				'harness', // tools/emu-harness
+				'harness', // tools/emu-harness and tools/emu
+				'oracle', // tools/pkhex-oracle and scripts/
 				'ci',
 				'deps',
-				'handoff', // docs/research/handoff.md
 				'plan' // PLAN.md
 			]
 		]
