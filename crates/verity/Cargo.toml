@@ -10,9 +10,6 @@ repository.workspace = true
 default = ["std"]
 std = ["alloc"]
 alloc = []
-gen3-origin = []
-gen4 = []
-gen5 = []
 
 [dependencies]
 

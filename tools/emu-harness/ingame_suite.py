@@ -22,8 +22,8 @@ HARNESS = os.path.join(HERE, "build/emu-harness")
 PLACE = os.path.join(ROOT, "target/release/examples/ingame_place")
 ORACLE = os.path.join(ROOT, "tools/pkhex-oracle/bin/Release/net9.0/PkhexOracle")
 REPORT = os.path.join(ROOT, "corpus/reports/ingame")
-ROMS = os.environ.get("PKDS_ROM_DIR", os.path.join(ROOT, "roms"))
-BIOS = os.environ.get("PKDS_BIOS_DIR", os.path.join(ROOT, "bios"))
+ROMS = os.environ.get("VERITY_ROM_DIR", os.path.join(ROOT, "roms"))
+BIOS = os.environ.get("VERITY_BIOS_DIR", os.path.join(ROOT, "bios"))
 CORPUS = "corpus/real/"
 
 

@@ -742,11 +742,6 @@ impl Editor {
         Ok(Editor { save, dirty: false })
     }
 
-    /// The data blob this save's game needs (fetch `data/<name>.bin`).
-    pub fn game_blob(&mut self) -> String {
-        game_id(self.open().kind()).into()
-    }
-
     /// The blobs viewing and saving need: the game's data and its move data (the whole-save
     /// check reads both). Fetch them when the save opens.
     pub fn save_blobs(&mut self) -> Vec<String> {
@@ -818,11 +813,6 @@ impl Editor {
         let (_, pk) = self.pkm(box_index, slot)?;
         let generation = self.open().generation();
         Ok(judge(generation, &pk))
-    }
-
-    /// The game-safe validator over the whole save (needs the game blob and `moves4`/`moves5`).
-    pub fn save_check(&mut self) -> Result<SaveCheck, Invalid> {
-        Ok(self.check_save())
     }
 
     /// What the editor's pickers offer for this save's game.
@@ -1417,12 +1407,6 @@ impl Session {
         })
     }
 
-    /// The data blob this save's game needs (fetch `data/<name>.bin`).
-    #[wasm_bindgen(js_name = gameBlob)]
-    pub fn game_blob(&mut self) -> String {
-        self.editor.game_blob()
-    }
-
     #[wasm_bindgen(js_name = saveBlobs)]
     pub fn save_blobs(&mut self) -> Vec<String> {
         self.editor.save_blobs()
@@ -1451,11 +1435,6 @@ impl Session {
     /// Legality of the Pokémon at `box_index` (-1 for the party) and `slot`.
     pub fn legality(&mut self, box_index: i32, slot: u8) -> Result<Ts<Legality>, JsError> {
         Ok(self.editor.legality(box_index, slot)?.into_ts()?)
-    }
-
-    #[wasm_bindgen(js_name = saveCheck)]
-    pub fn save_check(&mut self) -> Result<Ts<SaveCheck>, JsError> {
-        Ok(self.editor.save_check()?.into_ts()?)
     }
 
     pub fn choices(&mut self) -> Result<Ts<Choices>, JsError> {

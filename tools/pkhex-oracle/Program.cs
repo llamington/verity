@@ -30,7 +30,6 @@ public static class Program
             {
                 "sav-info" => HandleSavInfo(args),
                 "sav-roundtrip" => HandleSavRoundtrip(args),
-                "pkm-decode" => HandlePkmDecode(args),
                 "legality" => HandleLegality(args),
                 "legality-batch" => HandleLegalityBatch(args),
                 "generate-synthetic" => HandleGenerateSynthetic(args),
@@ -67,7 +66,6 @@ public static class Program
         Console.WriteLine("Commands:");
         Console.WriteLine("  sav-info <sav-path>");
         Console.WriteLine("  sav-roundtrip <sav-path> [--out <out-path>]");
-        Console.WriteLine("  pkm-decode <pkm-path>");
         Console.WriteLine("  legality <pkm-path>");
         Console.WriteLine("  legality-batch <dir-path>");
         Console.WriteLine("  generate-synthetic <out-dir>");
@@ -219,49 +217,6 @@ public static class Program
         };
 
         Console.WriteLine(JsonSerializer.Serialize(res, JsonOpts));
-        return 0;
-    }
-
-    private static int HandlePkmDecode(string[] args)
-    {
-        if (args.Length < 2)
-        {
-            Console.Error.WriteLine("Usage: pkm-decode <pkm-path>");
-            return 1;
-        }
-
-        var path = args[1];
-        var data = File.ReadAllBytes(path);
-        var pkm = EntityFormat.GetFromBytes(data);
-        if (pkm == null)
-        {
-            Console.Error.WriteLine("Unrecognized PKM format");
-            return 1;
-        }
-
-        var info = new
-        {
-            species = pkm.Species,
-            species_name = SpeciesName.GetSpeciesNameGeneration(pkm.Species, (int)LanguageID.English, pkm.Format),
-            form = pkm.Form,
-            nickname = pkm.Nickname,
-            level = pkm.CurrentLevel,
-            exp = pkm.EXP,
-            nature = ((Nature)pkm.Nature).ToString(),
-            gender = pkm.Gender == 0 ? "Male" : (pkm.Gender == 1 ? "Female" : "Genderless"),
-            is_shiny = pkm.IsShiny,
-            pid = $"0x{pkm.PID:X8}",
-            checksum_valid = pkm.ChecksumValid,
-            ivs = new { hp = pkm.IV_HP, atk = pkm.IV_ATK, def = pkm.IV_DEF, spa = pkm.IV_SPA, spd = pkm.IV_SPD, spe = pkm.IV_SPE },
-            evs = new { hp = pkm.EV_HP, atk = pkm.EV_ATK, def = pkm.EV_DEF, spa = pkm.EV_SPA, spd = pkm.EV_SPD, spe = pkm.EV_SPE },
-            moves = pkm.Moves,
-            ot_name = pkm.OriginalTrainerName,
-            ot_tid = pkm.TID16,
-            ot_sid = pkm.SID16,
-            format = pkm.Format
-        };
-
-        Console.WriteLine(JsonSerializer.Serialize(info, JsonOpts));
         return 0;
     }
 

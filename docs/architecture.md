@@ -17,8 +17,7 @@ knows saves, Pokémon and PKHeX's legality rules; the front ends only draw scree
 
 ## The core (`crates/verity`)
 
-`#![no_std]` with `alloc`, no I/O: every function takes byte buffers. Features `gen4` and `gen5`
-select the generations. The main modules:
+`#![no_std]` with `alloc`, no I/O: every function takes byte buffers. The main modules:
 
 - `save`: detection of each game's save, partitions, block checksums, slots, trainer, bag, Pokédex,
   event flags. Reads `.sav` and DeSmuME `.dsv`.

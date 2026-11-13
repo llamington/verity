@@ -230,31 +230,12 @@ impl<'a> Save<'a> {
         Ok((self.data[ofs + (i >> 3)] >> (i & 7)) & 1 != 0)
     }
 
-    pub fn set_event_flag(&mut self, i: usize, value: bool) -> Result<(), SaveError> {
-        let (ofs, count, _, _) = self.event_layout();
-        if i >= count {
-            return Err(SaveError::OutOfRange);
-        }
-        let b = &mut self.data[ofs + (i >> 3)];
-        *b = (*b & !(1 << (i & 7))) | (value as u8) << (i & 7);
-        Ok(())
-    }
-
     pub fn event_work(&self, i: usize) -> Result<u16, SaveError> {
         let (_, _, ofs, count) = self.event_layout();
         if i >= count {
             return Err(SaveError::OutOfRange);
         }
         Ok(read_u16(self.data, ofs + 2 * i))
-    }
-
-    pub fn set_event_work(&mut self, i: usize, value: u16) -> Result<(), SaveError> {
-        let (_, _, ofs, count) = self.event_layout();
-        if i >= count {
-            return Err(SaveError::OutOfRange);
-        }
-        write_u16(self.data, ofs + 2 * i, value);
-        Ok(())
     }
 
     pub fn pouches(&self) -> &'static [bag::PouchDef] {
