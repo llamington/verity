@@ -1103,6 +1103,115 @@ void text_in(Surface* c, int x, int x_end, int y, const char* fmt, ...)
     draw_in(c, x, y, buf, -1, clip, true);
 }
 
+Row& Row::add(Kind kind, Badge b, const char* text)
+{
+    if (n_ == (int)(sizeof(items_) / sizeof(items_[0])))
+    {
+        fault("crowded", c_, x_, row_ * 8, text);
+        return *this;
+    }
+    Item& it = items_[n_++];
+    it.kind = kind;
+    it.badge = b;
+    it.right = right_;
+    snprintf(it.s, sizeof(it.s), "%s", text);
+    return *this;
+}
+
+Row& Row::text(const char* fmt, ...)
+{
+    char buf[sizeof(Item::s)];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    return add(Text, Badge::Legal, buf);
+}
+
+Row& Row::shrink(const char* fmt, ...)
+{
+    char buf[sizeof(Item::s)];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    return add(right_ ? Text : Shrink, Badge::Legal, buf);
+}
+
+Row& Row::badge(Badge b, const char* text) { return add(BadgeItem, b, text); }
+
+Row& Row::push_right()
+{
+    right_ = true;
+    return *this;
+}
+
+// Spacing (the rules the screens used by hand): a badge starts on the first whole cell at least
+// 2 px past text before it, text starts 4 px past a badge or text before it, text before a badge
+// on the right ends 4 px short of its cell, and right-hand text ends 8 px inside the panel.
+void Row::draw()
+{
+    int y = row_ * 8;
+    int col0 = x_ / 8;
+    int end_col = col0 + region_cells(c_, col0, row_);
+    int text_end = end_col * 8 - 8;
+    auto cells = [](const char* s) { return 1 + (measure(s) + 9) / 8; };
+
+    // The right-hand items, from the edge inwards.
+    int right_start = end_col * 8;
+    bool at_edge = true;
+    for (int i = n_ - 1; i >= 0 && items_[i].right; i--)
+    {
+        Item& it = items_[i];
+        if (it.kind == BadgeItem)
+        {
+            int col = (at_edge ? end_col : (right_start - 4) / 8) - cells(it.s);
+            ui::badge(c_, col, row_, it.badge, it.s);
+            right_start = col * 8;
+        }
+        else
+        {
+            int x = (at_edge ? text_end : right_start - 4) - measure(it.s);
+            draw_text(c_, x, y, it.s);
+            right_start = x;
+        }
+        at_edge = false;
+    }
+    bool any_right = !at_edge;
+    int limit = any_right ? right_start - 4 : text_end;
+
+    // The left-hand items, in order.
+    int x = x_;
+    Kind prev = Shrink;  // stands for "nothing yet"
+    bool first = true;
+    for (int i = 0; i < n_ && !items_[i].right; i++)
+    {
+        Item& it = items_[i];
+        if (it.kind == BadgeItem)
+        {
+            int col = first ? (x + 7) / 8 : prev == BadgeItem ? x / 8 + 1 : (x + 9) / 8;
+            int end = ui::badge(c_, col, row_, it.badge, it.s);
+            if (any_right && end * 8 > right_start)
+                fault("crowded", c_, col * 8, y, it.s, end * 8 - right_start);
+            x = end * 8;
+        }
+        else
+        {
+            if (!first)
+                x += 4;
+            if (it.kind == Shrink && x + measure(it.s) > limit)
+                fit(it.s, limit - x);
+            int w = measure(it.s);
+            if (x + w > limit)
+                fault("crowded", c_, x, y, it.s, x + w - limit);
+            draw_text(c_, x, y, it.s);
+            x += w;
+        }
+        prev = it.kind;
+        first = false;
+    }
+}
+
 int Lines::line()
 {
     if (pending_gap)
