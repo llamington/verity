@@ -1,9 +1,10 @@
-// P11 smoke test: retail Platinum loads the save that ui-add.json wrote (run after it).
+// P11 smoke test: retail Platinum loads the save that ui-add.json wrote (run after it by
+// make emu-test, which keeps each script's SD card in build/emu/tests/<script>/sd).
 // Needs owner-dumped roms/platinum.nds and bios/.
 {
   "rom": "../../../roms/platinum.nds",
   "bios_dir": "../../../bios",
-  "save": "../../../build/emu/sd/saves/Pokemon Platinum.sav",
+  "save": "../../../build/emu/tests/ui-add/sd/saves/Pokemon Platinum.sav",
   "steps": [
     {"wait": 1500}, {"press": ["Start"], "frames": 2}, {"wait": 120},
     {"press": ["A"], "frames": 2}, {"wait": 150},

@@ -46,3 +46,6 @@ __pycache__/
 
 # Root Node tooling (commitlint, husky); the web app is a workspace.
 /node_modules/
+
+# Needles of screens drawn with ROM fonts and icons (make emu-font): never committed.
+tools/emu-harness/needles-local/
