@@ -2983,12 +2983,9 @@ private:
             return;
         }
         const verity_legality_report& r = report_;
-        // Badges sit on whole cells: start each one a cell past its measured label.
-        auto label = [&](int x, const char* t) {
-            ui::text(top(), x, y, UI_MUTED "%s", t);
-            return (x + ui::text_width(t) + 9) / 8;  // the badge's dot cell adds its own gap
-        };
-        int bc = label(kX, "Legality");
+        // The verdict badge needs no label (as on the summary). A "Legality" label left too little
+        // room: ILLEGAL's cells ran into "Game-safe", turning its first letter red.
+        int bc = 2;
         if (r.status == 1)
             ui::badge(top(), bc, kEdit + 2, ui::Badge::Legal, "LEGAL");
         else if (r.status == 2)
