@@ -76,7 +76,8 @@ sw.addEventListener('fetch', (event) => {
 		event.respondWith(cacheFirst(request, SPRITES));
 		return;
 	}
-	if (url.origin !== sw.location.origin) return;
+	// Cloudflare's own endpoints (the analytics country lookup) mustn't be answered from cache.
+	if (url.origin !== sw.location.origin || url.pathname.startsWith('/cdn-cgi/')) return;
 
 	if (precached.has(url.pathname)) {
 		event.respondWith(cacheFirst(request, PRECACHE));

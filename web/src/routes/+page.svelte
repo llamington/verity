@@ -10,6 +10,9 @@
 	import OpenSaveButton from '#lib/components/OpenSaveButton.svelte';
 	import BallMark from '#lib/components/BallMark.svelte';
 	import Logo from '#lib/components/Logo.svelte';
+	import { onMount } from 'svelte';
+	import { analyticsAvailable, consent } from '#lib/analytics.svelte.js';
+	import { SITE } from '#lib/site.js';
 	import { gameGradient, typeSwatch } from '#lib/theme.js';
 
 	const FEATURES = [
@@ -73,8 +76,11 @@
 		{ id: 'bw', name: 'Black · White' },
 		{ id: 'b2w2', name: 'Black 2 · White 2' }
 	];
-	// The live site, for the absolute URLs that link previews and search engines want.
-	const SITE = 'https://verity.llamington.workers.dev';
+	// The footer offers to change the analytics choice where analytics can run.
+	let showAnalyticsLink = $state(false);
+	onMount(() => {
+		showAnalyticsLink = analyticsAvailable();
+	});
 	const TITLE = 'Verity: Pokémon Gen 4 and 5 save editor';
 	const DESCRIPTION =
 		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. Runs in your browser; your save never leaves your device.';
@@ -275,6 +281,14 @@
 		<p>
 			Verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The
 			Pokémon Company. Pokémon and its names are trademarks of their respective owners.
+		</p>
+		<p>
+			Verity counts visits with Google Analytics; nothing about your save is ever sent.
+			{#if showAnalyticsLink}
+				<button type="button" class="underline" onclick={() => (consent.open = true)}
+					>Analytics settings</button
+				>
+			{/if}
 		</p>
 	</footer>
 </main>
