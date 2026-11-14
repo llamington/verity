@@ -125,6 +125,8 @@
 	<title>{TITLE}</title>
 	<meta name="description" content={DESCRIPTION} />
 	<link rel="canonical" href="{SITE}/" />
+	<!-- Proves ownership to Google Search Console; removing it unverifies the site. -->
+	<meta name="google-site-verification" content="xClRNn2-B-PGWhO-WMBLrWZ0TXkukLB2iYBQ-Wm4WsQ" />
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Verity" />
 	<meta property="og:url" content="{SITE}/" />
