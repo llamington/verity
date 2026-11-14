@@ -110,8 +110,8 @@
 	// The closing tag is escaped so neither this script block nor the parser sees one; `<` is escaped so
 	// the JSON can never end the tag either.
 	const JSON_LD_TAG = `<script type="application/ld+json">${JSON_LD.replaceAll('<', '\\u003c')}<\u002fscript>`;
-	/** WebP sources for a screenshot captured at 2x; `width` is its CSS width. */
-	function shot(name: 'summary' | 'edit' | 'gifts', width: number) {
+	/** WebP sources for a screenshot (or DS photo) stored at 2x; `width` is its CSS width. */
+	function shot(name: 'summary' | 'edit' | 'gifts' | 'ds-summary' | 'ds-gifts', width: number) {
 		const x1 = asset(`screenshots/${name}-1x.webp`);
 		const x2 = asset(`screenshots/${name}.webp`);
 		return { src: x2, srcset: `${x1} ${String(width)}w, ${x2} ${String(width * 2)}w` };
@@ -275,6 +275,36 @@
 			version. It edits the saves on your SD card directly, checks each save reads back intact after
 			writing it, and keeps your last three versions beside it as .bak1 to .bak3.
 		</p>
+		<div class="grid gap-4 sm:grid-cols-2 sm:items-start">
+			<figure class="flex flex-col gap-2">
+				<img
+					{...shot('ds-summary', 360)}
+					sizes={HALF}
+					width="360"
+					height="372"
+					loading="lazy"
+					class={SHOT_CLASS}
+					alt="A DSi XL running Verity: a Magmar's summary with a Legal verdict on the top screen, and a box of Pokémon on the touch screen."
+				/>
+				<figcaption class="text-sm text-muted-foreground">
+					The same legality verdict, on a real DSi XL.
+				</figcaption>
+			</figure>
+			<figure class="flex flex-col gap-2">
+				<img
+					{...shot('ds-gifts', 360)}
+					sizes={HALF}
+					width="360"
+					height="372"
+					loading="lazy"
+					class={SHOT_CLASS}
+					alt="A DSi XL running Verity: the Mystery Gift list, with Ash's Pikachu ready to collect from the deliveryman."
+				/>
+				<figcaption class="text-sm text-muted-foreground">
+					Mystery Gifts delivered straight to the save on your card.
+				</figcaption>
+			</figure>
+		</div>
 		<ol class="grid gap-4 sm:grid-cols-3">
 			{#each DS_STEPS as step, i (step)}
 				<li class="flex flex-col gap-1 rounded-2xl border-2 bg-card p-4 shadow-sm">
