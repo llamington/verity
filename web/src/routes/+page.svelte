@@ -6,13 +6,15 @@
 	import Gift from '@lucide/svelte/icons/gift';
 	import Backpack from '@lucide/svelte/icons/backpack';
 	import KeyRound from '@lucide/svelte/icons/key-round';
+	import Download from '@lucide/svelte/icons/download';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { goto } from '$app/navigation';
 	import OpenSaveButton from '#lib/components/OpenSaveButton.svelte';
 	import BallMark from '#lib/components/BallMark.svelte';
 	import Logo from '#lib/components/Logo.svelte';
 	import { onMount } from 'svelte';
 	import { analyticsAvailable, consent } from '#lib/analytics.svelte.js';
-	import { REPO, SITE } from '#lib/site.js';
+	import { DS_DOWNLOAD, RELEASES, REPO, SITE } from '#lib/site.js';
 	import { gameGradient, typeSwatch } from '#lib/theme.js';
 
 	const FEATURES = [
@@ -69,6 +71,11 @@
 			text: 'Copy the save off the cartridge with Checkpoint on a 3DS or GodMode9i on a DSi, and restore the edited save with the same tool.'
 		}
 	];
+	const DS_STEPS = [
+		'Download verity.nds and copy it to your SD card.',
+		'Open it from TWiLight Menu++ or a flashcart, or load it in melonDS.',
+		'Pick a save from the card. On first boot Verity builds its fonts and sprites from a Gen 4 or 5 game it finds there, so no Nintendo assets ship with it.'
+	];
 	const GAMES = [
 		{ id: 'dp', name: 'Diamond · Pearl' },
 		{ id: 'pt', name: 'Platinum' },
@@ -83,7 +90,7 @@
 	});
 	const TITLE = 'Verity: Pokémon Gen 4 and 5 save editor';
 	const DESCRIPTION =
-		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. A PKHeX alternative that runs in your browser, even offline; your save never leaves your device.';
+		'A legality-aware save editor for Pokémon Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White, Black 2 and White 2. A PKHeX alternative that runs in your browser, even offline, or on the DS itself; your save never leaves your device.';
 	const JSON_LD = JSON.stringify({
 		'@context': 'https://schema.org',
 		'@type': 'WebApplication',
@@ -91,8 +98,9 @@
 		url: `${SITE}/`,
 		description: DESCRIPTION,
 		applicationCategory: 'UtilitiesApplication',
-		operatingSystem: 'Any (runs in the browser)',
+		operatingSystem: 'Any (runs in the browser), Nintendo DS',
 		browserRequirements: 'Requires JavaScript and WebAssembly',
+		downloadUrl: DS_DOWNLOAD,
 		isAccessibleForFree: true,
 		license: 'https://www.gnu.org/licenses/gpl-3.0.html',
 		offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
@@ -151,7 +159,7 @@
 		</p>
 		<p>
 			An alternative to PKHeX that uses the same legality rules and runs entirely in your browser,
-			even offline once it has loaded. Your save file never leaves your device.
+			even offline once it has loaded, or on the DS itself. Your save file never leaves your device.
 		</p>
 		<div class="flex flex-wrap items-center gap-x-6 gap-y-3">
 			<!-- Picks the save here, then opens the editor with it loaded. -->
@@ -163,6 +171,7 @@
 				class="font-pixel text-base shadow-[0_4px_0_var(--ball-band)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-none"
 				>Open a save <span aria-hidden="true">▶</span></OpenSaveButton
 			>
+			<a class="font-semibold underline underline-offset-4" href="#ds">Run it on a DS</a>
 			<a
 				class="font-semibold underline underline-offset-4"
 				href="https://github.com/llamington/verity">View source on GitHub</a
@@ -259,10 +268,35 @@
 		</ul>
 	</section>
 
+	<section aria-labelledby="ds" class="flex scroll-mt-6 flex-col gap-4">
+		<h2 id="ds" class="font-pixel text-2xl font-bold">On your DS</h2>
+		<p class="text-sm text-muted-foreground">
+			Verity also runs as DS homebrew, with the same legality checks and features as the browser
+			version. It edits the saves on your SD card directly, checks each save reads back intact after
+			writing it, and keeps your last three versions beside it as .bak1 to .bak3.
+		</p>
+		<ol class="grid gap-4 sm:grid-cols-3">
+			{#each DS_STEPS as step, i (step)}
+				<li class="flex flex-col gap-1 rounded-2xl border-2 bg-card p-4 shadow-sm">
+					<span class="font-pixel font-bold">Step {i + 1}</span>
+					<p class="text-sm text-muted-foreground">{step}</p>
+				</li>
+			{/each}
+		</ol>
+		<div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+			<Button href={DS_DOWNLOAD} class="font-pixel"
+				><Download aria-hidden="true" />Download verity.nds</Button
+			>
+			<a class="text-sm underline underline-offset-4" rel="external" href={RELEASES}
+				>About this release</a
+			>
+		</div>
+	</section>
+
 	<section aria-labelledby="saves" class="flex flex-col gap-4">
 		<h2 id="saves" class="font-pixel text-2xl font-bold">Getting your save</h2>
 		<p class="text-sm text-muted-foreground">
-			Verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
+			In the browser, Verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
 		</p>
 		<ul class="grid gap-4 sm:grid-cols-3">
 			{#each SOURCES as s (s.title)}

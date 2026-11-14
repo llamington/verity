@@ -9,6 +9,10 @@ test('the landing page introduces verity and opens a save in the editor', async 
 		'https://github.com/kwsch/PKHeX'
 	);
 	await expect(page.getByRole('img', { name: /legality verdict/ })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Download verity.nds' })).toHaveAttribute(
+		'href',
+		'https://github.com/llamington/verity/releases/latest/download/verity.nds'
+	);
 
 	// The save is picked on the landing page and opens in the editor (this one isn't a save).
 	await page.getByTestId('landing-file').setInputFiles({
