@@ -150,12 +150,16 @@
 		class="pointer-events-none absolute -top-24 -right-28 text-white opacity-15"
 	/>
 	<div class="relative mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-16 pb-14">
-		<h1 class="flex items-center gap-3 font-pixel text-5xl font-bold tracking-wide drop-shadow">
-			<Logo size={48} tile class="animate-[wobble_3s_ease-in-out_infinite]" />verity
+		<!-- The subtitle sits in the h1 so the main heading names what Verity is, not just the brand. -->
+		<h1 class="flex flex-col gap-3">
+			<span class="flex items-center gap-3 font-pixel text-5xl font-bold tracking-wide drop-shadow">
+				<Logo size={48} tile class="animate-[wobble_3s_ease-in-out_infinite]" />verity
+			</span><span class="sr-only">: </span>
+			<span class="text-2xl font-bold">Pokémon Gen 4 &amp; 5 save editor</span>
 		</h1>
 		<p class="max-w-xl text-lg font-semibold">
-			A legality-aware save editor for the Gen 4 and Gen 5 games: Diamond, Pearl, Platinum,
-			HeartGold, SoulSilver, Black, White, Black 2 and White 2.
+			Legality-aware editing for Diamond, Pearl, Platinum, HeartGold, SoulSilver, Black, White,
+			Black 2 and White 2.
 		</p>
 		<p>
 			An alternative to PKHeX that uses the same legality rules and runs entirely in your browser,

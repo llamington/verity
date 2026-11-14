@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test';
 
 test('the landing page introduces verity and opens a save in the editor', async ({ page }) => {
 	await page.goto('/');
-	await expect(page.getByRole('heading', { level: 1 })).toHaveText('verity');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+		'verity: Pokémon Gen 4 & 5 save editor'
+	);
 	await expect(page.getByRole('heading', { name: 'What it does' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'PKHeX' })).toHaveAttribute(
 		'href',
