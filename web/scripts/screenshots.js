@@ -3,8 +3,7 @@
 //   npm run build && npx vite preview --port 4173 &
 //   npm run screenshots
 //
-// Sprites and item icons are blocked, so the images hold no Nintendo art (the app shows its
-// placeholder instead): the repo ships none.
+// Sprites and item icons load from the network as in the app, so it must be online.
 import { writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
@@ -13,11 +12,23 @@ const CORPUS = new URL('../../corpus/real/pkhex-avalonia/', import.meta.url).pat
 const OUT = new URL('../static/screenshots/', import.meta.url).pathname;
 
 /**
- * Waits for running animations (the sheet sliding in) to end or be cancelled.
+ * Waits for running animations (the sheet sliding in) to end or be cancelled, and for the
+ * images on screen (sprites, item icons) to load or fail. Lazy images off screen never load, so
+ * they're left out.
  * @param {import('playwright').Page} page
  */
 async function settled(page) {
 	await page.evaluate(() => Promise.allSettled(document.getAnimations().map((a) => a.finished)));
+	await page.evaluate(() =>
+		Promise.allSettled(
+			[...document.images]
+				.filter((img) => {
+					const r = img.getBoundingClientRect();
+					return r.bottom > 0 && r.top < innerHeight && r.width > 0;
+				})
+				.map((img) => img.decode())
+		)
+	);
 }
 
 /**
@@ -73,7 +84,7 @@ async function webp(page, png, scale) {
 }
 
 const browser = await chromium.launch();
-// The service worker would serve cached sprites past the route block.
+// No service worker, so every run fetches the same pinned sprites rather than a cached mix.
 const context = await browser.newContext({
 	viewport: { width: 1280, height: 1000 },
 	deviceScaleFactor: 2,
@@ -81,7 +92,6 @@ const context = await browser.newContext({
 	serviceWorkers: 'block'
 });
 const page = await context.newPage();
-await page.route('**/gh/PokeAPI/sprites@*/**', (route) => route.abort());
 
 await page.goto(`${BASE}/app`);
 await page.getByTestId('file').setInputFiles(CORPUS + 'gen4_platinum.sav');
