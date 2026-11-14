@@ -245,9 +245,6 @@
 				Mystery Gifts for your save's game and language, ready to deliver.
 			</figcaption>
 		</figure>
-		<p class="text-xs text-muted-foreground">
-			The app shows Pokémon sprites; they're left out of these pictures.
-		</p>
 	</section>
 
 	<section aria-labelledby="features" class="flex flex-col gap-4">

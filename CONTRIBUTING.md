@@ -71,8 +71,9 @@ Coverage is local only: `cargo coverage` (needs `cargo-llvm-cov`) and `npm run c
 - **The core stays `no_std`**, does no I/O and works on byte buffers, so the DS and the web share it.
 - **TypeScript stays strict.** No `any`, no `as` type assertions (`as const` is fine), and no
   `@ts-ignore`. Narrow with a check instead; the lint config enforces this.
-- **No Nintendo assets in the repo or a release.** The DS reads fonts and graphics from the
-  user's own ROM at runtime, and the web app hotlinks sprites.
+- **No Nintendo assets in the code or a release.** The DS reads fonts and graphics from the
+  user's own ROM at runtime, and the web app hotlinks sprites. Screenshots and photos may show
+  them.
 
 ## Commits and pull requests
 

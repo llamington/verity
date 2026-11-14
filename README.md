@@ -73,3 +73,5 @@ rules they follow.
 - Memory Link research and references adapted from [BW_tool](https://github.com/suloku/BW_tool) (suloku).
 - Verity is a fan project, not affiliated with or endorsed by Nintendo, Game Freak or The Pokémon
   Company.
+- Screenshots and photos show Pokémon artwork © Nintendo, Game Freak and The Pokémon Company. That
+  artwork isn't covered by the GPLv3, and none of it ships with Verity.
