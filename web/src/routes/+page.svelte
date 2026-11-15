@@ -276,7 +276,8 @@
 		<p class="text-sm text-muted-foreground">
 			Verity also runs as DS homebrew, with the same legality checks and features as the browser
 			version. It edits the saves on your SD card directly, checks each save reads back intact after
-			writing it, and keeps your last three versions beside it as .bak1 to .bak3.
+			writing it, and keeps the previous three versions beside it as .bak1 (the newest) to .bak3. To
+			restore one, rename it back to the save's name.
 		</p>
 		<div class="grid gap-4 sm:grid-cols-2 sm:items-start">
 			<figure class="flex flex-col gap-2">
