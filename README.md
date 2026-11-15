@@ -48,6 +48,9 @@ copy it to your SD card and open it from TWiLight Menu++ or a flashcart. It edit
 SD card directly. On first boot it builds its fonts and sprites from a Gen 4 or 5 game it finds on
 the card, so no Nintendo assets are shipped.
 
+Each time it saves, it keeps the previous three versions beside the save as `.bak1` (the newest)
+to `.bak3`. To restore one, rename it back to the save's name.
+
 ## Development
 
 Verity is a Rust core with two front ends:
