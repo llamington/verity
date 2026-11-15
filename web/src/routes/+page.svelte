@@ -154,7 +154,7 @@
 	<div class="relative mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-16 pb-14">
 		<!-- The subtitle sits in the h1 so the main heading names what Verity is, not just the brand. -->
 		<h1 class="flex flex-col gap-3">
-			<span class="flex items-center gap-3 font-pixel text-5xl font-bold tracking-wide drop-shadow">
+			<span class="flex items-center gap-3 font-pixel text-5xl font-bold tracking-wide">
 				<Logo size={48} tile class="animate-[wobble_3s_ease-in-out_infinite]" />verity
 			</span><span class="sr-only">: </span>
 			<span class="text-2xl font-bold">Pokémon Gen 4 &amp; 5 save editor</span>
