@@ -1,0 +1,25 @@
+[package]
+name = "verity-ds"
+description = "The DS front end"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+test = false
+doctest = false
+bench = false
+
+# On a host the crate is empty: only the DS build has BlocksDS.
+[target.'cfg(target_os = "none")'.dependencies]
+blocksds = { path = "../../../blocksds-rs/crates/blocksds" }
+verity-ffi = { path = "../verity-ffi", default-features = false, features = ["alloc", "picolibc-allocator"] }
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

@@ -12,7 +12,7 @@ most useful contribution of all; see [Reporting bugs](#reporting-bugs).
 | .NET 9 SDK | data blobs, oracle tests | `tools/pkhex-oracle` pulls `PKHeX.Core` from NuGet. |
 | Node (version in `.node-version`) | web app, commit hook | Run `npm install` at the repo root. |
 | `wasm-pack`, `wasm32-unknown-unknown` target | web app | `cargo install wasm-pack`, `rustup target add wasm32-unknown-unknown`. |
-| [BlocksDS](https://blocksds.skylyrac.net) | DS build | Set `BLOCKSDS` if it isn't at `/opt/blocksds/core`. |
+| [BlocksDS](https://blocksds.skylyrac.net), libclang | DS build | Set `BLOCKSDS` if it isn't at `/opt/blocksds/core`. The front end's [blocksds-rs](https://github.com/llamington/blocksds-rs) crates are expected beside this repo (`../blocksds-rs`). |
 | CMake, a C++17 compiler, Python 3 | DS UI tests | CMake fetches melonDS 1.1 unless `MELONDS_DIR` points at a checkout. |
 
 Then build the data blobs once. They come from PKHeX and are gitignored:
@@ -26,7 +26,7 @@ scripts/build-data.sh      # data/blobs/*.bin (set DOTNET_ROOT if dotnet isn't o
 
 ```sh
 cargo build --workspace    # core, bindings, tools
-cargo build-ds             # the core as an ARM9 static library
+cargo build-ds             # the DS front end as an ARM9 static library
 make nds                   # nds/verity.nds (needs BlocksDS)
 cd web && npm run dev      # the web app on localhost (builds the WASM first)
 ```

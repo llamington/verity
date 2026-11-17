@@ -12,11 +12,11 @@ export default {
 			'always',
 			[
 				'core', // crates/verity
-				'ffi', // crates/verity-ffi (the DS's C ABI)
+				'ffi', // crates/verity-ffi (the core's C ABI)
 				'wasm', // crates/verity-wasm
 				'rom', // crates/verity-rom
 				'datagen', // crates/datagen and data/
-				'ds', // nds/ (the DS front end)
+				'ds', // crates/verity-ds and nds/ (the DS front end)
 				'web', // web/
 				'harness', // tools/emu-harness and tools/emu
 				'oracle', // tools/pkhex-oracle and scripts/

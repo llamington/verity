@@ -1,5 +1,11 @@
 # UI stack decision
 
+> **Superseded (2026-11-16):** the front end is now Rust (`crates/verity-ds`). The blocker below,
+> a hand-kept copy of libnds's inline API, is handled by blocksds-sys: its hand-written bindings
+> are checked against the installed headers at build time (constants, layouts, signatures and a
+> fingerprint of each inline body), so the copy can't silently drift. The rest of this note is the
+> original decision.
+
 **Decision: C++ front end over the Rust core's C FFI** (the planned default). An all-Rust UI is
 rejected under the spike's decision rule (Rust only with no unresolved toolchain blockers) because the spike hit an unresolved toolchain blocker.
 

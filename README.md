@@ -56,11 +56,12 @@ to `.bak3`. To restore one, rename it back to the save's name.
 Verity is a Rust core with two front ends:
 
 - **`crates/verity`**: the core (Rust `#![no_std] + alloc`, no I/O, works on byte buffers)
-- **`crates/verity-ffi`**: C ABI static library for the DS front end
+- **`crates/verity-ffi`**: the core's C ABI, which the DS front end calls
+- **`crates/verity-ds`**: the DS front end (Rust, on BlocksDS through [blocksds](https://github.com/llamington/blocksds-rs))
 - **`crates/verity-wasm`**: browser bindings for the web app
 - **`crates/verity-rom`**: reads fonts and graphics from the user's own ROM on the DS
 - **`crates/datagen`**: compiles the oracle's exports into compact binary data blobs
-- **`nds/`**: the DS front end (BlocksDS, C++)
+- **`nds/`**: builds `verity.nds` from the front end and the data blobs (BlocksDS)
 - **`web/`**: the web app (SvelteKit)
 - **`tools/pkhex-oracle/`**: reference oracle built on `PKHeX.Core`
 - **`tools/emu-harness/`**: headless melonDS runner for automated DS checks
