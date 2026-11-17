@@ -5,6 +5,7 @@ members = [
     "crates/verity-rom",
     "crates/datagen",
     "crates/verity-wasm",
+    "crates/verity-ds",
 ]
 resolver = "2"
 exclude = ["fuzz"]
@@ -22,7 +23,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
-# Every crate forbids unsafe code except verity-ffi (the DS front end's C ABI), which sets its
-# own lints: each unsafe operation in its own block, with a SAFETY comment.
+# Every crate forbids unsafe code except verity-ffi (the C ABI) and verity-ds (the DS front end,
+# over libnds), which set their own lints: each unsafe operation in its own block, with a SAFETY
+# comment.
 [workspace.lints.rust]
 unsafe_code = "forbid"

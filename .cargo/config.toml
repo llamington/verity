@@ -1,11 +1,11 @@
 [target.armv5te-none-eabi]
-rustflags = ["-Zunstable-options", "-Cpanic=immediate-abort"]
+rustflags = ["-Cpanic=abort"]
 
 
 
 
 [alias]
-build-ds = "build -p verity-ffi --release --no-default-features --features picolibc-allocator,alloc --target armv5te-none-eabi -Zbuild-std=core,alloc"
+build-ds = "build -p verity-ds --release --target armv5te-none-eabi -Zbuild-std=core,alloc"
 # Local coverage report in target/llvm-cov/html (needs cargo-llvm-cov and llvm-tools-preview).
 # Run with the data blobs and corpus present, or the tests that need them skip.
 coverage = "llvm-cov --workspace --html"

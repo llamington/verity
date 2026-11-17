@@ -57,7 +57,8 @@ fn tile_row(x: usize, y: usize) -> usize {
 /// Pearl, by their tools; with `forward` None the direction that leaves more of the image
 /// transparent wins). Then places frame 0 (the left 80x80 of the scanned 160x80 image) in the
 /// 96x96 layout, centred across and standing on the bottom edge, where Gen 5 sprites stand.
-fn gen4_sprite(ncgr: &[u8], forward: Option<bool>) -> Result<[u8; SPRITE_BYTES]> {
+/// `SPRITE_BYTES` long, on the heap: the DS's stack is too small for sprites passed by value.
+fn gen4_sprite(ncgr: &[u8], forward: Option<bool>) -> Result<Vec<u8>> {
     let data = ncgr
         .get(NCGR_DATA..NCGR_DATA + 160 * 80 / 2)
         .ok_or(Error::Format("sprite NCGR"))?;
@@ -82,7 +83,7 @@ fn gen4_sprite(ncgr: &[u8], forward: Option<bool>) -> Result<[u8; SPRITE_BYTES]>
             if zeros(&f) >= zeros(&b) { f } else { b }
         }
     };
-    let mut out = [0u8; SPRITE_BYTES];
+    let mut out = vec![0u8; SPRITE_BYTES];
     for y in 0..80 {
         for tx in 0..10 {
             let src = y * 80 + tx * 4;
@@ -875,8 +876,8 @@ impl<'a> CachedSprites<'a> {
 }
 
 /// Decodes a sprite's tile data as read from the cache (LZ-compressed, with or without an NCGR
-/// header) into the 96x96 block layout.
-pub fn decode(blob: &[u8]) -> Result<[u8; SPRITE_BYTES]> {
+/// header) into the 96x96 block layout, `SPRITE_BYTES` long.
+pub fn decode(blob: &[u8]) -> Result<Vec<u8>> {
     let d = lz::decompress(blob)?;
     let data = if d.get(..4) == Some(b"RGCN") {
         d.get(NCGR_DATA..)
@@ -886,9 +887,7 @@ pub fn decode(blob: &[u8]) -> Result<[u8; SPRITE_BYTES]> {
     let data = data
         .and_then(|d| d.get(..SPRITE_BYTES))
         .ok_or(Error::Format("sprite"))?;
-    let mut out = [0u8; SPRITE_BYTES];
-    out.copy_from_slice(data);
-    Ok(out)
+    Ok(data.to_vec())
 }
 
 #[cfg(test)]

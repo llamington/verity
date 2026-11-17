@@ -10,8 +10,8 @@ knows saves, Pokémon and PKHeX's legality rules; the front ends only draw scree
         data/exports/*.json ── crates/datagen ──▶ data/blobs/*.bin
                                                      │ (read at runtime)
                                                      ▼
- nds/ (C++, BlocksDS) ── crates/verity-ffi ──┐   crates/verity   ┌── crates/verity-wasm ── web/ (SvelteKit)
-        │                                    └──▶  (no_std core) ◀─┘
+ crates/verity-ds ── crates/verity-ffi ──┐   crates/verity   ┌── crates/verity-wasm ── web/ (SvelteKit)
+  (Rust, BlocksDS)                      └──▶  (no_std core) ◀─┘
         └── crates/verity-rom (fonts, icons, sprites from the user's ROM)
 ```
 
@@ -75,10 +75,19 @@ A .NET console app on `PKHeX.Core`. Besides exporting data, it is the reference 
 dumps saves, judges Pokémon, and generates legal (and mutated) Pokémon for the parity tests in
 `crates/verity/tests`. A change to legality code is checked against what PKHeX says.
 
-## DS front end (`nds/`, `crates/verity-ffi`, `crates/verity-rom`)
+## DS front end (`crates/verity-ds`, `crates/verity-ffi`, `crates/verity-rom`, `nds/`)
 
-`verity-ffi` exposes the core through a C ABI as an ARM9 static library (`cargo build-ds`), and
-`nds/` is the C++ app on BlocksDS that links it. It is the only crate allowed `unsafe`.
+`verity-ds` is the DS app, in Rust: scenes, the text renderer, files and the ROM caches. It
+drives the hardware through [blocksds](https://github.com/llamington/blocksds-rs), a safe layer
+over BlocksDS's libnds, and calls the core through `verity-ffi`'s C ABI functions (wrapped safely
+in its `ffi` module). `cargo build-ds` builds it as an ARM9 static library, and `nds/`'s makefile
+links it into `verity.nds` with the data blobs in NitroFS. These two are the only crates allowed
+`unsafe`.
+
+The ARM9 stack is 15 KB of DTCM, and past its bottom is a mirror of main RAM, so the front end keeps
+its stack small (text buffers no bigger than the C ones they replaced) and checks it: the unused
+stack is painted at boot and the free part published every frame (`verity_test_stack_free`); below
+512 bytes the app stops with the panic screen rather than corrupt memory.
 `verity-rom` reads the NDS file system, NARCs and compression to pull fonts, box icons, sprites,
 item icons and move data out of a Gen 4/5 ROM it finds on the SD card. It caches them under
 `/_nds/verity/`, so no Nintendo assets ship with Verity. Saving writes a temporary file, renames
