@@ -52,6 +52,15 @@ struct BoxView {
     cur: i32,
     party: bool,
     dirty: bool,
+    /// The verdict line drawn as "checking...", checked on a frame with nothing else to draw so
+    /// the cursor moves without waiting for it.
+    verdict: Option<Verdict>,
+}
+
+#[derive(Clone, Copy)]
+struct Verdict {
+    row: i32,
+    col: i32,
 }
 
 pub fn box_view() -> Box<dyn Scene> {
@@ -60,6 +69,7 @@ pub fn box_view() -> Box<dyn Scene> {
         cur: 0,
         party: false,
         dirty: true,
+        verdict: None,
     })
 }
 
@@ -74,6 +84,8 @@ impl Scene for BoxView {
         ui::clear(bottom());
         self.draw();
         self.dirty = false;
+        // Behind the fade the check costs no responsiveness, and the screen fades in whole.
+        self.show_verdict();
     }
 
     fn update(&mut self, input: &Input) -> bool {
@@ -146,13 +158,13 @@ impl Scene for BoxView {
             }
         }
 
-        if self.box_index != before_box
-            || self.cur != before_cur
-            || self.party != before_party
-            || self.dirty
-        {
+        if self.box_index != before_box || self.party != before_party || self.dirty {
             self.draw();
             self.dirty = false;
+        } else if self.cur != before_cur {
+            self.move_cursor(before_cur);
+        } else {
+            self.show_verdict();
         }
         true
     }
@@ -225,15 +237,8 @@ impl BoxView {
         let n = if self.party { 6 } else { 30 };
         for i in 0..n {
             let v = self.at_cell(i);
+            self.draw_slot(i, &v);
             let (x, y) = self.cell_pos(i);
-            let style = if i == self.cur {
-                2
-            } else if v.species != 0 {
-                0
-            } else {
-                1
-            };
-            ui::slot(bottom(), x / 8, y / 8, style);
             let mut tiles = [0u8; 512];
             let icon = if v.species != 0 {
                 data::icon_tiles(v.species, v.form, v.gender == 1, v.is_egg != 0, &mut tiles)
@@ -263,16 +268,47 @@ impl BoxView {
                 );
             }
         }
-        self.details(&self.at_cell(self.cur));
+        let v = self.at_cell(self.cur);
+        self.details(&v);
+    }
+
+    fn draw_slot(&self, i: i32, v: &PkmView) {
+        let (x, y) = self.cell_pos(i);
+        let style = if i == self.cur {
+            2
+        } else if v.species != 0 {
+            0
+        } else {
+            1
+        };
+        ui::slot(bottom(), x / 8, y / 8, style);
+    }
+
+    /// Only the two slots' frames change; their icons stay.
+    fn move_cursor(&mut self, from: i32) {
+        self.draw_slot(from, &self.at_cell(from));
+        let v = self.at_cell(self.cur);
+        self.draw_slot(self.cur, &v);
+        self.details(&v);
+    }
+
+    fn show_verdict(&mut self) {
+        let Some(at) = self.verdict.take() else {
+            return;
+        };
+        let v = self.at_cell(self.cur);
+        ui::clear_px(top(), at.row * 8, at.row * 8 + 8);
+        legality_line(at.row, &v, at.col, self.box_byte(), self.cur as u8);
     }
 
     /// The top screen while browsing, laid out like the games' summary: the Pokémon's sprite (its
     /// ball behind it) with the verdict and who it is beside it, then its moves and IVs across the
     /// panel. EVs and the PID are in the editor.
-    fn details(&self, v: &PkmView) {
+    fn details(&mut self, v: &PkmView) {
         ui::clear(top());
         ui::frame_clear(top());
         ui::top_art_hide();
+        self.verdict = None;
         ui::item_icon(true, 0, 0, None);
         let (x, rx) = (ui::INSET_TOP, SIDE_X);
         if v.species == 0 {
@@ -301,7 +337,7 @@ impl BoxView {
             ui::title(top(), b"Egg");
             ui::panel(top(), 1, 2, 30, 11);
             let mut l = ui::Lines::new(2);
-            self.legality_line(&mut l, v, cx / 8);
+            self.verdict_pending(&mut l, cx / 8);
             l.block();
             ui::text(
                 top(),
@@ -347,7 +383,7 @@ impl BoxView {
         }
         ui::panel(top(), 1, 2, 30, 20);
         let mut l = ui::Lines::new(2);
-        self.legality_line(&mut l, v, cx / 8);
+        self.verdict_pending(&mut l, cx / 8);
         // Types (the game's icons, else names), then the gender and the shiny star.
         let (ty, mut gx) = (34, cx);
         for k in 0..2 {
@@ -447,14 +483,15 @@ impl BoxView {
         }
     }
 
-    /// The verdict on one grid line: a badge, then the time or what failed.
-    fn legality_line(&self, l: &mut ui::Lines, v: &PkmView, col: i32) {
-        legality_line(l, v, col, self.box_byte(), self.cur as u8);
+    fn verdict_pending(&mut self, l: &mut ui::Lines, col: i32) {
+        let row = l.grid_row();
+        ui::text(top(), col * 8, row * 8, &t!(MUTED, "checking..."));
+        self.verdict = Some(Verdict { row, col });
     }
 }
 
 /// The verdict for (box_index, slot) on one grid line: a badge, then the time or what failed.
-pub(crate) fn legality_line(l: &mut ui::Lines, v: &PkmView, col: i32, box_index: u8, slot: u8) {
+fn legality_line(row: i32, v: &PkmView, col: i32, box_index: u8, slot: u8) {
     let (r, ms) = data::legality(box_index, slot);
     const WHY: [&str; 7] = [
         "",
@@ -465,7 +502,7 @@ pub(crate) fn legality_line(l: &mut ui::Lines, v: &PkmView, col: i32, box_index:
         "hatched",
         "event/trade/walker",
     ];
-    let mut line = ui::Row::new(top(), l.grid_row(), col * 8);
+    let mut line = ui::Row::new(top(), row, col * 8);
     let mut rest = if r.status == 1 {
         line.badge(Badge::Legal, b"LEGAL");
         if col > 2 {
