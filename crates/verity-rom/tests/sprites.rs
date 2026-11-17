@@ -50,7 +50,7 @@ fn rgb(c: u16) -> [u8; 3] {
 }
 
 /// Pixel (x, y) of a decoded sprite.
-fn px(s: &[u8; SPRITE_BYTES], x: usize, y: usize) -> u8 {
+fn px(s: &[u8], x: usize, y: usize) -> u8 {
     let blocks = [
         (0, 0, 64, 64),
         (64, 0, 32, 64),
@@ -121,6 +121,7 @@ fn sprites_from_roms() {
             let s = c.find(*key).unwrap_or_else(|| panic!("{name} {key:?}"));
             let tiles = sprites::decode(&cache[s.tiles as usize..(s.tiles + s.tiles_len) as usize])
                 .unwrap();
+            assert_eq!(tiles.len(), SPRITE_BYTES);
             for shiny in 0..2 {
                 let p = s.palette as usize + 32 * shiny;
                 let pal: Vec<u16> = (0..16)

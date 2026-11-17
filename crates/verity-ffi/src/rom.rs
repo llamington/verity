@@ -497,7 +497,7 @@ pub unsafe extern "C" fn verity_sprite_decode(blob: *const u8, len: usize, out: 
     match sprites::decode(unsafe { slice::from_raw_parts(blob, len) }) {
         Ok(tiles) => {
             // SAFETY: `out` is non-null (checked above) and writable for 4608 bytes (this
-            // function's contract); `tiles` is a local `[u8; SPRITE_BYTES]` (4608).
+            // function's contract); `tiles` is `SPRITE_BYTES` (4608) long.
             unsafe { core::ptr::copy_nonoverlapping(tiles.as_ptr(), out, tiles.len()) };
             true
         }
