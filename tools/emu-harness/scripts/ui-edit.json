@@ -31,7 +31,16 @@
     {"press": ["R"], "frames": 2}, {"press": ["R"], "frames": 2},
     {"press": ["A"], "frames": 2},
     {"wait": 5},
-    {"hold": ["Down"], "frames": 50},
+    // Down 8 times, Poison Sting to Supersonic (a held key's repeats depend on how fast the
+    // list redraws).
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
+    {"press": ["Down"], "frames": 2}, {"wait": 2},
     {"wait": 2},
     {"assert_screen": "edit-move-picker"},
     {"screenshot": "03-move-picker.png"},
