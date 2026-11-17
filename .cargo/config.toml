@@ -1,5 +1,5 @@
 [target.armv5te-none-eabi]
-rustflags = ["-Zunstable-options", "-Cpanic=immediate-abort"]
+rustflags = ["-Cpanic=abort"]
 
 
 
