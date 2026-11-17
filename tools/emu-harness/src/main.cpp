@@ -68,8 +68,10 @@
 //
 // Outputs in --out (default: <script>.out/; <out>/<script name>/ with several scripts):
 // screenshots, save dumps, failure images, and run.jsonl (one JSON object per step with the frame
-// number and screen hashes). Exit status 0 when every step of every script passes, 1 when a step
-// fails, 2 on an error (bad script, missing file).
+// number and screen hashes; a DS build that measures itself adds a "metrics" object per step with
+// its heap, frame time and free stack, which tools/emu-harness/metrics.py summarises). Exit status
+// 0 when every step of every script passes, 1 when a step fails, 2 on an error (bad script,
+// missing file).
 
 #include <algorithm>
 #include <atomic>
@@ -846,9 +848,24 @@ void run_steps(Ctx& c, const json::Value& cfg)
     // fails, naming the text.
     bool layout = c.symbols.count("verity_test_layout") && c.symbols.count("verity_test_layout_text");
     u32 faults = 0;
+    // A DS build that measures itself (verity_test_heap_used and friends in hooks.rs): each step
+    // logs them, and the frame maximum restarts.
+    const char* metrics[] = {"verity_test_heap_used", "verity_test_heap_arena", "verity_test_frame_lines_max",
+                             "verity_test_frames_late", "verity_test_stack_free"};
+    bool measured = std::all_of(std::begin(metrics), std::end(metrics),
+                                [&](const char* m) { return c.symbols.count(m) > 0; });
     for (size_t i = 0; i < steps.size(); i++)
     {
         run_step(c, i, steps[i]);
+        if (measured)
+        {
+            std::string extra = ",\"scene\":\"" + esc(read_string(c, c.symbols["verity_test_scene"].addr, 16)) + "\"";
+            for (const char* m : metrics)
+                extra += std::string(",\"") + (m + strlen("verity_test_")) + "\":" +
+                         std::to_string(c.nds->ARM9Read32(c.symbols[m].addr));
+            log_step(c, i, "metrics", extra, true);
+            c.nds->ARM9Write32(c.symbols["verity_test_frame_lines_max"].addr, 0);
+        }
         if (!layout)
             continue;
         u32 now = c.nds->ARM9Read32(c.symbols["verity_test_layout"].addr);

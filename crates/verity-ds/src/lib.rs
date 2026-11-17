@@ -35,6 +35,7 @@ pub extern "C" fn verity_on_panic() -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> i32 {
     hooks::paint_stack();
+    hooks::count_vblanks();
     ui::sprites_init();
     blocksds::input::set_repeat(15, 4);
     if blocksds::fs::init_fat().is_err() {

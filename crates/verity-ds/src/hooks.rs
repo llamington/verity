@@ -107,3 +107,101 @@ pub fn check_stack() {
     }
     assert!(free >= STACK_MIN_FREE, "stack nearly exhausted");
 }
+
+// ---- frames and heap -----------------------------------------------------------------------
+
+/// Bytes the heap has handed out and not had back (C and Rust share it).
+#[unsafe(no_mangle)]
+static mut verity_test_heap_used: u32 = 0;
+/// Bytes the heap has taken from RAM, its high-water mark (picolibc never gives them back).
+#[unsafe(no_mangle)]
+static mut verity_test_heap_arena: u32 = 0;
+/// The longest frame's work, in scanlines since its VBlank (263 a frame); the harness zeroes it
+/// after each step.
+#[unsafe(no_mangle)]
+static mut verity_test_frame_lines_max: u32 = 0;
+/// Frames whose work ran past the next VBlank.
+#[unsafe(no_mangle)]
+static mut verity_test_frames_late: u32 = 0;
+#[unsafe(no_mangle)]
+static mut verity_test_vblanks: u32 = 0;
+
+const LINES: u32 = 263;
+const VBLANK_LINE: u32 = 192;
+const REG_VCOUNT: *const u16 = 0x0400_0006 as *const u16;
+
+#[repr(C)]
+struct MallInfo {
+    arena: usize,
+    ordblks: usize,
+    smblks: usize,
+    hblks: usize,
+    hblkhd: usize,
+    usmblks: usize,
+    fsmblks: usize,
+    uordblks: usize,
+    fordblks: usize,
+    keepcost: usize,
+}
+
+unsafe extern "C" {
+    /// picolibc's heap summary; walks the free list.
+    safe fn mallinfo() -> MallInfo;
+}
+
+unsafe extern "C" fn on_vblank() {
+    // SAFETY: a hook only this handler writes; the main thread only reads it.
+    unsafe {
+        let n = addr_of_mut!(verity_test_vblanks);
+        n.write_volatile(n.read_volatile().wrapping_add(1));
+    }
+}
+
+pub fn count_vblanks() {
+    // SAFETY: installs a handler with libnds's dispatcher, which nothing else uses for VBlank.
+    unsafe { blocksds::sys::irqSet(blocksds::sys::IRQ_VBLANK, Some(on_vblank)) };
+}
+
+/// The VBlank count and scanline now.
+fn now() -> (u32, u32) {
+    loop {
+        // SAFETY: reads a hook and a read-only display register.
+        let (v, line) = unsafe {
+            (
+                addr_of_mut!(verity_test_vblanks).read_volatile(),
+                u32::from(REG_VCOUNT.read_volatile()),
+            )
+        };
+        // SAFETY: as above.
+        if unsafe { addr_of_mut!(verity_test_vblanks).read_volatile() } == v {
+            return (v, line);
+        }
+    }
+}
+
+/// Marks the start of a frame's work, just after its VBlank.
+pub fn frame_start() -> u32 {
+    now().0
+}
+
+/// Records the frame's work time and the heap, before waiting for the next VBlank.
+pub fn frame_end(start: u32) {
+    let (v, line) = now();
+    let since = (line + LINES - VBLANK_LINE) % LINES;
+    let missed = v.wrapping_sub(start);
+    let lines = missed * LINES + since;
+    let heap = mallinfo();
+    // SAFETY: hooks only this module writes (the harness zeroes the max between steps).
+    unsafe {
+        let max = addr_of_mut!(verity_test_frame_lines_max);
+        if lines > max.read_volatile() {
+            max.write_volatile(lines);
+        }
+        if missed > 0 {
+            let late = addr_of_mut!(verity_test_frames_late);
+            late.write_volatile(late.read_volatile() + 1);
+        }
+        addr_of_mut!(verity_test_heap_used).write_volatile(heap.uordblks as u32);
+        addr_of_mut!(verity_test_heap_arena).write_volatile(heap.arena as u32);
+    }
+}

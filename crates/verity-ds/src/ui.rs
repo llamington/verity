@@ -163,10 +163,14 @@ pub fn run() {
         let Some(scene) = stack.last_mut() else { break };
         // Show the last frame's drawing while the display is between frames, then draw the next.
         blocksds::wait_for_vblank();
+        let start = hooks::frame_start();
         display::commit();
         input.poll();
         let keep = scene.update(&input);
         hooks::check_stack();
+        if keep && PENDING.borrow_mut().is_none() {
+            hooks::frame_end(start);
+        }
         if !keep {
             hooks::set_busy(true);
             fade(true);
