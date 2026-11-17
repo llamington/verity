@@ -115,8 +115,15 @@ fn attach(kind: BlobKind, file: &str) -> bool {
     true
 }
 
-/// Reads and probes a save file. On failure the previous document is kept and the error says why.
+/// Reads and probes a save file. The previous document is closed first, so two saves never share
+/// the heap; on failure none is open and the error says why.
 pub fn open(path: &[u8]) -> Result<(), &'static str> {
+    {
+        let mut d = doc();
+        d.buf = Vec::new();
+        d.path = LongText::new();
+        d.dirty = false; // unsaved edits to the previous one are gone
+    }
     let Some(mut buf) = read_all(path, MAX_SAVE) else {
         return Err("cannot read file");
     };
@@ -128,7 +135,6 @@ pub fn open(path: &[u8]) -> Result<(), &'static str> {
     d.buf = buf;
     d.info = info;
     d.file_checksums_ok = info.checksums_valid != 0;
-    d.dirty = false; // a fresh file (unsaved edits to the previous one are gone)
     d.path = LongText::from(path).cap(192);
     Ok(())
 }
