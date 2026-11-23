@@ -60,7 +60,7 @@
 	const SOURCES = [
 		{
 			title: 'Emulator',
-			text: 'melonDS and most emulators keep a .sav beside the game or in a saves folder; DeSmuME and DraStic use .dsv. Close the game first, or the emulator may overwrite your edits when it exits.'
+			text: 'The save is beside the game or in a saves folder, as a .sav, .dsv or .srm depending on the emulator. Close the game first, or the emulator may overwrite your edits.'
 		},
 		{
 			title: 'TWiLight Menu++ or a flashcart',
@@ -330,7 +330,7 @@
 	<section aria-labelledby="saves" class="flex flex-col gap-4">
 		<h2 id="saves" class="font-pixel text-2xl font-bold">Getting your save</h2>
 		<p class="text-sm text-muted-foreground">
-			In the browser, Verity opens a raw save (.sav) or a DeSmuME save (.dsv). Where to find yours:
+			In the browser, Verity opens Gen 4 and 5 DS saves. Where to find yours:
 		</p>
 		<ul class="grid gap-4 sm:grid-cols-3">
 			{#each SOURCES as s (s.title)}

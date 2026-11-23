@@ -36,7 +36,7 @@ export async function pickSave(): Promise<OpenedFile | undefined> {
 			types: [
 				{
 					description: 'Pokémon save',
-					accept: { 'application/octet-stream': ['.sav', '.dsv', '.bin'] }
+					accept: { 'application/octet-stream': ['.sav', '.dsv', '.srm', '.bin'] }
 				}
 			]
 		});
