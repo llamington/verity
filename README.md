@@ -32,10 +32,10 @@ your save never leaves your device. It also runs on the DS itself (see below).
 
 ## Getting your save
 
-Verity opens a raw save (`.sav`) or a DeSmuME save (`.dsv`). Keep a copy of the original.
+Verity opens Gen 4 and 5 DS saves. Keep a copy of the original.
 
-- **Emulator:** the `.sav` (or `.dsv` for DeSmuME and DraStic) is beside the game or in a saves
-  folder. Close the game first, or the emulator may overwrite your edits.
+- **Emulator:** the save is beside the game or in a saves folder, as a `.sav`, `.dsv` or `.srm`
+  depending on the emulator. Close the game first, or the emulator may overwrite your edits.
 - **TWiLight Menu++ or a flashcart:** the `.sav` is on the SD card, in a saves folder next to the
   game or beside it.
 - **Game cartridge:** copy the save off with Checkpoint on a 3DS or GodMode9i on a DSi, and

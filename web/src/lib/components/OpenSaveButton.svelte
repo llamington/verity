@@ -64,7 +64,7 @@
 <input
 	bind:this={input}
 	type="file"
-	accept=".sav,.dsv,.bin"
+	accept=".sav,.dsv,.srm,.bin"
 	class="sr-only"
 	tabindex="-1"
 	aria-hidden="true"

@@ -182,7 +182,7 @@
 			<Logo size={64} class="animate-[wobble_2.4s_ease-in-out_infinite]" />
 			<h2 class="font-pixel text-2xl font-bold">No save loaded</h2>
 			<p class="max-w-md text-muted-foreground">
-				Open a Gen 4 or Gen 5 save (.sav or DeSmuME .dsv). It stays on your device.
+				Open a Gen 4 or Gen 5 save. It stays on your device.
 			</p>
 			<OpenSaveButton size="lg" class="font-pixel text-base">Open a save…</OpenSaveButton>
 		</section>
