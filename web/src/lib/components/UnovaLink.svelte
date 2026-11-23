@@ -118,7 +118,6 @@
 			<Input
 				id="unova-file"
 				type="file"
-				accept=".sav,.dsv,.srm"
 				class="h-auto py-1.5 file:mr-3 file:rounded-full file:bg-secondary file:px-3 file:py-0.5 file:text-secondary-foreground"
 				onchange={onFile}
 			/>
