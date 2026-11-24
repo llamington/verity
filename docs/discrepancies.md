@@ -13,6 +13,11 @@ separate operation that matches PKHeX's delete behaviour.
 
 ## Notes for upstream
 
+- `MonochromeRNG.Generate` forces a fixed-gender static's PID low byte only for species that
+  can be either gender, but `PIDVerifier` checks it (`IsValidForcedRandomGender`) for every
+  fixed-gender Gen 5 encounter. So PKHeX can generate an illegal White 2 Route 4 Braviary
+  (male-only, low byte 254 or 255). verity's Gen 5 generator forces the byte for single-gender
+  species too.
 - `PlayerData5` (PKHeX 25.12.21) reads a `u32` at `0x28` but its setter writes `0x2C`.
 
 ## Unedited export

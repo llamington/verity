@@ -972,23 +972,33 @@ fn parity5(mode: &str, n: usize, seed: u64, muts: u32) {
     assert!(bad.is_empty());
 }
 
-/// Random Gen 5 wild requests: every Pokémon built must be PKHeX-legal.
-fn build_gen5_wild_legal(n: usize, seed: u64) -> usize {
+/// Random Gen 5 wizard requests (wild slots, or static encounters, gifts and trades): every Pokémon
+/// built must be PKHeX-legal.
+fn build_gen5_legal(n: usize, seed: u64, statics: bool) -> usize {
     use verity::generate::build4::Trainer4;
     use verity::generate::wild5::{Request5, generate};
+    use verity::generate::wizard;
     let ctx = Box::leak(Box::new(context5()));
-    let tmp = std::env::temp_dir().join(format!("verity-g5w-{}-{seed}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!(
+        "verity-g5w-{}-{seed}-{statics}",
+        std::process::id()
+    ));
     fs::create_dir_all(&tmp).unwrap();
     let mut r = Rand::new(seed);
-    let groups: [(&[u8], &EncounterData); 4] = [
-        (b"SlotsW", &ctx.enc_bw),
-        (b"SlotsB", &ctx.enc_bw),
-        (b"SlotsW2", &ctx.enc_b2w2),
-        (b"SlotsB2", &ctx.enc_b2w2),
+    let games: [(u8, &EncounterData); 4] = [
+        (20, &ctx.enc_bw),
+        (21, &ctx.enc_bw),
+        (22, &ctx.enc_b2w2),
+        (23, &ctx.enc_b2w2),
     ];
-    let lists: Vec<Vec<Encounter>> = groups
+    let lists: Vec<(u8, Vec<Encounter>)> = games
         .iter()
-        .map(|(g, d)| d.group(g).filter(|e| e.species() != 0).collect())
+        .map(|&(v, d)| {
+            let list = wizard::encounters(d, v)
+                .filter(|e| e.species() != 0 && e.is_slot() != statics)
+                .collect();
+            (v, list)
+        })
         .collect();
     let mut made = 0;
     let mut name = [0xFFFFu16; 8];
@@ -996,7 +1006,7 @@ fn build_gen5_wild_legal(n: usize, seed: u64) -> usize {
         name[i] = c;
     }
     for i in 0..n {
-        let list = &lists[r.next_u32() as usize % 4];
+        let (version, list) = &lists[r.next_u32() as usize % 4];
         let encounter = list[r.next_u32() as usize % list.len()];
         let tr = Trainer4 {
             name_raw: name,
@@ -1007,18 +1017,25 @@ fn build_gen5_wild_legal(n: usize, seed: u64) -> usize {
         };
         let q = Request5 {
             encounter,
+            version: *version,
             level: None,
-            nature: (r.next_u32() & 1 == 0).then_some((r.next_u32() % 25) as u8),
+            nature: (encounter
+                .template()
+                .is_none_or(|t| t.nature() == NATURE_RANDOM)
+                && r.next_u32() & 1 == 0)
+                .then_some((r.next_u32() % 25) as u8),
             gender: None,
-            shiny: !encounter.is_hidden_grotto() && r.next_u32().is_multiple_of(4),
-            ball: (r.next_u32() & 1 == 0)
+            shiny: !encounter.is_hidden_grotto()
+                && encounter.shiny() != SHINY_NEVER
+                && r.next_u32().is_multiple_of(4),
+            ball: (encounter.ball() == 0 && r.next_u32() & 1 == 0)
                 .then_some([1u8, 2, 3, 4, 6, 12, 15][r.next_u32() as usize % 7]),
             date: [12, 3, 4],
             seed: r.next_u32() as u64 | (i as u64) << 32,
         };
         let pk =
             generate(ctx, &tr, &q).unwrap_or_else(|e| panic!("{e:?} sp {}", encounter.species()));
-        if q.shiny {
+        if q.shiny || encounter.shiny() == SHINY_ALWAYS {
             assert!(pk.is_shiny());
         }
         fs::write(tmp.join(format!("{made:05}.pk5")), &pk.decrypted()[..136]).unwrap();
@@ -1040,17 +1057,35 @@ fn build_gen5_wild_legal(n: usize, seed: u64) -> usize {
     made
 }
 
+/// PKHeX `Shiny` values.
+const SHINY_NEVER: u8 = 1;
+const SHINY_ALWAYS: u8 = 2;
+const NATURE_RANDOM: u8 = 25;
+
 #[test]
 fn gen5_wild_legal() {
     if root().join("data/blobs/names5.bin").exists() {
-        eprintln!("built {}", build_gen5_wild_legal(400, 77));
+        eprintln!("built {}", build_gen5_legal(400, 77, false));
     }
 }
 
 #[test]
 #[ignore]
 fn gen5_wild_legal_1e4() {
-    eprintln!("built {}", build_gen5_wild_legal(10_000, 78));
+    eprintln!("built {}", build_gen5_legal(10_000, 78, false));
+}
+
+#[test]
+fn gen5_static_legal() {
+    if root().join("data/blobs/names5.bin").exists() {
+        eprintln!("built {}", build_gen5_legal(400, 79, true));
+    }
+}
+
+#[test]
+#[ignore]
+fn gen5_static_legal_1e4() {
+    eprintln!("built {}", build_gen5_legal(10_000, 80, true));
 }
 
 #[test]

@@ -130,7 +130,7 @@ typedef struct verity_legality_report {
 /** Legality of the Pokémon at loc (Gen 4 wild slots and statics for now). */
 verity_err verity_legality(uint8_t *buf, size_t len, verity_loc loc, verity_legality_report *out);
 
-/** One wild slot. index identifies it for verity_gen_insert. */
+/** One encounter. index identifies it for verity_gen_insert. */
 typedef struct verity_encounter {
     uint16_t index;
     uint16_t location;
@@ -141,11 +141,13 @@ typedef struct verity_encounter {
     uint8_t slot_type; /* PKHeX SlotType4: 0 grass, 1 surf, 2-4 rods, ... */
     uint8_t slot_number;
     uint8_t can_radar;
+    uint8_t encounter_type; /* 0 wild slot, 1 static encounter, 2 gift, 3 roaming, 4 trade */
 } verity_encounter;
 
-/** Species with wild slots in version (10 D, 11 P, 12 Pt); returns the count written. */
+/** Species with encounters in version (10 D, 11 P, 12 Pt, 7 HG, 8 SS, 20 W, 21 B, 22 W2, 23 B2); returns the count written. */
 size_t verity_wild_species(uint8_t version, uint16_t *out, size_t cap);
-/** Wild slots of species in version; returns the count written. */
+/** Wild slots, static encounters, gifts and trades of species in version; returns the count
+    written. */
 size_t verity_wild_encounters(uint8_t version, uint16_t species, verity_encounter *out, size_t cap);
 
 /** Legal generation request. 0xFF / 0xFFFF mean "any". */

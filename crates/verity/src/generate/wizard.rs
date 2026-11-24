@@ -1,32 +1,17 @@
-//! The add-Pokémon wizards' entry points (wild Gen 4/5 slots, Gen 4 eggs), shared by the DS
+//! The add-Pokémon wizards' entry points (Gen 4/5 wild slots, Gen 5 static encounters, gifts
+//! and in-game trades, Gen 4 eggs), shared by the DS
 //! (`verity-ffi`) and the browser (`verity-wasm`).
 
 use alloc::vec::Vec;
 
 use super::api4::{self, EncounterChoice, GenRequest, IvRequest};
+pub use super::offered::{Offer, encounters, offer, slots_group};
 use super::status::GenStatus;
 use super::wild4::Lead;
 use crate::data::encounters::{Encounter, EncounterData};
 use crate::legality::analysis4::{Context4, can_be_egg};
 use crate::legality::analysis5::Context5;
 use crate::save::{Save, SaveKind, Slot};
-
-/// The encounter group holding `version`'s wild slots (10 D, 11 P, 12 Pt, 7 HG, 8 SS, 20 W,
-/// 21 B, 22 W2, 23 B2).
-pub fn slots_group(version: u8) -> Option<&'static [u8]> {
-    match version {
-        10 => Some(b"SlotsD"),
-        11 => Some(b"SlotsP"),
-        12 => Some(b"SlotsPt"),
-        7 => Some(b"SlotsHG"),
-        8 => Some(b"SlotsSS"),
-        20 => Some(b"SlotsW"),
-        21 => Some(b"SlotsB"),
-        22 => Some(b"SlotsW2"),
-        23 => Some(b"SlotsB2"),
-        _ => None,
-    }
-}
 
 /// The encounter tables holding `version`'s wild slots.
 pub fn wild_data<'a>(
@@ -43,13 +28,10 @@ pub fn wild_data<'a>(
     }
 }
 
-/// The distinct species with wild slots in `version`, ascending.
+/// The distinct species of [`encounters`] in `version`, ascending.
 pub fn wild_species(data: &EncounterData, version: u8) -> Vec<u16> {
-    let Some(g) = slots_group(version) else {
-        return Vec::new();
-    };
     let mut seen = [false; 650];
-    for e in data.group(g) {
+    for e in encounters(data, version) {
         if let Some(s) = seen.get_mut(e.species() as usize) {
             *s = true;
         }
@@ -59,16 +41,13 @@ pub fn wild_species(data: &EncounterData, version: u8) -> Vec<u16> {
         .collect()
 }
 
-/// The wild slots of `species` in `version`, with the index [`WildRequest::encounter`] takes.
+/// The [`encounters`] of `species` in `version`, with the index [`WildRequest::encounter`] takes.
 pub fn wild_encounters<'a>(
     data: &'a EncounterData<'a>,
     version: u8,
     species: u16,
 ) -> Vec<(u16, Encounter<'a>)> {
-    let Some(g) = slots_group(version) else {
-        return Vec::new();
-    };
-    data.group(g)
+    encounters(data, version)
         .enumerate()
         .filter(|(_, e)| e.species() == species)
         .map(|(i, e)| (i as u16, e))
@@ -104,9 +83,9 @@ pub fn insert_wild(
     r: &WildRequest,
     slot: Slot,
 ) -> Result<(), GenStatus> {
-    let g = slots_group(r.version).ok_or(GenStatus::Unsupported)?;
+    slots_group(r.version).ok_or(GenStatus::Unsupported)?;
     if matches!(save.kind(), SaveKind::BW | SaveKind::B2W2) {
-        return insert_wild5(save, c5.ok_or(GenStatus::Unsupported)?, r, g, slot);
+        return insert_wild5(save, c5.ok_or(GenStatus::Unsupported)?, r, slot);
     }
     if !matches!(r.version, 7 | 8 | 10..=12) {
         return Err(GenStatus::Unsupported);
@@ -117,7 +96,7 @@ pub fn insert_wild(
         Some(i) => {
             let data = wild_data(Some(ctx), None, r.version).ok_or(GenStatus::Unsupported)?;
             EncounterChoice::Slot(
-                data.group(g)
+                encounters(data, r.version)
                     .nth(i as usize)
                     .ok_or(GenStatus::NotInEncounter)?,
             )
@@ -151,7 +130,6 @@ fn insert_wild5(
     save: &mut Save,
     ctx: &Context5,
     r: &WildRequest,
-    g: &[u8],
     slot: Slot,
 ) -> Result<(), GenStatus> {
     use super::wild5::{self, Error5, Request5};
@@ -162,15 +140,17 @@ fn insert_wild5(
     };
     let encounter = match r.encounter {
         None => {
-            let count = ed.group(g).filter(|e| e.species() == r.species).count();
+            let count = encounters(ed, r.version)
+                .filter(|e| e.species() == r.species)
+                .count();
             if count == 0 {
                 return Err(GenStatus::NoEncounter);
             }
-            ed.group(g)
+            encounters(ed, r.version)
                 .filter(|e| e.species() == r.species)
                 .nth(r.seed as usize % count)
         }
-        Some(i) => ed.group(g).nth(i as usize),
+        Some(i) => encounters(ed, r.version).nth(i as usize),
     }
     .ok_or(GenStatus::NotInEncounter)?;
     if encounter.species() != r.species {
@@ -178,6 +158,7 @@ fn insert_wild5(
     }
     let q = Request5 {
         encounter,
+        version: r.version,
         level: r.level,
         nature: r.nature,
         gender: r.gender,
@@ -190,6 +171,8 @@ fn insert_wild5(
         Error5::LevelOutsideSlot => GenStatus::LevelOutsideSlot,
         Error5::GenderImpossible => GenStatus::GenderImpossible,
         Error5::ShinyImpossible => GenStatus::ShinyInGrotto,
+        Error5::ShinyLocked => GenStatus::ShinyLocked,
+        Error5::NatureFixed => GenStatus::NatureFixed,
         Error5::BallNotAllowed => GenStatus::BallNotAllowed,
         Error5::Illegal => GenStatus::Internal,
     })?;

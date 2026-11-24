@@ -1771,6 +1771,12 @@ private:
         return t < 15 ? names[t] : "?";
     }
 
+    static const char* offer_type(uint8_t t)
+    {
+        static const char* names[] = {"Wild", "Static", "Gift", "Roaming", "Trade"};
+        return t < 5 ? names[t] : "?";
+    }
+
     static const char* slot_type5(uint8_t t)
     {
         static const char* names[] = {"Standard", "Grass", "Surf", "Super Rod", "Swarm", "Grotto"};
@@ -1997,7 +2003,9 @@ private:
                     ui::text(bottom(), kListX, y, "%s", where);
                     int lv_x = ui::text_right(bottom(), 244, y, UI_MUTED "Lv " UI_MUTED "%s", lv);
                     ui::text_in(bottom(), 140, lv_x - 6, y, UI_MUTED "%s",
-                                gen5() ? slot_type5(e.slot_type) : slot_type(e.slot_type));
+                                e.encounter_type != 0 ? offer_type(e.encounter_type)
+                                : gen5()              ? slot_type5(e.slot_type)
+                                                      : slot_type(e.slot_type));
                 }
             }
         }

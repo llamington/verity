@@ -319,6 +319,171 @@ fn wizard_lists_wild_species_and_slots_per_game() {
     assert!(wizard::wild_data(None, Some(c5), 12).is_none());
 }
 
+#[test]
+fn wizard_offers_gen5_static_encounters_in_their_own_game() {
+    use verity::generate::build4::Trainer4;
+    use verity::generate::wild5::{self, Error5, Request5};
+    let Some((_, c5)) = contexts() else { return };
+    const BRAVIARY: u16 = 628;
+    const MANDIBUZZ: u16 = 630;
+    const RESHIRAM: u16 = 643;
+    const SNIVY: u16 = 495;
+    const ROUTE_4: u16 = 17;
+    let statics = |v, species| -> Vec<(u16, verity::data::encounters::Encounter<'static>)> {
+        wizard::wild_encounters(&c5.enc_b2w2, v, species)
+            .into_iter()
+            .filter(|(_, e)| !e.is_slot())
+            .collect()
+    };
+    let route4 = |v, species| {
+        statics(v, species)
+            .iter()
+            .filter(|(_, e)| e.location() == ROUTE_4)
+            .count()
+    };
+    assert_eq!(route4(22, BRAVIARY), 1);
+    assert_eq!(route4(23, BRAVIARY), 0);
+    assert_eq!(route4(23, MANDIBUZZ), 1);
+    assert_eq!(route4(22, MANDIBUZZ), 0);
+    assert!(wizard::wild_species(&c5.enc_b2w2, 22).contains(&BRAVIARY));
+
+    let mut name = [0xFFFFu16; 8];
+    for (i, c) in "Verity".encode_utf16().enumerate() {
+        name[i] = c;
+    }
+    let tr = Trainer4 {
+        name_raw: name,
+        tid: 12345,
+        sid: 54321,
+        gender: 0,
+        language: 2,
+    };
+    let request = |encounter, version| Request5 {
+        encounter,
+        version,
+        level: None,
+        nature: None,
+        gender: None,
+        shiny: false,
+        ball: None,
+        date: [26, 11, 24],
+        seed: 0x1234_5678,
+    };
+    let (_, braviary) = statics(22, BRAVIARY)[0];
+    for seed in 0..64 {
+        let q = Request5 {
+            seed,
+            ..request(braviary, 22)
+        };
+        let pk = wild5::generate(c5, &tr, &q).unwrap();
+        assert_eq!(
+            (pk.version(), pk.met_location(), pk.met_level(), pk.gender()),
+            (22, ROUTE_4, 25, 0)
+        );
+        assert!(pk.hidden_ability());
+    }
+    let female = Request5 {
+        gender: Some(1),
+        ..request(braviary, 22)
+    };
+    assert_eq!(
+        wild5::generate(c5, &tr, &female).err(),
+        Some(Error5::GenderImpossible)
+    );
+    let (_, reshiram) = statics(22, RESHIRAM)[0];
+    let shiny = Request5 {
+        shiny: true,
+        ..request(reshiram, 22)
+    };
+    assert_eq!(
+        wild5::generate(c5, &tr, &shiny).err(),
+        Some(Error5::ShinyLocked)
+    );
+    let (index, snivy) = statics(22, SNIVY)[0];
+    assert_eq!(
+        (wizard::offer(&snivy), wizard::offer(&braviary)),
+        (wizard::Offer::Gift, wizard::Offer::Static)
+    );
+    let ultra = Request5 {
+        ball: Some(2),
+        ..request(snivy, 22)
+    };
+    assert_eq!(
+        wild5::generate(c5, &tr, &ultra).err(),
+        Some(Error5::BallNotAllowed)
+    );
+    let req = WildRequest {
+        encounter: Some(index),
+        ..wild(22, SNIVY)
+    };
+    insert_and_check("gen5_white2.sav", SaveKind::B2W2, &req);
+}
+
+#[test]
+fn wizard_offers_gen5_trades_and_roamers() {
+    use verity::generate::build4::Trainer4;
+    use verity::generate::wild5::{self, Error5, Request5};
+    use wizard::Offer;
+    let Some((_, c5)) = contexts() else { return };
+    const TORNADUS: u16 = 641;
+    const PETILIL: u16 = 548;
+    const COTTONEE: u16 = 546;
+    const ROTOM: u16 = 479;
+    let offered = |v, species, kind| {
+        let data = if v < 22 { &c5.enc_bw } else { &c5.enc_b2w2 };
+        wizard::wild_encounters(data, v, species)
+            .into_iter()
+            .map(|(_, e)| e)
+            .filter(|e| wizard::offer(e) == kind)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(offered(21, TORNADUS, Offer::Roaming).len(), 1);
+    assert!(offered(20, TORNADUS, Offer::Roaming).is_empty());
+    // TradeGift_B2W2 repeats the game-only trades: each is offered once, in its own game.
+    assert_eq!(offered(22, COTTONEE, Offer::Trade).len(), 1);
+    assert_eq!(offered(23, PETILIL, Offer::Trade).len(), 1);
+    assert!(offered(22, PETILIL, Offer::Trade).is_empty());
+
+    let tr = Trainer4 {
+        name_raw: [0x56, 0x65, 0x72, 0xFFFF, 0, 0, 0, 0],
+        tid: 1,
+        sid: 2,
+        gender: 0,
+        language: 1,
+    };
+    let request = |encounter, version| Request5 {
+        encounter,
+        version,
+        level: None,
+        nature: None,
+        gender: None,
+        shiny: false,
+        ball: None,
+        date: [26, 11, 24],
+        seed: 7,
+    };
+    let rotom = offered(20, ROTOM, Offer::Trade)[0];
+    let t = rotom.template().unwrap();
+    let pk = wild5::generate(c5, &tr, &request(rotom, 20)).unwrap();
+    assert_eq!(
+        (pk.pid(), pk.tid(), pk.nature()),
+        (t.pid(), t.tid(), t.nature())
+    );
+    assert_eq!(pk.language(), 0, "Japanese BW trades have language 0");
+    assert!(pk.is_nicknamed());
+    let other_nature = Request5 {
+        nature: Some((t.nature() + 1) % 25),
+        ..request(rotom, 20)
+    };
+    assert_eq!(
+        wild5::generate(c5, &tr, &other_nature).err(),
+        Some(Error5::NatureFixed)
+    );
+    let tornadus = offered(21, TORNADUS, Offer::Roaming)[0];
+    let pk = wild5::generate(c5, &tr, &request(tornadus, 21)).unwrap();
+    assert_eq!(pk.met_location(), tornadus.location());
+}
+
 fn wild(version: u8, species: u16) -> WildRequest {
     WildRequest {
         version,

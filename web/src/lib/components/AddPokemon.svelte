@@ -139,14 +139,14 @@
 	</div>
 	<p class="text-xs text-muted-foreground">
 		{speciesList.length}
-		{egg ? 'species can be bred here.' : 'species have wild slots in this game.'}
+		{egg ? 'species can be bred here.' : 'species can be met in this game.'}
 	</p>
 
 	{#if !egg}
 		<div class="flex flex-col gap-1">
 			<Label for="add-slot">Encounter</Label>
 			<Select.Root id="add-slot" class="w-full" bind:value={encounter}>
-				<Select.Option value={-1}>Any slot</Select.Option>
+				<Select.Option value={-1}>Any encounter</Select.Option>
 				{#each slots as s (s.index)}
 					<Select.Option value={s.index}>
 						{name(s.location)} · {s.kind} · Lv. {s.levelMin === s.levelMax

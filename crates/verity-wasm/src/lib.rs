@@ -18,7 +18,7 @@ use verity::data::{GameData, Strings, string_table as st};
 use verity::edit::{self, Edit, Met, Nickname};
 use verity::generate::status::GenStatus;
 use verity::generate::wild4::Lead;
-use verity::generate::wizard;
+use verity::generate::wizard::{self, Offer};
 use verity::gift::catalog;
 use verity::legality::analysis4::{Context4, Matched, Report};
 use verity::legality::analysis5::Context5;
@@ -984,7 +984,7 @@ impl Editor {
         }))
     }
 
-    /// Species with wild slots in `version` (needs the legality blobs).
+    /// Species with encounters in `version` (needs the legality blobs).
     pub fn wild_species(&mut self, version: u8) -> Result<Vec<Named>, Invalid> {
         let data = wizard_data(version)?;
         collect(
@@ -994,7 +994,7 @@ impl Editor {
         )
     }
 
-    /// The wild slots of `species` in `version`.
+    /// The wild slots, static encounters, gifts and trades of `species` in `version`.
     pub fn wild_encounters(&mut self, version: u8, species: u16) -> Result<Vec<WildSlot>, Invalid> {
         let data = wizard_data(version)?;
         let generation = if version >= 20 { 5 } else { 4 };
@@ -1007,7 +1007,14 @@ impl Editor {
                     form: e.form(),
                     level_min: e.level_min(),
                     level_max: e.level_max(),
-                    kind: slot_kind(generation, e.slot_type()).into(),
+                    kind: match wizard::offer(&e) {
+                        Offer::Slot => slot_kind(generation, e.slot_type()),
+                        Offer::Static => "Static",
+                        Offer::Gift => "Gift",
+                        Offer::Roaming => "Roaming",
+                        Offer::Trade => "Trade",
+                    }
+                    .into(),
                     slot_number: e.slot_number(),
                     can_radar: generation == 4 && e.can_radar(),
                 }),
