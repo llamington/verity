@@ -278,6 +278,102 @@ fn generate_api_random_requests_1e4() {
     assert!(made >= 10_000);
 }
 
+/// Every Gen 4 static encounter and gift the wizard offers, with random constraints: each
+/// request succeeds and PKHeX finds the result legal. Returns how many were made.
+fn static_requests(rounds: usize, seed: u64) -> usize {
+    use verity::generate::offered;
+    let ctx = context();
+    let mut r = Rand::new(seed);
+    let tmp = std::env::temp_dir().join(format!("verity-g4st-{}-{seed}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let mut made = 0;
+    for _ in 0..rounds {
+        for v in [10u8, 11, 12, 7, 8] {
+            let data = if matches!(v, 7 | 8) {
+                &ctx.enc_hgss
+            } else {
+                &ctx.enc_dppt
+            };
+            for e in offered::encounters(data, v).filter(|e| !e.is_slot()) {
+                let tr = trainer(&mut r);
+                let req = GenRequest {
+                    version: v,
+                    species: e.species(),
+                    form: e.form(),
+                    encounter: EncounterChoice::Slot(e),
+                    level: None,
+                    nature: r
+                        .next_u32()
+                        .is_multiple_of(3)
+                        .then(|| (r.next_u32() % 25) as u8),
+                    gender: None,
+                    ability: None,
+                    shiny: r.next_u32().is_multiple_of(4),
+                    lead: Lead::None,
+                    hidden_power_type: None,
+                    ivs: IvRequest::Random,
+                    ball: None,
+                    moves: None,
+                    met_date: [9, 4, 1],
+                    seed: r.next_u32() as u64 | 1,
+                    budget: 20_000,
+                };
+                let g = match api4::generate_for(ctx, &tr, &req) {
+                    Err(Error::UnreleasedInLanguage) => {
+                        assert_eq!(tr.language, 8, "only Korean lacks these events");
+                        continue;
+                    }
+                    r => r.unwrap_or_else(|err| panic!("{err:?} v{v} sp{}", e.species())),
+                };
+                let pk = &g.pkm;
+                assert_eq!((pk.species(), pk.version()), (e.species(), v));
+                assert!(pk.is_shiny() || !req.shiny);
+                if let Some(n) = req.nature {
+                    assert_eq!(pk.pid() % 25, n as u32);
+                }
+                fs::write(tmp.join(format!("{made:06}.pk4")), &pk.decrypted()[..136]).unwrap();
+                made += 1;
+            }
+        }
+    }
+    let out = oracle(&["legality-batch".as_ref(), tmp.as_os_str()]);
+    let mut bad = Vec::new();
+    let mut seen = 0;
+    for line in String::from_utf8_lossy(&out).lines() {
+        let v: Value = serde_json::from_str(line).unwrap();
+        seen += 1;
+        if !v["valid"].as_bool().unwrap() {
+            bad.push(format!(
+                "{}: {}",
+                v["file"],
+                v["report"].as_str().unwrap_or("").replace('\n', " | ")
+            ));
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert_eq!(seen, made, "PKHeX should judge every file");
+    assert!(
+        bad.is_empty(),
+        "{} PKHeX-illegal:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+    made
+}
+
+#[test]
+fn generate_api_static_encounters() {
+    if ready() {
+        eprintln!("made {}", static_requests(3, 21));
+    }
+}
+
+#[test]
+#[ignore]
+fn generate_api_static_encounters_1e4() {
+    eprintln!("made {}", static_requests(100, 22));
+}
+
 #[test]
 fn generate_api_specific_errors() {
     if !ready() {

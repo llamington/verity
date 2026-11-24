@@ -1665,6 +1665,7 @@ fn built_legal(n: usize, seed: u64) -> (usize, usize) {
             &e,
             &g,
             &tr,
+            e.version(),
             [
                 9,
                 1 + (r.next_u32() % 12) as u8,

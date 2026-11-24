@@ -20,11 +20,16 @@ pub fn slots_group(version: u8) -> Option<&'static [u8]> {
     }
 }
 
-/// `version`'s static encounter and in-game trade groups (PKHeX `Encounters5BW`,
-/// `Encounters5B2W2`). `TradeGift_B2W2` repeats `TradeGift_B2`/`TradeGift_W2`, so only it is
-/// used.
+/// `version`'s static encounter and in-game trade groups (PKHeX `Encounters4DPPt`,
+/// `Encounters4HGSS`, `Encounters5BW`, `Encounters5B2W2`). `TradeGift_B2W2` repeats
+/// `TradeGift_B2`/`TradeGift_W2`, so only it is used.
 fn template_groups(version: u8) -> &'static [&'static [u8]] {
     match version {
+        10 => &[b"StaticD", b"StaticDP", b"StaticDPPt"],
+        11 => &[b"StaticP", b"StaticDP", b"StaticDPPt"],
+        12 => &[b"StaticPt", b"StaticDPPt"],
+        7 => &[b"StaticHG", b"Encounter_HGSS"],
+        8 => &[b"StaticSS", b"Encounter_HGSS"],
         20 => &[b"StaticW", b"Encounter_BW", b"TradeGift_W", b"TradeGift_BW"],
         21 => &[b"StaticB", b"Encounter_BW", b"TradeGift_B", b"TradeGift_BW"],
         22 => &[b"StaticW2", b"Encounter_B2W2_Regular", b"TradeGift_B2W2"],
@@ -33,22 +38,31 @@ fn template_groups(version: u8) -> &'static [&'static [u8]] {
     }
 }
 
-/// Whether a template's PKHeX `GameVersion` includes `version` (66 BW, 67 B2W2).
+/// Whether a template's PKHeX `GameVersion` includes `version` (63 DP, 64 DPPt, 65 HGSS,
+/// 66 BW, 67 B2W2).
 pub fn template_in_game(template_version: u8, version: u8) -> bool {
     template_version == version
         || match template_version {
+            63 => matches!(version, 10 | 11),
+            64 => matches!(version, 10..=12),
+            65 => matches!(version, 7 | 8),
             66 => matches!(version, 20 | 21),
             67 => matches!(version, 22 | 23),
             _ => false,
         }
 }
 
-/// Templates the generator can build: no gift eggs.
+/// Templates the generators can build: no gift eggs, and no HG/SS Spiky-eared Pichu (its PID
+/// comes from the Pokéwalker method).
 fn offered_template(e: &Encounter, version: u8) -> bool {
-    matches!(
-        e.kind(),
-        Some(EncounterKind::Static5 | EncounterKind::Trade5BW | EncounterKind::Trade5B2W2)
-    ) && !e.has(flag::EGG)
+    const PICHU: u16 = 172;
+    let buildable = match e.kind() {
+        Some(EncounterKind::Static4) => e.species() != PICHU,
+        Some(EncounterKind::Static5 | EncounterKind::Trade5BW | EncounterKind::Trade5B2W2) => true,
+        _ => false,
+    };
+    buildable
+        && !e.has(flag::EGG)
         && e.template()
             .is_some_and(|t| t.egg_location() == 0 && template_in_game(t.version(), version))
 }
@@ -76,7 +90,8 @@ pub fn encounters<'a>(
 pub enum Offer {
     Slot = 0,
     Static = 1,
-    /// PKHeX `EncounterStatic5.Gift`: given rather than battled, so its ball is a Poké Ball.
+    /// PKHeX `EncounterStatic4.Gift`/`EncounterStatic5.Gift`: given rather than battled, so its
+    /// ball is a Poké Ball.
     Gift = 2,
     /// Met on any of its routes; generated where the template places it.
     Roaming = 3,

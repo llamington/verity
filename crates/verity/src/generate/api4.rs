@@ -1,6 +1,7 @@
-//! Request API for D/P/Pt wild encounters: `GenRequest` → generate (Method J) → build the
-//! PK4 → the legality gate ([`analyze4`] must be valid) → insert into a save slot with the
-//! capture side effects (party stats, Pokédex).
+//! Request API for Gen 4 wild slots and static encounters: `GenRequest` → generate (Method J/K
+//! for slots, Method 1 or chain shiny for statics) → build the PK4 → the legality gate
+//! ([`analyze4`] must be valid) → insert into a save slot with the capture side effects (party
+//! stats, Pokédex).
 //!
 //! Nothing illegal leaves [`generate`]: every result has passed [`analyze4`], which matches
 //! PKHeX on the fuzz and corpus suites. An impossible request returns a specific [`Error`].
@@ -12,6 +13,7 @@ use super::wild4::{self, GenError, IvProposal, Lead, Rand, Request};
 use crate::data::encounters::{Encounter, EncounterKind};
 use crate::legality::analysis4::{CheckId, Context4, Matched, analyze4};
 use crate::pkm::Pkm;
+use crate::rng::finder::{AnalyzeInput, PidType};
 use crate::rng::method_j::Slot4;
 use crate::save::{Save, SaveError, SaveKind, Slot};
 
@@ -24,9 +26,9 @@ pub const VERSION_SS: u8 = 8;
 /// Which encounter to generate from.
 #[derive(Clone, Copy)]
 pub enum EncounterChoice<'a> {
-    /// A specific slot, e.g. picked from [`encounters`].
+    /// A specific wild slot or static encounter, e.g. picked from [`encounters`].
     Slot(Encounter<'a>),
-    /// Any wild slot of the request's game with the species and form.
+    /// Any encounter of the request's game with the species and form.
     Any,
 }
 
@@ -93,8 +95,13 @@ pub enum Error {
     WrongFormat,
     /// The game-safe validator rejected the write.
     Unsafe(crate::safety::WriteError),
-    /// The operation needs a Pokémon that matched a Gen 4 wild slot.
+    /// The operation (or IV control) needs a Gen 4 wild slot.
     NotWild,
+    /// Leads don't change static encounters.
+    LeadUnavailable,
+    /// The event that opens the encounter's location wasn't distributed in this language.
+    UnreleasedInLanguage,
+    ShinyLocked,
 }
 
 impl From<GenError> for Error {
@@ -227,16 +234,16 @@ fn form_matches(e: &Encounter, form: u8) -> bool {
     e.has(crate::data::encounters::flag::RANDOM_UNSPECIFIC_FORM) || e.form() == form
 }
 
-/// Wild slots of `version` for `species`/`form`, in data order (for an encounter picker).
+/// Wild slots then static encounters of `version` for `species`/`form`, in data order (for an
+/// encounter picker).
 pub fn encounters<'a>(
     ctx: &Context4<'a>,
     version: u8,
     species: u16,
     form: u8,
 ) -> Result<Vec<Encounter<'a>>, Error> {
-    let g = group(version)?;
-    Ok(enc_data(ctx, version)
-        .group(g)
+    group(version)?;
+    Ok(super::offered::encounters(enc_data(ctx, version), version)
         .filter(|e| e.species() == species && form_matches(e, form))
         .collect())
 }
@@ -286,6 +293,19 @@ fn first_failure(pk: &Pkm, ctx: &Context4) -> Option<Error> {
     ))
 }
 
+fn build_data<'a>(ctx: &Context4<'a>, version: u8) -> BuildData<'a> {
+    BuildData {
+        hgss: ctx.hgss,
+        learn: match version {
+            VERSION_PT => ctx.learn.pt,
+            VERSION_HG | VERSION_SS => ctx.learn.hgss,
+            _ => ctx.learn.dp,
+        },
+        moves: ctx.learn.moves,
+        names4: ctx.names4,
+    }
+}
+
 fn generate_slot(
     ctx: &Context4,
     req: &GenRequest,
@@ -293,6 +313,9 @@ fn generate_slot(
     e: &Encounter,
     rand: &mut Rand,
 ) -> Result<Generated4, Error> {
+    if !e.is_slot() {
+        return generate_static(ctx, req, tr, e, rand);
+    }
     if e.species() != req.species || !form_matches(e, req.form) || e.version() != req.version {
         return Err(Error::NotInEncounter);
     }
@@ -337,17 +360,8 @@ fn generate_slot(
             (p.generated, Some(p))
         }
     };
-    let bd = BuildData {
-        hgss: ctx.hgss,
-        learn: match req.version {
-            VERSION_PT => ctx.learn.pt,
-            VERSION_HG | VERSION_SS => ctx.learn.hgss,
-            _ => ctx.learn.dp,
-        },
-        moves: ctx.learn.moves,
-        names4: ctx.names4,
-    };
-    let mut pk = build_wild4(&bd, e, &frame, tr, req.met_date);
+    let bd = build_data(ctx, req.version);
+    let mut pk = build_wild4(&bd, e, &frame, tr, req.version, req.met_date);
     if let Some(b) = req.ball {
         pk.set_ball(b);
     }
@@ -365,6 +379,161 @@ fn generate_slot(
     })
 }
 
+/// PKHeX `EncounterStatic4.SetMethod1` / `SetChainShiny` with the request as the criteria: a
+/// Method 1 PID and IVs from one seed, or a chain-shiny PID for always-shiny encounters.
+fn generate_static(
+    ctx: &Context4,
+    req: &GenRequest,
+    tr: &Trainer4,
+    e: &Encounter,
+    rand: &mut Rand,
+) -> Result<Generated4, Error> {
+    const SHINY_NEVER: u8 = 1;
+    const SHINY_ALWAYS: u8 = 2;
+    const GENDER_RANDOM: u8 = 255;
+    let t = e.template().ok_or(Error::NotInEncounter)?;
+    if e.kind() != Some(EncounterKind::Static4)
+        || e.species() != req.species
+        || !form_matches(e, req.form)
+        || !super::offered::template_in_game(t.version(), req.version)
+    {
+        return Err(Error::NotInEncounter);
+    }
+    if req.lead != Lead::None {
+        return Err(Error::LeadUnavailable);
+    }
+    if crate::legality::analysis4::unreleased_in_language(
+        e.location(),
+        super::build4::safe_language(tr.language),
+    ) {
+        return Err(Error::UnreleasedInLanguage);
+    }
+    if req.ivs != IvRequest::Random {
+        return Err(Error::NotWild);
+    }
+    let level = t.level_min();
+    if req.level.is_some_and(|l| l != level) {
+        return Err(Error::Gen(GenError::LevelOutsideSlot));
+    }
+    if req.shiny && t.shiny() == SHINY_NEVER {
+        return Err(Error::ShinyLocked);
+    }
+    if let Some(b) = req.ball
+        && !ball_allowed(e, b, req.version)
+    {
+        return Err(Error::BallNotAllowed);
+    }
+    let form = e.form();
+    let ratio = ctx.ratio(req.species);
+    let gender = match (t.gender(), req.gender) {
+        (GENDER_RANDOM, g) => g,
+        (fixed, Some(g)) if g != fixed => return Err(Error::Gen(GenError::GenderImpossible)),
+        (fixed, _) => Some(fixed),
+    };
+    if let Some(g) = gender {
+        let possible = match ratio {
+            255 => g == 2,
+            254 => g == 1,
+            0 => g == 0,
+            _ => g < 2,
+        };
+        if !possible {
+            return Err(Error::Gen(GenError::GenderImpossible));
+        }
+    }
+    let ability_bit = match req.ability {
+        Some(a) => ability_bit(ctx, req.species, form, a)?,
+        None => None,
+    };
+    let chain = t.shiny() == SHINY_ALWAYS;
+    let shiny = req.shiny || chain;
+    let id = (tr.sid as u32) << 16 | tr.tid as u32;
+    // A Method 1 shiny is 1 in 8192 frames.
+    let budget = if shiny && !chain {
+        req.budget.saturating_mul(4096)
+    } else {
+        req.budget.saturating_mul(64)
+    };
+    for _ in 0..budget {
+        let origin = rand.next_u32();
+        let (pid, iv32) = if chain {
+            wild4::chain_shiny_roll(origin, tr.tid, tr.sid)
+        } else {
+            (wild4::method1_pid(origin), wild4::ivs_after_pid(origin))
+        };
+        let x = pid ^ id;
+        if ((x >> 16) ^ (x & 0xFFFF) < 8) != shiny
+            || req.nature.is_some_and(|n| pid % 25 != n as u32)
+            || ability_bit.is_some_and(|b| pid & 1 != b as u32)
+        {
+            continue;
+        }
+        let g = crate::pkm::derived::gender_from_pid(pid, ratio);
+        if gender.is_some_and(|want| want != g) {
+            continue;
+        }
+        if let Some(hp) = req.hidden_power_type {
+            let ivs = core::array::from_fn(|i| ((iv32 >> (5 * i)) & 0x1F) as u16);
+            if crate::pkm::derived::hidden_power_type(&ivs) != hp {
+                continue;
+            }
+        }
+        let input = AnalyzeInput {
+            pid,
+            iv32,
+            tid: tr.tid,
+            sid: tr.sid,
+            species: req.species,
+            gender: g,
+            version: req.version,
+            met_level: level,
+            ot_gender: 0,
+        };
+        let pidiv = crate::rng::finder::analyze(&input, |s| ctx.ratio(s));
+        let want = if chain {
+            PidType::ChainShiny
+        } else {
+            PidType::Method1
+        };
+        if pidiv.kind != want {
+            continue;
+        }
+        let frame = wild4::Generated {
+            pid,
+            iv32,
+            level,
+            gender: g,
+            pidiv_seed: pidiv.seed,
+            lead: Default::default(),
+            form,
+        };
+        let mut pk = build_wild4(
+            &build_data(ctx, req.version),
+            e,
+            &frame,
+            tr,
+            req.version,
+            req.met_date,
+        );
+        if let Some(b) = req.ball {
+            pk.set_ball(b);
+        }
+        if let Some(m) = req.moves {
+            pk.set_moves_with_pp(m, &ctx.learn.moves);
+        }
+        pk.refresh_checksum();
+        if let Some(err) = first_failure(&pk, ctx) {
+            return Err(err);
+        }
+        return Ok(Generated4 {
+            pkm: pk,
+            frame,
+            iv_proposal: None,
+        });
+    }
+    Err(Error::Gen(GenError::BudgetExhausted))
+}
+
 /// Errors ranked by how much they say about the request (an "any encounter" request reports
 /// the most specific reason across the slots it tried).
 fn specificity(e: &Error) -> u8 {
@@ -378,7 +547,7 @@ fn specificity(e: &Error) -> u8 {
     }
 }
 
-/// Generates a legal D/P/Pt wild Pokémon for the save's trainer.
+/// Generates a legal Gen 4 wild or static Pokémon for the save's trainer.
 pub fn generate(ctx: &Context4, save: &Save, req: &GenRequest) -> Result<Generated4, Error> {
     generate_for(ctx, &trainer_of(save), req)
 }
