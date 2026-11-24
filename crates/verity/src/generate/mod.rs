@@ -4,6 +4,7 @@
 pub mod api4;
 pub mod build4;
 pub mod egg4;
+pub mod offered;
 #[cfg(feature = "alloc")]
 pub mod status;
 pub mod wild4;

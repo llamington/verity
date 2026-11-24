@@ -22,7 +22,7 @@ fn wild_data(version: u8) -> Option<&'static verity::data::encounters::Encounter
     }
 }
 
-/// One wild slot (`verity_encounter`). `index` identifies it for `verity_gen_insert`.
+/// One encounter (`verity_encounter`). `index` identifies it for `verity_gen_insert`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct VerityEncounter {
@@ -36,6 +36,8 @@ pub struct VerityEncounter {
     pub slot_type: u8,
     pub slot_number: u8,
     pub can_radar: u8,
+    /// `wizard::Offer`: 0 wild slot, 1 static encounter, 2 gift, 3 roaming, 4 trade.
+    pub encounter_type: u8,
 }
 
 /// C ABI: the distinct species with wild slots in `version` (10 D, 11 P, 12 Pt, 7 HG, 8 SS),
@@ -62,7 +64,8 @@ pub unsafe extern "C" fn verity_wild_species(version: u8, out: *mut u16, cap: us
     n
 }
 
-/// C ABI: the wild slots of `species` in `version`. Returns how many were written.
+/// C ABI: the wild slots, static encounters, gifts and trades of `species` in `version`.
+/// Returns how many were written.
 ///
 /// # Safety
 ///
@@ -98,6 +101,7 @@ pub unsafe extern "C" fn verity_wild_encounters(
             slot_type: e.slot_type(),
             slot_number: e.slot_number(),
             can_radar: e.can_radar() as u8,
+            encounter_type: wizard::offer(&e) as u8,
         };
         n += 1;
     }
