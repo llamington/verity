@@ -113,7 +113,8 @@ fn gender_of(pid: u32, ratio: u8) -> u8 {
     crate::pkm::derived::gender_from_pid(pid, ratio)
 }
 
-fn ivs_after_pid(pid_seed: u32) -> u32 {
+/// IVs from the two LCRNG calls after a Method 1 PID.
+pub fn ivs_after_pid(pid_seed: u32) -> u32 {
     let mut s = next_n::<2>(pid_seed);
     let iv1 = next15(&mut s) as u32;
     let iv2 = next15(&mut s) as u32;

@@ -1,5 +1,5 @@
-//! The add-Pokémon wizards' entry points (Gen 4/5 wild slots, Gen 5 static encounters, gifts
-//! and in-game trades, Gen 4 eggs), shared by the DS
+//! The add-Pokémon wizards' entry points (Gen 4/5 wild slots, static encounters and gifts,
+//! Gen 5 in-game trades, Gen 4 eggs), shared by the DS
 //! (`verity-ffi`) and the browser (`verity-wasm`).
 
 use alloc::vec::Vec;

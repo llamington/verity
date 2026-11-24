@@ -30,10 +30,12 @@ pub enum GenStatus {
     ShinyInGrotto = 20,
     ShinyLocked = 21,
     NatureFixed = 22,
+    LeadUnavailable = 23,
+    UnreleasedInLanguage = 24,
 }
 
 /// The texts, NUL-terminated for the C ABI, by code.
-const TEXTS: [&str; 23] = [
+const TEXTS: [&str; 25] = [
     "OK\0",
     "Only Gen 4 wild encounters for now\0",
     "No wild encounter in this game\0",
@@ -57,6 +59,8 @@ const TEXTS: [&str; 23] = [
     "Hidden Grotto Pokemon are never shiny\0",
     "This Pokemon is never shiny\0",
     "This Pokemon's nature is fixed\0",
+    "Leads don't affect this encounter\0",
+    "Never released in this save's language\0",
 ];
 
 impl GenStatus {
@@ -100,6 +104,9 @@ impl From<Error> for GenStatus {
             Error::Unsafe(_) => S::Unsafe,
             Error::Illegal(_) => S::Internal,
             Error::NotWild => S::NotWild,
+            Error::LeadUnavailable => S::LeadUnavailable,
+            Error::UnreleasedInLanguage => S::UnreleasedInLanguage,
+            Error::ShinyLocked => S::ShinyLocked,
         }
     }
 }

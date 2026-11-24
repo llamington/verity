@@ -484,6 +484,93 @@ fn wizard_offers_gen5_trades_and_roamers() {
     assert_eq!(pk.met_location(), tornadus.location());
 }
 
+#[test]
+fn wizard_offers_gen4_static_encounters() {
+    use verity::generate::api4::{self, EncounterChoice, Error, GenRequest, IvRequest};
+    use verity::generate::build4::Trainer4;
+    use wizard::Offer;
+    let Some((c4, _)) = contexts() else { return };
+    const GIRATINA: u16 = 487;
+    const GYARADOS: u16 = 130;
+    const CHIKORITA: u16 = 152;
+    const RAIKOU: u16 = 243;
+    const GRISEOUS_ORB: u16 = 112;
+    let offered = |v, species, kind| {
+        let data = if matches!(v, 7 | 8) {
+            &c4.enc_hgss
+        } else {
+            &c4.enc_dppt
+        };
+        wizard::wild_encounters(data, v, species)
+            .into_iter()
+            .map(|(_, e)| e)
+            .filter(|e| wizard::offer(e) == kind)
+            .collect::<Vec<_>>()
+    };
+    let mut name_raw = [0u16; 8];
+    verity::text::encode4(
+        &"Dawn".encode_utf16().collect::<Vec<_>>(),
+        7,
+        2,
+        &mut name_raw,
+        verity::text::Clear::Zero,
+    );
+    let tr = Trainer4 {
+        name_raw,
+        tid: 4321,
+        sid: 1234,
+        gender: 1,
+        language: 2,
+    };
+    let make = |v, e: verity::data::encounters::Encounter<'static>, lead| {
+        api4::generate_for(
+            c4,
+            &tr,
+            &GenRequest {
+                version: v,
+                species: e.species(),
+                form: e.form(),
+                encounter: EncounterChoice::Slot(e),
+                level: None,
+                nature: None,
+                gender: None,
+                ability: None,
+                shiny: false,
+                lead,
+                hidden_power_type: None,
+                ivs: IvRequest::Random,
+                ball: None,
+                moves: None,
+                met_date: [9, 4, 1],
+                seed: 99,
+                budget: 20_000,
+            },
+        )
+    };
+
+    let origin = offered(12, GIRATINA, Offer::Static)
+        .into_iter()
+        .find(|e| e.form() == 1)
+        .unwrap();
+    let pk = make(12, origin, Lead::None).unwrap().pkm;
+    assert_eq!(
+        (pk.form(), pk.held_item(), pk.version()),
+        (1, GRISEOUS_ORB, 12)
+    );
+
+    let red = offered(7, GYARADOS, Offer::Static)[0];
+    assert!(make(7, red, Lead::None).unwrap().pkm.is_shiny());
+    assert!(offered(12, GYARADOS, Offer::Static).is_empty());
+
+    assert_eq!(offered(8, CHIKORITA, Offer::Gift).len(), 1);
+    let raikou = offered(7, RAIKOU, Offer::Roaming)[0];
+    assert!(make(7, raikou, Lead::None).is_ok());
+    assert_eq!(
+        make(7, raikou, Lead::Synchronize(3)).err(),
+        Some(Error::LeadUnavailable)
+    );
+}
+
 fn wild(version: u8, species: u16) -> WildRequest {
     WildRequest {
         version,

@@ -1,6 +1,7 @@
-//! Builds a PK4 for a generated D/P/Pt wild encounter. Mirrors PKHeX
-//! `EncounterSlot4.ConvertToPKM`, `G4PKM.MetLocation`/`Ball` setters, `Learnset.SetEncounterMoves`
-//! and `PKM.SetMoves`; PID/IVs/level come from [`super::wild4`].
+//! Builds a PK4 for a generated Gen 4 wild slot or static encounter. Mirrors PKHeX
+//! `EncounterSlot4.ConvertToPKM`, `EncounterStatic4.ConvertToPKM`, `G4PKM.MetLocation`/`Ball`
+//! setters, `Learnset.SetEncounterMoves` and `PKM.SetMoves`; PID/IVs/level come from
+//! [`super::wild4`] and [`super::api4`].
 
 use super::wild4::Generated;
 use crate::data::encounters::Encounter;
@@ -78,13 +79,14 @@ pub fn encounter_moves(learn: &GameData, species: u16, form: u8, level: u8) -> [
     moves
 }
 
-/// Builds the stored (box) PK4 for a generated wild slot encounter, met on `date` (years since
-/// 2000, month, day).
+/// Builds the stored (box) PK4 for a generated wild slot or static encounter met in `version`
+/// on `date` (years since 2000, month, day).
 pub fn build_wild4(
     d: &BuildData,
     enc: &Encounter,
     g: &Generated,
     tr: &Trainer4,
+    version: u8,
     date: [u8; 3],
 ) -> Pkm {
     let mut raw = [0u8; SIZE_4STORED];
@@ -96,7 +98,6 @@ pub fn build_wild4(
     };
     let pi = d.hgss.species_form(species, form);
     let language = safe_language(tr.language);
-    let version = enc.version();
 
     let put16 = |raw: &mut [u8; SIZE_4STORED], o: usize, v: u16| {
         raw[o..o + 2].copy_from_slice(&v.to_le_bytes())
@@ -112,7 +113,11 @@ pub fn build_wild4(
     raw[0x15] = if g.pid & 1 == 0 { a1 } else { a2 };
     raw[0x17] = language;
     raw[0x38..0x3C].copy_from_slice(&(g.iv32 & 0x3FFF_FFFF).to_le_bytes());
-    raw[0x40] = (g.gender & 3) << 1 | form << 3;
+    let fateful = enc.has(crate::data::encounters::flag::FATEFUL) as u8;
+    raw[0x40] = fateful | (g.gender & 3) << 1 | form << 3;
+    if let Some(t) = enc.template() {
+        put16(&mut raw, 0x0A, t.held_item());
+    }
     raw[0x5F] = version;
     raw[0x7B] = date[0];
     raw[0x7C] = date[1];
@@ -168,7 +173,10 @@ pub fn build_wild4(
     }
     pk.set_ot_name_raw(&ot);
 
-    let moves = encounter_moves(&d.learn, species, form, g.level);
+    let moves = match enc.template() {
+        Some(t) if t.has(crate::data::encounters::flag::HAS_MOVES) => t.moves(),
+        _ => encounter_moves(&d.learn, species, form, g.level),
+    };
     pk.set_moves_with_pp(moves, &d.moves);
     pk.refresh_checksum();
     pk
