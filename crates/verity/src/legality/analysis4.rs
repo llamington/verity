@@ -560,7 +560,20 @@ fn choose<'a>(ctx: &Context4, inp: &Inputs, m: Option<WildMatches<'a>>, report: 
     if hatched_gift {
         verify_hatched4(inp, report);
     }
+    if let Enc4::Data(e) = &enc
+        && e.kind() == Some(crate::data::encounters::EncounterKind::Static4)
+        && unreleased_in_language(e.location(), pk.language())
+    {
+        report.flag(CheckId::Encounter);
+    }
     verify_common(ctx, inp, Some(&enc), report);
+}
+
+/// PKHeX `EncounterVerifier`: Oak's Letter and the Member Card, which open Flower Paradise and
+/// Newmoon Island, were never distributed in Korean.
+pub fn unreleased_in_language(location: u16, language: u8) -> bool {
+    const KOREAN: u8 = 8;
+    language == KOREAN && matches!(location, 63 | 85)
 }
 
 /// PKHeX `EncounterVerifier.VerifyEncounterEgg4` (native format 4, hatched).
@@ -578,8 +591,7 @@ fn verify_hatched4(inp: &Inputs, report: &mut Report) {
         return;
     }
     let met = pk.met_location();
-    let korean_shaymin = pk.language() == 8 && matches!(met, 63 | 85);
-    let ok = !korean_shaymin
+    let ok = !unreleased_in_language(met, pk.language())
         && (super::hatch4::valid_met4(met, pk.version())
             || (pk.egg_location() == LINK_TRADE4 && super::hatch4::valid_met4_any(met)));
     if !ok {
